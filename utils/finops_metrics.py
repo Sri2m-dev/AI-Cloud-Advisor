@@ -1,5 +1,7 @@
 # Utility for FinOps metrics calculations
 
+SAVINGS_RATE = 0.18
+
 def calculate_finops_metrics(df):
     total_cost = df["line_item_unblended_cost"].sum()
     service_cost = df.groupby(
@@ -9,5 +11,5 @@ def calculate_finops_metrics(df):
         "line_item_unblended_cost",
         ascending=False
     )
-    potential_savings = total_cost * 0.18
+    potential_savings = total_cost * SAVINGS_RATE
     return total_cost, potential_savings, service_cost
