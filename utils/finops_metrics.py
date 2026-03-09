@@ -9,5 +9,5 @@ def calculate_finops_metrics(df):
         "line_item_unblended_cost",
         ascending=False
     )
-    potential_savings = total_cost * 0.18
+    potential_savings = total_cost * 0.18  # 18% average cloud cost savings based on industry benchmarks
     return total_cost, potential_savings, service_cost
