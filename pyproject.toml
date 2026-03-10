@@ -1,0 +1,20 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+  ".git",
+  ".venv",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["cost_loader.py", "finops_metrics.py", "ai_recommender.py", "config.py", "tests"]
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+strict_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true

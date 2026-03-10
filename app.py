@@ -1,6 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Cloud Advisory Platform", layout="wide")
+from config import CONFIG
+
+st.set_page_config(page_title=CONFIG.app_title, layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -11,14 +13,14 @@ if "user" not in st.session_state:
 # LOGIN
 if not st.session_state.logged_in:
 
-    st.title("☁ Cloud Advisory Platform")
+    st.title(f"☁ {CONFIG.app_title}")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
 
-        if username == "admin" and password == "cloud123":
+        if username == CONFIG.default_username and password == CONFIG.default_password:
 
             st.session_state.logged_in = True
             st.session_state.user = username
@@ -44,4 +46,4 @@ else:
         st.session_state.logged_in = False
         st.rerun()
 
-    st.title("Welcome to Cloud Advisory Platform")
+    st.title(f"Welcome to {CONFIG.app_title}")

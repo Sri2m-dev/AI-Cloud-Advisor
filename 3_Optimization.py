@@ -1,6 +1,7 @@
-import streamlit as st
-from utils.ai_recommender import generate_recommendations
 import pandas as pd
+import streamlit as st
+
+from ai_recommender import generate_recommendations
 
 st.title("Optimization Opportunities")
 

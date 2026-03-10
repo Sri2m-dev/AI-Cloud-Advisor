@@ -1,7 +1,8 @@
-import streamlit as st
 import plotly.express as px
-from utils.cost_loader import load_cost_file
-from utils.finops_metrics import calculate_finops_metrics
+import streamlit as st
+
+from cost_loader import load_cost_file
+from finops_metrics import calculate_finops_metrics
 
 st.title("AWS Cost Explorer")
 

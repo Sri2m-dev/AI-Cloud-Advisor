@@ -1,6 +1,10 @@
 # Utility for FinOps metrics calculations
+from typing import Tuple
 
-def calculate_finops_metrics(df):
+import pandas as pd
+
+
+def calculate_finops_metrics(df: pd.DataFrame) -> Tuple[float, float, pd.DataFrame]:
     total_cost = df["line_item_unblended_cost"].sum()
     service_cost = df.groupby(
         "product_product_name"

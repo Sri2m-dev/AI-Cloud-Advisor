@@ -1,7 +1,7 @@
 # 1_Dashboard.py
-import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 
 st.title("☁ Cloud Advisory Dashboard")
 
