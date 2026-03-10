@@ -1,3 +1,17 @@
 streamlit
 pandas
 plotly
+=======
+streamlit
+pandas
+plotly
+pytest
+ruff
+mypy
+>>>>>>> 55746bbc37eb435ab2868e6e57ada4b11e802ab8
+streamlit
+pandas
+plotly
+pytest
+ruff
+mypy
