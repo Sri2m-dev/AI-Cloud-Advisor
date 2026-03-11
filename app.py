@@ -33,9 +33,19 @@ if not st.session_state.logged_in:
 else:
     st.sidebar.title("☁ Cloud Advisory")
     st.sidebar.write(f"👤 {st.session_state.user}")
-    clients = ["Demo Account", "Enterprise Client", "Startup Client"]
+    clients = ["Demo Account", "Client A", "Client B"]
     client = st.sidebar.selectbox("Select Client", clients)
     st.sidebar.write(f"Client: {client}")
+
+    if client == "Client A":
+        # Replace with actual data loading logic
+        data = "Loaded Client A data"
+    elif client == "Client B":
+        # Replace with actual data loading logic
+        data = "Loaded Client B data"
+    else:
+        data = "Loaded Demo Account data"
+
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
