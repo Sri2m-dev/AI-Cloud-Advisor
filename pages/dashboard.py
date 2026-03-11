@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from services.finops_metrics import calculate_unit_cost, detect_cost_anomaly
 
 st.title("📊 Cloud Cost Dashboard")
 
@@ -35,6 +36,18 @@ service_cost = pd.DataFrame({
     "Cost": [5000,2000,3000,450]
 })
 
-fig2 = px.pie(service_cost, names="Service", values="Cost")
+df = calculate_unit_cost(service_cost)
+st.dataframe(df)
 
+fig2 = px.pie(service_cost, names="Service", values="Cost")
 st.plotly_chart(fig2, use_container_width=True)
+
+# Cost Anomaly Detection
+st.subheader("Cost Anomaly Detection")
+anomalies = detect_cost_anomaly(service_cost)
+
+if not anomalies.empty:
+    st.error("⚠ Cost anomaly detected!")
+    st.dataframe(anomalies)
+else:
+    st.success("No anomalies detected")

@@ -1,17 +1,14 @@
-# Utility for FinOps metrics calculations
+import pandas as pd
 
-def calculate_finops_metrics(df):
-    # Normalize column names
-    df.columns = [c.lower().replace("/", "_") for c in df.columns]
+def calculate_unit_cost(service_cost_df):
+    total_cost = service_cost_df["Cost"].sum()
+    service_cost_df["Cost_Percentage"] = (
+        service_cost_df["Cost"] / total_cost * 100
+    )
+    return service_cost_df
 
-    # Detect cost column automatically
-    cost_column = None
-    for col in df.columns:
-        if "cost" in col:
-            cost_column = col
-            break
-    if cost_column is None:
-        raise ValueError("No cost column found in CUR file")
-    total_cost = df[cost_column].astype(float).sum()
-    potential_savings = total_cost * 0.18
-    return total_cost, potential_savings, cost_column
+def detect_cost_anomaly(cost_df):
+    avg_cost = cost_df["Cost"].mean()
+    threshold = avg_cost * 1.5
+    anomalies = cost_df[cost_df["Cost"] > threshold]
+    return anomalies
