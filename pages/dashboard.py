@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from services.finops_metrics import calculate_unit_cost, detect_cost_anomaly
+from services.ai_recommendations import generate_finops_recommendation
 
 st.title("📊 Cloud Cost Dashboard")
 
@@ -41,6 +42,16 @@ st.dataframe(df)
 
 fig2 = px.pie(service_cost, names="Service", values="Cost")
 st.plotly_chart(fig2, use_container_width=True)
+
+# AI FinOps Recommendation
+if st.button("Generate AI Optimization Insights"):
+    df_summary = df.groupby("Service")["Cost"].sum().to_dict()
+    recommendation = generate_finops_recommendation(
+        cost_summary=df_summary,
+        region="us-east-1"
+    )
+    st.subheader("AI FinOps Recommendations")
+    st.write(recommendation)
 
 # Cost Anomaly Detection
 st.subheader("Cost Anomaly Detection")

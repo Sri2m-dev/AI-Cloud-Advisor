@@ -1,19 +1,22 @@
 import streamlit as st
 import pandas as pd
-from services.ai_finops_advisor import generate_finops_recommendations
+import os
+from services.ai_finops_llm import generate_ai_recommendations
 
-st.title("🤖 AI Cloud FinOps Advisor")
+# Set OpenAI API key from Streamlit secrets
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+
+st.title("🤖 AI FinOps Advisor")
 
 st.write("AI-driven cloud cost optimization recommendations")
 
-service_cost = pd.DataFrame({
+cost_data = pd.DataFrame({
     "Service": ["EC2", "S3", "RDS", "Lambda"],
     "Cost": [5000, 2000, 3000, 450]
 })
 
-recommendations = generate_finops_recommendations(service_cost)
-
-st.subheader("Recommended Optimizations")
-
-for rec in recommendations:
-    st.success(rec)
+if st.button("Generate AI Recommendations"):
+    with st.spinner("Analyzing cloud costs..."):
+        recommendations = generate_ai_recommendations(cost_data)
+    st.success("Optimization Recommendations")
+    st.write(recommendations)
