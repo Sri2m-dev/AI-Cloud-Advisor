@@ -1,27 +1,39 @@
-from openai import OpenAI
 import pandas as pd
-import os
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_ai_recommendations(cost_df):
-    cost_summary = cost_df.to_string()
-    prompt = f"""
-You are a FinOps cloud cost optimization expert.
 
-Analyze the following AWS cost breakdown and suggest
-cost optimization recommendations.
+    recommendations = []
 
-Cost Data:
-{cost_summary}
+    try:
+        for _, row in cost_df.iterrows():
 
-Provide clear recommendations with estimated savings.
-"""
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a FinOps expert."},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    return response.choices[0].message.content
+            service = row.get("Service", "")
+            cost = row.get("Cost", 0)
+
+            if service == "EC2" and cost > 4000:
+                recommendations.append(
+                    "EC2 optimization: Consider Graviton instances or Savings Plans."
+                )
+
+            elif service == "S3" and cost > 1500:
+                recommendations.append(
+                    "S3 optimization: Move infrequently accessed data to Glacier or Intelligent Tiering."
+                )
+
+            elif service == "RDS" and cost > 2500:
+                recommendations.append(
+                    "RDS optimization: Evaluate Reserved Instances for steady workloads."
+                )
+
+            elif service == "Lambda" and cost > 300:
+                recommendations.append(
+                    "Lambda optimization: Reduce memory allocation or optimize execution time."
+                )
+
+        if not recommendations:
+            recommendations.append("No major optimization opportunities detected.")
+
+    except Exception as e:
+        recommendations.append("Error generating recommendations.")
+
+    return recommendations

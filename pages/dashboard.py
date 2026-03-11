@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 from services.finops_metrics import calculate_unit_cost, detect_cost_anomaly
 from services.ai_recommendations import generate_finops_recommendation
+from services.aws_cost import get_aws_cost
 
 st.title("📊 Cloud Cost Dashboard")
 
@@ -28,6 +29,11 @@ data = pd.DataFrame({
 fig = px.line(data, x="Month", y="Cost", markers=True)
 
 st.plotly_chart(fig, use_container_width=True)
+
+# AWS Cost Trend
+df = get_aws_cost()
+st.subheader("AWS Cost Trend")
+st.line_chart(df.set_index("date"))
 
 # Service Breakdown
 st.subheader("Service Cost Breakdown")
