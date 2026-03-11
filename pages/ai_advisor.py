@@ -1,14 +1,19 @@
 import streamlit as st
+import pandas as pd
+from services.ai_finops_advisor import generate_finops_recommendations
 
-st.title("🤖 AI Cloud Advisor")
+st.title("🤖 AI Cloud FinOps Advisor")
 
-st.write("Recommended Optimizations")
+st.write("AI-driven cloud cost optimization recommendations")
 
-recommendations = [
-    "Downsize EC2 m5.2xlarge to m5.xlarge",
-    "Move S3 Standard → S3 Intelligent Tiering",
-    "Purchase Reserved Instances for RDS",
-]
+service_cost = pd.DataFrame({
+    "Service": ["EC2", "S3", "RDS", "Lambda"],
+    "Cost": [5000, 2000, 3000, 450]
+})
 
-for r in recommendations:
-    st.success(r)
+recommendations = generate_finops_recommendations(service_cost)
+
+st.subheader("Recommended Optimizations")
+
+for rec in recommendations:
+    st.success(rec)
