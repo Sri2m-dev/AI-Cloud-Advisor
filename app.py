@@ -1,104 +1,175 @@
 import streamlit as st
-import pandas as pd
 
-# Dummy data for demonstration
-monthly_cost = pd.DataFrame({"Month": ["Jan", "Feb", "Mar", "Apr", "May"], "Cost": [80000, 90000, 110000, 120000, 124000]})
-service_breakdown = pd.DataFrame({"Service": ["EC2", "S3", "RDS", "EKS", "Lambda"], "Cost": [32000, 18000, 22000, 14000, 8000]})
-top_drivers = pd.DataFrame({"Service": ["EC2", "RDS", "S3", "EKS", "Lambda", "DynamoDB", "Redshift", "ElastiCache", "SageMaker", "EMR"], "Cost": [32000, 22000, 18000, 14000, 8000, 7000, 6000, 5000, 4000, 3000]})
-anomalies = [
-    {"service": "EC2", "increase": "65%", "reason": "scale-out event"},
-    {"service": "RDS", "increase": "40%", "reason": "backup job"}
-]
-ai_insights = [
-    "Idle EC2 instances detected",
-    "Savings plan opportunity",
-    "S3 lifecycle optimization"
-]
-finops_kpis = {
-    "Monthly Spend": "$120k",
-    "Unit Cost": "$0.21 per transaction",
-    "Waste": "$18k",
-    "Savings Potential": "$35k"
-}
-
-st.set_page_config(page_title="Executive FinOps Dashboard", layout="wide")
-
-page = st.sidebar.selectbox(
-    "Select Dashboard Page",
-    ["Cost Overview", "Cost Anomalies", "AI Recommendations", "FinOps KPIs"]
+st.set_page_config(
+    page_title="Cloud Advisory Platform",
+    layout="wide"
 )
 
-if page == "Cost Overview":
-    st.title("Cost Overview")
-    st.subheader("Monthly Cost Trend")
-    st.line_chart(monthly_cost.set_index("Month"))
-    st.subheader("Service Breakdown")
-    st.bar_chart(service_breakdown.set_index("Service"))
-    st.subheader("Top 10 Cost Drivers")
-    st.bar_chart(top_drivers.set_index("Service"))
+# -------------------
+# SESSION STATE
+# -------------------
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
-elif page == "Cost Anomalies":
-    st.title("Cost Anomalies")
-    for anomaly in anomalies:
-        st.warning(f"⚠ Cost spike detected\nService: {anomaly['service']}\nIncrease: {anomaly['increase']}\nPossible reason: {anomaly['reason']}")
+# -------------------
+# LOGIN PAGE
+# -------------------
+def login_page():
 
-elif page == "AI Recommendations":
-    st.title("AI Cloud Advisor Insights")
-    for insight in ai_insights:
-        st.write(f"• {insight}")
-
-elif page == "FinOps KPIs":
-    st.title("FinOps KPIs")
-    st.table(finops_kpis)
-import streamlit as st
-
-from config import CONFIG
-
-st.set_page_config(page_title=CONFIG.app_title, layout="wide")
-
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if "user" not in st.session_state:
-    st.session_state.user = ""
-
-# LOGIN
-if not st.session_state.logged_in:
-
-    st.title(f"☁ {CONFIG.app_title}")
+    st.title("☁️ Cloud Advisory Platform")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
 
-        if username == CONFIG.default_username and password == CONFIG.default_password:
-
-            st.session_state.logged_in = True
-            st.session_state.user = username
+        if username == "admin" and password == "cloud123":
+            st.session_state.authenticated = True
             st.rerun()
 
         else:
             st.error("Invalid credentials")
 
- # MAIN APP
-else:
-    st.sidebar.title("☁ Cloud Advisory")
-    st.sidebar.write(f"👤 {st.session_state.user}")
-    clients = ["Demo Account", "Client A", "Client B"]
-    client = st.sidebar.selectbox("Select Client", clients)
-    st.sidebar.write(f"Client: {client}")
+# -------------------
+# PAGE FUNCTIONS
+# -------------------
+def dashboard_page():
+    st.title("Dashboard")
+    st.write("Welcome to the Cloud Advisory Platform 🚀")
 
-    if client == "Client A":
-        # Replace with actual data loading logic
-        data = "Loaded Client A data"
-    elif client == "Client B":
-        # Replace with actual data loading logic
-        data = "Loaded Client B data"
-    else:
-        data = "Loaded Demo Account data"
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Monthly Cost", "$12,450", "5%")
+    col2.metric("Forecast", "$13,100", "2%")
+    col3.metric("Savings Opportunity", "$3,200")
+    col4.metric("Idle Resources", "17")
 
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
-    st.title(f"Welcome to {CONFIG.app_title}")
+    st.divider()
+
+    st.subheader("Cost Trend")
+
+    data = {
+        "Month": ["Jan","Feb","Mar","Apr","May"],
+        "Cost": [8000,9000,11000,12000,12500]
+    }
+
+    import pandas as pd
+    df = pd.DataFrame(data)
+
+    st.line_chart(df.set_index("Month"))
+
+def ai_advisor_page():
+    st.title("AI FinOps Advisor")
+
+    st.write("AI-driven cloud cost optimization recommendations")
+
+    if st.button("Generate AI Recommendations"):
+        st.success("Recommendations Generated")
+        st.markdown("""
+        **EC2 Optimization**
+
+        • 3 EC2 instances are underutilized  
+        • Recommended: downgrade from m5.large → t3.medium  
+
+        **Estimated Monthly Savings:** $840
+        """)
+
+def cost_explorer_page():
+    st.title("Cost Explorer")
+
+    import pandas as pd
+
+    data = {
+        "Service": ["EC2","S3","RDS","Lambda"],
+        "Cost": [5000,2000,3000,450]
+    }
+
+    df = pd.DataFrame(data)
+
+    st.subheader("Service Cost Breakdown")
+
+    st.dataframe(df)
+
+    st.bar_chart(df.set_index("Service"))
+
+def finops_insights_page():
+    st.title("FinOps Insights")
+
+    st.subheader("Cost Allocation by Team")
+
+    import pandas as pd
+
+    data = {
+        "Team":["Platform","Data","DevOps","AI"],
+        "Cost":[4000,3500,2800,2150]
+    }
+
+    df = pd.DataFrame(data)
+
+    st.bar_chart(df.set_index("Team"))
+
+def optimization_page():
+    st.title("Optimization Opportunities")
+
+    st.warning("Idle resources detected")
+
+    st.write("""
+    • 5 unattached EBS volumes  
+    • 2 idle load balancers  
+    • 3 underutilized EC2 instances
+    """)
+
+    st.metric("Potential Savings", "$1,750 / month")
+
+def optimization_insights_page():
+    st.title("Optimization Insights")
+
+    st.info("Top Cost Drivers")
+
+    import pandas as pd
+
+    data = {
+        "Service":["EC2","RDS","S3","Data Transfer"],
+        "Cost":[5000,3000,2000,900]
+    }
+
+    df = pd.DataFrame(data)
+
+    st.bar_chart(df.set_index("Service"))
+
+def reports_page():
+    st.title("Reports")
+
+    st.write("Generate FinOps reports")
+
+    if st.button("Generate Monthly Report"):
+        st.success("Report generated successfully")
+
+    if st.button("Download CSV"):
+        st.info("Download feature coming soon")
+
+# -------------------
+# APP FLOW
+# -------------------
+
+if not st.session_state.authenticated:
+    login_page()
+    st.stop()
+
+# Sidebar logout
+with st.sidebar:
+    st.button("Logout", on_click=lambda: st.session_state.update(authenticated=False))
+
+# Navigation
+pg = st.navigation(
+    [
+        st.Page(dashboard_page, title="Dashboard", default=True),
+        st.Page(ai_advisor_page, title="AI Advisor"),
+        st.Page(cost_explorer_page, title="Cost Explorer"),
+        st.Page(finops_insights_page, title="FinOps Insights"),
+        st.Page(optimization_page, title="Optimization"),
+        st.Page(optimization_insights_page, title="Optimization Insights"),
+        st.Page(reports_page, title="Reports"),
+    ]
+)
+
+pg.run()

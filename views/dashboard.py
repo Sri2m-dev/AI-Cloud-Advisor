@@ -6,15 +6,26 @@ from services.finops_metrics import calculate_unit_cost, detect_cost_anomaly
 from services.ai_recommendations import generate_finops_recommendation
 from services.aws_cost import get_aws_cost
 
+import streamlit as st
+
+# Protect page
+if not st.session_state.get("authenticated"):
+    st.warning("Please login from the main page")
+    st.stop()
+
 st.title("📊 Cloud Cost Dashboard")
 
 # KPI Row
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Monthly Cost", "$12,450", "5% ↑")
-col2.metric("Forecast", "$13,100", "2% ↑")
-col3.metric("Savings Opportunity", "$3,200", "-")
-col4.metric("Idle Resources", "17", "-")
+with col1:
+    st.metric("Monthly Cost", "$12,450", "5%")
+with col2:
+    st.metric("Forecast", "$13,100", "2%")
+with col3:
+    st.metric("Savings Opportunity", "$3,200")
+with col4:
+    st.metric("Idle Resources", "17")
 
 st.divider()
 

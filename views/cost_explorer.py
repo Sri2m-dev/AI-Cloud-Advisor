@@ -1,3 +1,9 @@
+import streamlit as st
+
+# Protect page
+if not st.session_state.get("authenticated"):
+	st.warning("Please login from the main page")
+	st.stop()
 import plotly.express as px
 import streamlit as st
 

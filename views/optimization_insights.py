@@ -1,3 +1,9 @@
+import streamlit as st
+
+# Protect page
+if not st.session_state.get("authenticated"):
+    st.warning("Please login from the main page")
+    st.stop()
 # 2_Optimization.py
 import streamlit as st
 import pandas as pd

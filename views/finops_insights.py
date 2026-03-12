@@ -1,5 +1,11 @@
 import streamlit as st
 
+# Protect page
+if not st.session_state.get("authenticated"):
+	st.warning("Please login from the main page")
+	st.stop()
+import streamlit as st
+
 st.title("📊 FinOps Insights")
 
 st.subheader("Cost Anomalies")
