@@ -25,6 +25,7 @@ def login_page():
 
         if username == "admin" and password == "cloud123":
             st.session_state.authenticated = True
+            st.switch_page("pages/dashboard.py")
             st.rerun()
 
         else:
