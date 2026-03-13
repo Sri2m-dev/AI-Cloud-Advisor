@@ -1,9 +1,67 @@
+# PostgreSQL integration
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import os
+
+def get_pg_connection():
+    """
+    Returns a PostgreSQL connection using environment variables.
+    """
+    conn = psycopg2.connect(
+        dbname=os.getenv("PGDATABASE", "cloud_advisor"),
+        user=os.getenv("PGUSER", "postgres"),
+        password=os.getenv("PGPASSWORD", "password"),
+        host=os.getenv("PGHOST", "localhost"),
+        port=os.getenv("PGPORT", "5432"),
+        cursor_factory=RealDictCursor
+    )
+    return conn
+
+def init_pg_db():
+    """
+    Initializes the PostgreSQL database schema.
+    """
+    conn = get_pg_connection()
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        company VARCHAR(255)
+    );
+    CREATE TABLE IF NOT EXISTS cloud_accounts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        provider VARCHAR(20),
+        account_id VARCHAR(255),
+        credentials_encrypted TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS cost_data (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER REFERENCES cloud_accounts(id),
+        date DATE,
+        service VARCHAR(255),
+        cost NUMERIC
+    );
+    CREATE TABLE IF NOT EXISTS predictions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER REFERENCES cloud_accounts(id),
+        month VARCHAR(7),
+        predicted_cost NUMERIC
+    );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
 # db.py
 # Database connection and ORM logic for AI-Cloud-Advisor
 
-def get_db():
 import sqlite3
 
+def get_db():
     return sqlite3.connect("cloud_advisor.db", check_same_thread=False)
 
 def create_tables():
