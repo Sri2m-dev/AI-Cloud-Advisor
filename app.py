@@ -47,15 +47,14 @@ def dashboard_page():
 
     st.subheader("Cost Trend")
 
-    data = {
-        "Month": ["Jan","Feb","Mar","Apr","May"],
-        "Cost": [8000,9000,11000,12000,12500]
-    }
-
+    from services.aws_connector import get_aws_cost
     import pandas as pd
-    df = pd.DataFrame(data)
-
-    st.line_chart(df.set_index("Month"))
+    cost_data = get_aws_cost()
+    if cost_data:
+        df = pd.DataFrame(cost_data)
+        st.line_chart(df.set_index("month"))
+    else:
+        st.warning("No AWS cost data available.")
 
 def ai_advisor_page():
     st.title("AI FinOps Advisor")
@@ -169,6 +168,7 @@ pg = st.navigation(
         st.Page(optimization_page, title="Optimization"),
         st.Page(optimization_insights_page, title="Optimization Insights"),
         st.Page(reports_page, title="Reports"),
+        st.Page("pages/cloud_accounts.py", title="Cloud Accounts"),
     ]
 )
 
