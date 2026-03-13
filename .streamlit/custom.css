@@ -1,0 +1,48 @@
+/* Custom Streamlit Branding */
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f7fafd;
+}
+
+/* Sidebar */
+.css-1d391kg, .css-1lcbmhc {
+    background: linear-gradient(135deg, #0D8ABC 0%, #2E8B57 100%) !important;
+    color: #fff !important;
+}
+
+/* Main header */
+.css-10trblm {
+    color: #0D8ABC !important;
+    font-weight: 700;
+}
+
+/* Buttons */
+.stButton > button {
+    background-color: #0D8ABC !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    font-weight: 600;
+    border: none;
+}
+
+/* Metric cards */
+.stMetric {
+    background: #e6f2fa !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+    color: #0D8ABC !important;
+}
+
+/* Download button */
+.stDownloadButton > button {
+    background: #2E8B57 !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    font-weight: 600;
+}
+
+/* Expander */
+.stExpanderHeader {
+    color: #0D8ABC !important;
+    font-weight: 600;
+}

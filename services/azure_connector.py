@@ -1,3 +1,12 @@
+import pandas as pd
+
+def get_azure_cost():
+    # Placeholder: Replace with real Azure Cost Management API integration
+    return pd.DataFrame({
+        "date": ["2026-03-01", "2026-03-02"],
+        "Service": ["VM", "Storage"],
+        "Cost": [3000, 1200]
+    })
 from azure.identity import ClientSecretCredential
 from azure.mgmt.resource import ResourceManagementClient
 

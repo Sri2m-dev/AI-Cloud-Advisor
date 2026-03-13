@@ -1,3 +1,48 @@
+def save_forecast_note(username, forecast_date, note):
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forecast_notes (
+            username TEXT,
+            forecast_date TEXT,
+            note TEXT,
+            PRIMARY KEY (username, forecast_date)
+        )
+    """)
+    conn.execute("REPLACE INTO forecast_notes (username, forecast_date, note) VALUES (?, ?, ?)", (username, forecast_date, note))
+    conn.commit()
+    conn.close()
+
+def load_forecast_note(username, forecast_date):
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forecast_notes (
+            username TEXT,
+            forecast_date TEXT,
+            note TEXT,
+            PRIMARY KEY (username, forecast_date)
+        )
+    """)
+    cur = conn.execute("SELECT note FROM forecast_notes WHERE username = ? AND forecast_date = ?", (username, forecast_date))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else ""
+def save_cost_data(provider, cost_df):
+    """
+    Save cost data DataFrame to billing_data table.
+    provider: 'aws', 'azure', or 'gcp'
+    cost_df: DataFrame with columns ['date', 'Service', 'Cost']
+    """
+    import pandas as pd
+    if not isinstance(cost_df, pd.DataFrame):
+        return
+    conn = get_db()
+    for _, row in cost_df.iterrows():
+        conn.execute(
+            "INSERT INTO billing_data (account, service, cost) VALUES (?, ?, ?)",
+            (provider, row.get('Service', ''), float(row.get('Cost', 0)))
+        )
+    conn.commit()
+    conn.close()
 # PostgreSQL integration
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -65,6 +110,7 @@ def get_db():
     return sqlite3.connect("cloud_advisor.db", check_same_thread=False)
 
 def create_tables():
+    conn = get_db()
     conn.execute("""
     CREATE TABLE IF NOT EXISTS billing_data (
         account TEXT,
@@ -72,9 +118,6 @@ def create_tables():
         cost REAL
     )
     """)
-    conn.commit()
-
-    conn = get_db()
     conn.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
@@ -112,3 +155,18 @@ def get_user(username):
     user = cur.fetchone()
     conn.close()
     return user
+
+def log_audit_event(username, action, details=None):
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            action TEXT,
+            details TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("INSERT INTO audit_log (username, action, details) VALUES (?, ?, ?)", (username, action, details))
+    conn.commit()
+    conn.close()

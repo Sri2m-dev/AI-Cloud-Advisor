@@ -4,3 +4,4 @@ numpy
 plotly
 boto3
 openai
+APScheduler

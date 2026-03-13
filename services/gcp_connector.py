@@ -1,3 +1,12 @@
+import pandas as pd
+
+def get_gcp_cost():
+    # Placeholder: Replace with real GCP Billing Export integration
+    return pd.DataFrame({
+        "date": ["2026-03-01", "2026-03-02"],
+        "Service": ["Compute Engine", "BigQuery"],
+        "Cost": [2200, 800]
+    })
 from google.oauth2 import service_account
 from google.cloud import storage
 import json
