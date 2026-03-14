@@ -170,3 +170,20 @@ def log_audit_event(username, action, details=None):
     conn.execute("INSERT INTO audit_log (username, action, details) VALUES (?, ?, ?)", (username, action, details))
     conn.commit()
     conn.close()
+
+def get_connected_account_count():
+    conn = sqlite3.connect("cloud_advisor.db")
+    try:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS cloud_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        cur = conn.execute("SELECT COUNT(*) FROM cloud_accounts")
+        count = cur.fetchone()[0]
+        return count
+    finally:
+        conn.close()

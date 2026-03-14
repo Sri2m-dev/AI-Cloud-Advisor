@@ -6,7 +6,7 @@ os.environ["STREAMLIT_PAGES"] = "0"
 import streamlit as st
 st.set_page_config(
     page_title="Cloud Advisory Platform",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
@@ -275,12 +275,17 @@ if "authenticated" not in st.session_state:
 # LOGIN PAGE
 # -------------------
 def login_page():
-
+    st.set_page_config(layout="centered")
+    st.markdown("""
+    <style>
+    div[data-baseweb=\"input\"] {
+        max-width: 400px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     st.title("☁️ Cloud Advisory Platform")
-
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
-
     if st.button("Login"):
         from database.db import get_user, log_audit_event
         user = get_user(username)
@@ -289,6 +294,7 @@ def login_page():
             st.session_state["username"] = user[0]
             st.session_state["role"] = user[2]
             log_audit_event(user[0], "login")
+            st.success("Login successful")
             st.rerun()
         else:
             st.error("Invalid credentials")
@@ -296,12 +302,9 @@ def login_page():
     if user_role not in ["admin", "premium", "user"]:
         st.warning("You do not have access to this feature.")
         st.stop()
-
-    def logout_action():
         from database.db import log_audit_event
         log_audit_event(st.session_state.get("username", "guest"), "logout")
         st.session_state.update(authenticated=False)
-    st.button("Logout", on_click=logout_action)
 
 # -------------------
 # PAGE FUNCTIONS
@@ -318,11 +321,21 @@ def dashboard_page():
 
     # --- Scheduled Report Emails (manual trigger for demo) ---
     st.markdown("---")
-    st.subheader("Send Feedback Analytics via Email")
-    st.caption("Configure your SMTP credentials in environment variables: YAGMAIL_USER, YAGMAIL_PASSWORD")
+    st.subheader("Email Feedback Analytics")
+    st.caption("Set SMTP env: YAGMAIL_USER, YAGMAIL_PASSWORD")
+    st.markdown("""
+    <style>
+    div[data-baseweb="input"] {
+        max-width: 400px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     import yagmail
-    email_to = st.text_input("Recipient Email", "your@email.com")
-    if st.button("Send Feedback Reports by Email"):
+    col1, col2 = st.columns([1,4])
+    with col1:
+        email_to = st.text_input("Recipient Email", "your@email.com", key="email_input_compact")
+        send_btn = st.button("Send Email", key="send_email_compact", use_container_width=True)
+    if send_btn:
         yag = yagmail.SMTP(user=os.getenv("YAGMAIL_USER"), password=os.getenv("YAGMAIL_PASSWORD"))
         attachments = []
         if anomaly_feedback:
@@ -1027,7 +1040,8 @@ with st.sidebar:
         ("Cost Explorer", "💸"),
         ("Reports", "📑"),
         ("Cost Forecast (Premium)", "🔮"),
-        ("Cloud Accounts", "☁️")
+        ("Cloud Accounts", "☁️"),
+        ("Plans & Billing", "💳")
     ]
     nav_labels = [f"{icon} {page}" for page, icon in nav_pages]
     default_index = nav_labels.index(f"🏠 Dashboard") if f"🏠 Dashboard" in nav_labels else 0
@@ -1085,3 +1099,39 @@ elif selected_page == "Cost Forecast (Premium)":
 elif selected_page == "Cloud Accounts":
     from pages.cloud_accounts import cloud_accounts_page
     cloud_accounts_page()
+elif selected_page == "Plans & Billing":
+    st.title("Plans & Billing")
+    st.markdown("""
+    ### Choose the right plan for your business
+    | Plan        | Price      | Cloud Accounts | Features                                 |
+    |-------------|------------|---------------|------------------------------------------|
+    | Starter     | $49/month  | 1             | Basic analytics & dashboards             |
+    | Growth      | $149/month | 5             | All Starter features, AI insights        |
+    | Enterprise  | $499/month | Unlimited     | All Growth features, Automation, Reports |
+    """)
+    st.markdown("---")
+    st.markdown("#### Feature Comparison")
+    st.table({
+        "Feature": ["Cloud Accounts", "AI Insights", "Automation", "Advanced Reports"],
+        "Starter": ["1", "-", "-", "Basic"],
+        "Growth": ["5", "Yes", "-", "Standard"],
+        "Enterprise": ["Unlimited", "Yes", "Yes", "Full"]
+    })
+    st.info("For annual discounts or custom needs, reach out to sales@aicloudadvisor.com.")
+    current_plan = st.session_state.get("plan", "Starter")
+    st.success(f"Your current plan: {current_plan}")
+    # Only allow plan changes for admin users
+    user = st.session_state.get("username", "guest")
+    from database.db import get_user
+    user_info = get_user(user)
+    is_admin = user_info and user_info[2] == "admin"
+    if is_admin:
+        st.markdown("**Change Plan**")
+        col1, _ = st.columns([1, 3])
+        with col1:
+            new_plan = st.selectbox("Select new plan:", ["Starter", "Growth", "Enterprise"], index=["Starter", "Growth", "Enterprise"].index(current_plan), key="plan_select")
+            if st.button("Update Plan"):
+                st.session_state["plan"] = new_plan
+                st.success(f"Plan updated to: {new_plan}")
+    else:
+        st.warning("Only admin users can change the plan.")
