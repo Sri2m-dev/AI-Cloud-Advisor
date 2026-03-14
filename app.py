@@ -281,7 +281,7 @@ def login_page():
     st.set_page_config(layout="centered")
     st.markdown("""
     <style>
-    div[data-baseweb=\"input\"] {
+    div[data-baseweb="input"] {
         max-width: 400px;
     }
     </style>
@@ -1015,6 +1015,29 @@ def audit_log_page():
         st.error(f"Error loading audit log: {e}")
     finally:
         conn.close()
+
+# --- Supabase Sign Up Page ---
+import streamlit as st
+from supabase import create_client, Client
+
+SUPABASE_URL = "https://your-project.supabase.co"  # TODO: Replace with your Supabase URL
+SUPABASE_KEY = "your-anon-or-service-key"  # TODO: Replace with your Supabase anon key
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def supabase_signup_page():
+    st.title("Sign Up (Supabase)")
+    email = st.text_input("Email", key="sb_email")
+    password = st.text_input("Password", type="password", key="sb_password")
+    company = st.text_input("Company", key="sb_company")
+    if st.button("Sign Up (Supabase)", key="sb_signup_btn"):
+        result = supabase.auth.sign_up({"email": email, "password": password})
+        if result.get("user"):
+            st.success("Sign up successful! Please check your email to verify your account.")
+            user_id = result["user"]["id"]
+            supabase.table("profiles").insert({"id": user_id, "email": email, "company": company}).execute()
+            st.info("Company info saved to your profile.")
+        else:
+            st.error(result.get("error", {}).get("message", "Sign up failed."))
 
 # -------------------
 # APP FLOW
