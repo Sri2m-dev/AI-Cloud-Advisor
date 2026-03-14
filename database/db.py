@@ -1,3 +1,6 @@
+# Ensure this function exists for compatibility
+def get_account_limit():
+    return 5
 def save_forecast_note(username, forecast_date, note):
     conn = get_db()
     conn.execute("""
