@@ -1,3 +1,6 @@
+# Load environment variables from .env automatically
+from dotenv import load_dotenv
+load_dotenv()
 import os
 # Disable Streamlit's default multipage navigation sidebar
 os.environ["STREAMLIT_PAGES"] = "0"
@@ -20,7 +23,7 @@ hide_pages = """
 """
 st.markdown(hide_pages, unsafe_allow_html=True)
 import datetime
-import sqlite3
+from database.db import get_pg_connection
 import pandas as pd
 import numpy as np
 from prophet import Prophet
@@ -81,7 +84,7 @@ def cost_forecast_page():
         st.success(f"Best model: {study.best_params['model']} with MAE={study.best_value:.2f}")
         st.json(study.best_params)
     st.title("Cost Forecast (Premium)")
-    conn = sqlite3.connect("cloud_advisor.db")
+    conn = get_pg_connection()
     df = None
     try:
         df = pd.read_sql_query("SELECT date, SUM(cost) as total_cost FROM billing_data GROUP BY date ORDER BY date", conn)
@@ -535,14 +538,12 @@ def dashboard_page():
             study.optimize(kmeans_objective, n_trials=10, show_progress_bar=False)
             st.success(f"Best n_clusters: {study.best_params['n_clusters']} (inertia={study.best_value:.2f})")
     import pandas as pd
-    import sqlite3
     import plotly.express as px
     st.title("Dashboard")
     st.write("Unified Cloud Cost Analytics Dashboard 🚀")
 
     # Load data
-
-    conn = sqlite3.connect("cloud_advisor.db")
+    conn = get_pg_connection()
     df = pd.read_sql_query("SELECT * FROM billing_data", conn)
     conn.close()
 
@@ -945,7 +946,7 @@ def reports_page():
 
 def cost_sync_history_page():
     st.title("Cost Sync History")
-    conn = sqlite3.connect("cloud_advisor.db")
+    conn = get_pg_connection()
     df = None
     try:
         df = pd.read_sql_query("SELECT account, service, cost FROM billing_data ORDER BY rowid DESC LIMIT 100", conn)
@@ -963,7 +964,7 @@ def audit_log_page():
     if st.session_state.get("role", "user") != "admin":
         st.warning("Only admins can view the audit log.")
         return
-    conn = sqlite3.connect("cloud_advisor.db")
+    conn = get_pg_connection()
     try:
         df = pd.read_sql_query("SELECT username, action, details, timestamp FROM audit_log ORDER BY timestamp DESC LIMIT 500", conn)
         if df.empty:
