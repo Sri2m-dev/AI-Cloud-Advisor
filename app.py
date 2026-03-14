@@ -9,6 +9,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Hide only the Streamlit multipage navigation ("app", "cloud accounts")
+hide_pages = """
+<style>
+[data-testid="stSidebarNav"] {
+    display: none;
+}
+</style>
+"""
+st.markdown(hide_pages, unsafe_allow_html=True)
 import datetime
 import sqlite3
 import pandas as pd
@@ -297,48 +307,14 @@ def login_page():
 # PAGE FUNCTIONS
 # -------------------
 def dashboard_page():
-    # --- Instructions for Scheduled Background Emails ---
-    st.markdown("---")
-    st.subheader("Automated Scheduled Email Reports")
-    st.markdown("To enable fully automated scheduled feedback analytics emails (with advanced PDF formatting), run the following script in the background on your server:")
-    st.code("python send_feedback_reports.py", language="bash")
-    st.markdown("- Reports are sent every Monday at 08:00 (server time).\n- Configure recipient and SMTP credentials using environment variables: FEEDBACK_REPORT_EMAIL_TO, YAGMAIL_USER, YAGMAIL_PASSWORD.\n- PDF formatting is improved for readability and table layout.")
-    # --- PDF Export for Feedback Analytics ---
-    from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
-    import tempfile
-    st.markdown("---")
-    st.subheader("Export Feedback Analytics as PDF")
-    def create_pdf_report(df, title):
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        c = canvas.Canvas(tmp.name, pagesize=letter)
-        width, height = letter
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(30, height-40, title)
-        c.setFont("Helvetica", 10)
-        y = height-70
-        for col in df.columns:
-            c.drawString(30, y, f"{col}")
-            y -= 15
-        y -= 10
-        for idx, row in df.iterrows():
-            y -= 15
-            if y < 40:
-                c.showPage()
-                y = height-40
-            c.drawString(30, y, ", ".join(str(x) for x in row.values))
-        c.save()
-        return tmp.name
-    if anomaly_feedback:
-        if st.button("Download Anomaly Feedback PDF"):
-            pdf_path = create_pdf_report(df_anom_fb, "Anomaly Feedback Report")
-            with open(pdf_path, "rb") as f:
-                st.download_button("Download PDF", f.read(), "anomaly_feedback_report.pdf", "application/pdf")
-    if rec_feedback:
-        if st.button("Download Recommendation Feedback PDF"):
-            pdf_path = create_pdf_report(df_rec_fb, "Recommendation Feedback Report")
-            with open(pdf_path, "rb") as f:
-                st.download_button("Download PDF", f.read(), "recommendation_feedback_report.pdf", "application/pdf")
+    anomaly_feedback = []
+    rec_feedback = []
+    st.title("☁️ Cloud Cost Dashboard")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Monthly Cost", "$12,450", "+8%")
+    col2.metric("Forecast Next Month", "$13,100", "+5%")
+    col3.metric("Potential Savings", "$2,150", "-15%")
+    col4.metric("Idle Resources", "17", "Needs action")
 
     # --- Scheduled Report Emails (manual trigger for demo) ---
     st.markdown("---")
@@ -469,6 +445,9 @@ def dashboard_page():
             last_train_time = f.read().strip()
     st.caption(f"Last model retrain: {last_train_time if last_train_time else 'Never'}")
     # Simple retrain trigger: if new data since last retrain or user clicks button
+    if 'filtered' not in locals() or filtered is None or filtered.empty or 'date' not in filtered.columns:
+        st.warning("No filtered data available for retraining check.")
+        return
     latest_data_time = str(filtered['date'].max())
     if last_train_time is None or latest_data_time > last_train_time:
         retrain_flag = True
@@ -549,12 +528,13 @@ def dashboard_page():
     st.write("Unified Cloud Cost Analytics Dashboard 🚀")
 
     # Load data
+
     conn = sqlite3.connect("cloud_advisor.db")
     df = pd.read_sql_query("SELECT * FROM billing_data", conn)
     conn.close()
 
-    if df.empty:
-        st.warning("No cost data available.")
+    if df.empty or 'date' not in df.columns:
+        st.warning("No cost data available or 'date' column missing.")
         return
 
     # Add provider column based on account naming convention
@@ -884,6 +864,62 @@ def optimization_insights_page():
     st.bar_chart(df.set_index("Service"))
 
 def reports_page():
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    import tempfile
+    st.markdown("---")
+    st.subheader("Export Feedback Analytics as PDF")
+    def create_pdf_report(df, title):
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        c = canvas.Canvas(tmp.name, pagesize=letter)
+        width, height = letter
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(30, height-40, title)
+        c.setFont("Helvetica", 10)
+        y = height-70
+        for col in df.columns:
+            c.drawString(30, y, f"{col}")
+            y -= 15
+        y -= 10
+        for idx, row in df.iterrows():
+            y -= 15
+            if y < 40:
+                c.showPage()
+                y = height-40
+            c.drawString(30, y, ", ".join(str(x) for x in row.values))
+        c.save()
+        return tmp.name
+
+    # Read anomaly feedback
+    feedback_file = "anomaly_feedback.csv"
+    anomaly_feedback = []
+    if os.path.exists(feedback_file):
+        with open(feedback_file, 'r') as f:
+            for line in f:
+                date, label, flag = line.strip().split(',')
+                anomaly_feedback.append({'date': date, 'flag': flag})
+    if anomaly_feedback:
+        df_anom_fb = pd.DataFrame(anomaly_feedback)
+        if st.button("Download Anomaly Feedback PDF"):
+            pdf_path = create_pdf_report(df_anom_fb, "Anomaly Feedback Report")
+            with open(pdf_path, "rb") as f:
+                st.download_button("Download PDF", f.read(), "anomaly_feedback_report.pdf", "application/pdf")
+
+    # Read recommendation feedback
+    rec_feedback_file = "recommendation_feedback.csv"
+    rec_feedback = []
+    if os.path.exists(rec_feedback_file):
+        with open(rec_feedback_file, 'r') as f:
+            for line in f:
+                resource, rtype, flag = line.strip().split(',')
+                rec_feedback.append({'resource': resource, 'type': rtype, 'flag': flag})
+    if rec_feedback:
+        df_rec_fb = pd.DataFrame(rec_feedback)
+        if st.button("Download Recommendation Feedback PDF"):
+            pdf_path = create_pdf_report(df_rec_fb, "Recommendation Feedback Report")
+            with open(pdf_path, "rb") as f:
+                st.download_button("Download PDF", f.read(), "recommendation_feedback_report.pdf", "application/pdf")
+
     st.title("Reports")
     st.write("Generate FinOps reports")
     if st.session_state.get("role", "user") == "admin":
@@ -989,14 +1025,9 @@ with st.sidebar:
         ("Dashboard", "🏠"),
         ("AI Advisor", "🤖"),
         ("Cost Explorer", "💸"),
-        ("FinOps Insights", "📊"),
-        ("Optimization", "⚡"),
-        ("Optimization Insights", "🔍"),
         ("Reports", "📑"),
-        ("Cloud Accounts", "☁️"),
-        ("Cost Sync History", "🕒"),
-        ("Audit Log", "📝"),
-        ("Cost Forecast (Premium)", "🔮")
+        ("Cost Forecast (Premium)", "🔮"),
+        ("Cloud Accounts", "☁️")
     ]
     nav_labels = [f"{icon} {page}" for page, icon in nav_pages]
     default_index = nav_labels.index(f"🏠 Dashboard") if f"🏠 Dashboard" in nav_labels else 0
@@ -1026,20 +1057,31 @@ elif selected_page == "AI Advisor":
     ai_advisor_page()
 elif selected_page == "Cost Explorer":
     cost_explorer_page()
-elif selected_page == "FinOps Insights":
-    finops_insights_page()
-elif selected_page == "Optimization":
-    optimization_page()
-elif selected_page == "Optimization Insights":
-    optimization_insights_page()
 elif selected_page == "Reports":
-    reports_page()
+    # Advanced pages as tabs within Reports
+    report_tabs = [
+        "Main Reports",
+        "FinOps Insights",
+        "Optimization",
+        "Optimization Insights",
+        "Cost Sync History",
+        "Audit Log"
+    ]
+    selected_tab = st.selectbox("Report Sections", report_tabs, key="report_tab")
+    if selected_tab == "Main Reports":
+        reports_page()
+    elif selected_tab == "FinOps Insights":
+        finops_insights_page()
+    elif selected_tab == "Optimization":
+        optimization_page()
+    elif selected_tab == "Optimization Insights":
+        optimization_insights_page()
+    elif selected_tab == "Cost Sync History":
+        cost_sync_history_page()
+    elif selected_tab == "Audit Log":
+        audit_log_page()
+elif selected_page == "Cost Forecast (Premium)":
+    cost_forecast_page()
 elif selected_page == "Cloud Accounts":
     from pages.cloud_accounts import cloud_accounts_page
     cloud_accounts_page()
-elif selected_page == "Cost Sync History":
-    cost_sync_history_page()
-elif selected_page == "Audit Log":
-    audit_log_page()
-elif selected_page == "Cost Forecast (Premium)":
-    cost_forecast_page()
