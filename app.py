@@ -1,7 +1,14 @@
 import os
 # Disable Streamlit's default multipage navigation sidebar
 os.environ["STREAMLIT_PAGES"] = "0"
-import os
+
+# Streamlit page config: set title and collapse sidebar by default
+import streamlit as st
+st.set_page_config(
+    page_title="Cloud Advisory Platform",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 import datetime
 import sqlite3
 import pandas as pd
@@ -10,7 +17,6 @@ from prophet import Prophet
 from statsmodels.tsa.arima.model import ARIMA
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-import streamlit as st
 from database.db import save_forecast_note, load_forecast_note, log_audit_event
 import plotly.express as px
 from sklearn.ensemble import IsolationForest
