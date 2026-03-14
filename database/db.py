@@ -1,5 +1,5 @@
 # Ensure this function exists for compatibility
-def get_account_limit(plan):
+def get_account_limit(plan="Free"):
     limits = {
         "Free": 1,
         "Starter": 3,

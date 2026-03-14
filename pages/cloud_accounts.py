@@ -5,8 +5,9 @@ def cloud_accounts_page():
     st.title("Cloud Accounts")
     st.subheader("Connect your cloud account")
 
-    current_plan = st.session_state.get("plan", "Starter")
-    account_limit = get_account_limit()
+    current_plan = "Free"
+    account_limit = get_account_limit(current_plan)
+    connected_accounts = get_connected_account_count()
     num_accounts = get_connected_account_count()
     st.info(f"Connected accounts: {num_accounts} / {account_limit if account_limit != float('inf') else 'Unlimited'}")
     # Visual progress bar
