@@ -5,3 +5,11 @@ plotly
 boto3
 openai
 APScheduler
+prophet==1.1.5
+statsmodels==0.14.2
+scikit-learn==1.5.1
+sqlalchemy
+psycopg2-binary
+boto3
+azure-identity
+google-cloud-billing
