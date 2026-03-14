@@ -1,6 +1,12 @@
 # Ensure this function exists for compatibility
-def get_account_limit():
-    return 5
+def get_account_limit(plan):
+    limits = {
+        "Free": 1,
+        "Starter": 3,
+        "Pro": 10,
+        "Enterprise": 50
+    }
+    return limits.get(plan, 1)
 def save_forecast_note(username, forecast_date, note):
     conn = get_db()
     conn.execute("""
