@@ -222,6 +222,82 @@ def _ensure_cloud_sync_runs_table(conn):
     _ensure_column(conn, "cloud_sync_runs", "metadata", "TEXT")
 
 
+def _ensure_recommendations_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            account_identifier TEXT,
+            provider TEXT,
+            category TEXT,
+            title TEXT,
+            description TEXT,
+            status TEXT DEFAULT 'new',
+            owner TEXT,
+            priority TEXT,
+            estimated_savings REAL,
+            realized_savings REAL DEFAULT 0,
+            due_date TEXT,
+            dismiss_reason TEXT,
+            source TEXT,
+            resource TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            completed_at TEXT
+        )
+        """
+    )
+    _ensure_column(conn, "recommendations", "username", "TEXT")
+    _ensure_column(conn, "recommendations", "account_identifier", "TEXT")
+    _ensure_column(conn, "recommendations", "provider", "TEXT")
+    _ensure_column(conn, "recommendations", "category", "TEXT")
+    _ensure_column(conn, "recommendations", "title", "TEXT")
+    _ensure_column(conn, "recommendations", "description", "TEXT")
+    _ensure_column(conn, "recommendations", "status", "TEXT DEFAULT 'new'")
+    _ensure_column(conn, "recommendations", "owner", "TEXT")
+    _ensure_column(conn, "recommendations", "priority", "TEXT")
+    _ensure_column(conn, "recommendations", "estimated_savings", "REAL")
+    _ensure_column(conn, "recommendations", "realized_savings", "REAL DEFAULT 0")
+    _ensure_column(conn, "recommendations", "due_date", "TEXT")
+    _ensure_column(conn, "recommendations", "dismiss_reason", "TEXT")
+    _ensure_column(conn, "recommendations", "source", "TEXT")
+    _ensure_column(conn, "recommendations", "resource", "TEXT")
+    _ensure_column(conn, "recommendations", "created_at", "TEXT")
+    _ensure_column(conn, "recommendations", "updated_at", "TEXT")
+    _ensure_column(conn, "recommendations", "completed_at", "TEXT")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_recommendations_identity
+        ON recommendations(username, source, category, title, resource)
+        """
+    )
+
+
+def _ensure_recommendation_events_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recommendation_id INTEGER NOT NULL,
+            username TEXT,
+            action TEXT,
+            old_value TEXT,
+            new_value TEXT,
+            notes TEXT,
+            created_at TEXT
+        )
+        """
+    )
+    _ensure_column(conn, "recommendation_events", "recommendation_id", "INTEGER")
+    _ensure_column(conn, "recommendation_events", "username", "TEXT")
+    _ensure_column(conn, "recommendation_events", "action", "TEXT")
+    _ensure_column(conn, "recommendation_events", "old_value", "TEXT")
+    _ensure_column(conn, "recommendation_events", "new_value", "TEXT")
+    _ensure_column(conn, "recommendation_events", "notes", "TEXT")
+    _ensure_column(conn, "recommendation_events", "created_at", "TEXT")
+
+
 def _ensure_cloud_accounts_table(conn):
     conn.execute(
         """
@@ -273,6 +349,8 @@ def create_tables():
     _ensure_forecast_notes_table(conn)
     _ensure_cloud_accounts_table(conn)
     _ensure_cloud_sync_runs_table(conn)
+    _ensure_recommendations_table(conn)
+    _ensure_recommendation_events_table(conn)
     conn.commit()
     conn.close()
 
@@ -413,6 +491,44 @@ def get_user(username):
     user = cur.fetchone()
     conn.close()
     return user
+
+
+def get_user_role(username):
+    user = get_user(username) if username else None
+    return user[2] if user else "user"
+
+
+def get_recommendation(recommendation_id):
+    conn = get_db()
+    _ensure_recommendations_table(conn)
+    row = conn.execute(
+        """
+        SELECT id, username, account_identifier, provider, category, title, description,
+               status, owner, priority, estimated_savings, realized_savings, due_date,
+               dismiss_reason, source, resource, created_at, updated_at, completed_at
+        FROM recommendations
+        WHERE id = ?
+        """,
+        (recommendation_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def can_manage_recommendation(recommendation, acting_username, action="view"):
+    if not recommendation or not acting_username:
+        return False
+
+    role = get_user_role(acting_username)
+    if role in {"admin", "premium"}:
+        return True
+
+    owner = recommendation.get("owner")
+    if action == "view":
+        return owner == acting_username or not owner
+    if action == "accept":
+        return owner in {None, "", acting_username}
+    return owner == acting_username
 
 
 def log_audit_event(username, action, details=None):
@@ -738,6 +854,291 @@ def list_sync_runs(cloud_account_id=None, username=None, limit=20):
     rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
     conn.close()
     return rows
+
+
+def add_recommendation_event(recommendation_id, username, action, old_value=None, new_value=None, notes=None):
+    conn = get_db()
+    _ensure_recommendation_events_table(conn)
+    conn.execute(
+        """
+        INSERT INTO recommendation_events (
+            recommendation_id, username, action, old_value, new_value, notes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            recommendation_id,
+            username,
+            action,
+            old_value,
+            new_value,
+            notes,
+            datetime.utcnow().isoformat(timespec="seconds"),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_recommendation_events(recommendation_id, limit=20):
+    conn = get_db()
+    _ensure_recommendation_events_table(conn)
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT id, recommendation_id, username, action, old_value, new_value, notes, created_at
+            FROM recommendation_events
+            WHERE recommendation_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (recommendation_id, limit),
+        ).fetchall()
+    ]
+    conn.close()
+    return rows
+
+
+def save_recommendation(
+    username,
+    category,
+    title,
+    description,
+    source,
+    resource=None,
+    account_identifier=None,
+    provider=None,
+    owner=None,
+    priority="medium",
+    estimated_savings=None,
+    due_date=None,
+):
+    conn = get_db()
+    _ensure_recommendations_table(conn)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    existing = conn.execute(
+        """
+        SELECT id, status
+        FROM recommendations
+        WHERE username = ? AND source = ? AND category = ? AND title = ? AND COALESCE(resource, '') = COALESCE(?, '')
+        """,
+        (username, source, category, title, resource),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """
+            UPDATE recommendations
+            SET description = ?, account_identifier = ?, provider = ?, owner = COALESCE(?, owner),
+                priority = COALESCE(?, priority), estimated_savings = COALESCE(?, estimated_savings),
+                due_date = COALESCE(?, due_date), updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                description,
+                account_identifier,
+                provider,
+                owner,
+                priority,
+                estimated_savings,
+                due_date,
+                now,
+                existing[0],
+            ),
+        )
+        recommendation_id = existing[0]
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO recommendations (
+                username, account_identifier, provider, category, title, description, status,
+                owner, priority, estimated_savings, due_date, source, resource, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                username,
+                account_identifier,
+                provider,
+                category,
+                title,
+                description,
+                owner,
+                priority,
+                estimated_savings,
+                due_date,
+                source,
+                resource,
+                now,
+                now,
+            ),
+        )
+        recommendation_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return recommendation_id
+
+
+def list_recommendations(username=None, status=None, source=None, limit=100):
+    conn = get_db()
+    _ensure_recommendations_table(conn)
+    query = """
+        SELECT id, username, account_identifier, provider, category, title, description,
+               status, owner, priority, estimated_savings, realized_savings, due_date,
+               dismiss_reason, source, resource, created_at, updated_at, completed_at
+        FROM recommendations
+    """
+    conditions = []
+    params = []
+    if username is not None:
+        conditions.append("username = ?")
+        params.append(username)
+    if status is not None:
+        conditions.append("status = ?")
+        params.append(status)
+    if source is not None:
+        conditions.append("source = ?")
+        params.append(source)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY updated_at DESC, created_at DESC LIMIT ?"
+    params.append(limit)
+    rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
+    conn.close()
+    return rows
+
+
+def update_recommendation_status(
+    recommendation_id,
+    status,
+    username=None,
+    owner=None,
+    dismiss_reason=None,
+    realized_savings=None,
+    notes=None,
+):
+    conn = get_db()
+    _ensure_recommendations_table(conn)
+    row = conn.execute(
+        "SELECT status, owner, realized_savings, dismiss_reason FROM recommendations WHERE id = ?",
+        (recommendation_id,),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    recommendation = {
+        "id": recommendation_id,
+        "status": row[0],
+        "owner": row[1],
+        "realized_savings": row[2],
+        "dismiss_reason": row[3],
+    }
+    action_name = "accept" if status == "accepted" else f"status:{status}"
+    if not can_manage_recommendation(recommendation, username, action=action_name):
+        conn.close()
+        return False
+    previous_status = row[0]
+    effective_owner = owner
+    if status == "accepted" and not effective_owner and not row[1]:
+        effective_owner = username
+    completed_at = datetime.utcnow().isoformat(timespec="seconds") if status == "completed" else None
+    conn.execute(
+        """
+        UPDATE recommendations
+        SET status = ?, owner = COALESCE(?, owner), dismiss_reason = COALESCE(?, dismiss_reason),
+            realized_savings = COALESCE(?, realized_savings), completed_at = COALESCE(?, completed_at), updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            status,
+            effective_owner,
+            dismiss_reason,
+            realized_savings,
+            completed_at,
+            datetime.utcnow().isoformat(timespec="seconds"),
+            recommendation_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    add_recommendation_event(
+        recommendation_id,
+        username,
+        action="status_changed",
+        old_value=previous_status,
+        new_value=status,
+        notes=notes or dismiss_reason,
+    )
+    return True
+
+
+def update_recommendation_details(
+    recommendation_id,
+    username=None,
+    owner=None,
+    priority=None,
+    due_date=None,
+    notes=None,
+):
+    conn = get_db()
+    _ensure_recommendations_table(conn)
+    row = conn.execute(
+        "SELECT owner, priority, due_date FROM recommendations WHERE id = ?",
+        (recommendation_id,),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    recommendation = {
+        "id": recommendation_id,
+        "owner": row[0],
+        "priority": row[1],
+        "due_date": row[2],
+    }
+    if not can_manage_recommendation(recommendation, username, action="details"):
+        conn.close()
+        return False
+
+    role = get_user_role(username)
+    effective_owner = owner if role in {"admin", "premium"} else row[0]
+
+    old_snapshot = {
+        "owner": row[0],
+        "priority": row[1],
+        "due_date": row[2],
+    }
+    new_snapshot = {
+        "owner": effective_owner if effective_owner is not None else row[0],
+        "priority": priority if priority is not None else row[1],
+        "due_date": due_date if due_date is not None else row[2],
+    }
+
+    conn.execute(
+        """
+        UPDATE recommendations
+        SET owner = COALESCE(?, owner),
+            priority = COALESCE(?, priority),
+            due_date = COALESCE(?, due_date),
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            effective_owner,
+            priority,
+            due_date,
+            datetime.utcnow().isoformat(timespec="seconds"),
+            recommendation_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    add_recommendation_event(
+        recommendation_id,
+        username,
+        action="details_updated",
+        old_value=json.dumps(old_snapshot),
+        new_value=json.dumps(new_snapshot),
+        notes=notes,
+    )
+    return True
 
 
 def get_connected_account_count(username=None):

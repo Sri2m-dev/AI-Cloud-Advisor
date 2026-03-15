@@ -9,7 +9,7 @@ os.environ["STREAMLIT_PAGES"] = "0"
 import streamlit as st
 st.set_page_config(
     page_title="Cloud Advisory Platform",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
@@ -269,6 +269,11 @@ def inject_custom_css():
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 inject_custom_css()
 
+st.set_page_config(
+    page_title="Cloud Advisory Platform",
+    layout="wide"
+)
+
 # -------------------
 # SESSION STATE
 # -------------------
@@ -279,6 +284,7 @@ if "authenticated" not in st.session_state:
 # LOGIN PAGE
 # -------------------
 def login_page():
+    st.set_page_config(layout="centered")
     st.markdown("""
     <style>
     div[data-baseweb="input"] {
@@ -436,15 +442,7 @@ def _render_my_open_recommendations(username):
             assigned_items.append(item)
 
     st.markdown("---")
-    header_col, action_col = st.columns([3, 1])
-    header_col.subheader("My Open Recommendations")
-    action_col.button(
-        "Open Inbox",
-        key="dashboard_open_recommendations_inbox",
-        use_container_width=True,
-        on_click=lambda: st.session_state.update(selected_page="Recommendations"),
-    )
-    st.caption("Dashboard keeps this lightweight. Use Recommendations for full workflow management.")
+    st.subheader("My Open Recommendations")
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     metric_col1.metric("Open", len(open_items))
     metric_col2.metric("Assigned to Me", len(assigned_items))
@@ -464,14 +462,13 @@ def _render_my_open_recommendations(username):
             0 if item in overdue_items else 1,
             -float(item.get("estimated_savings") or 0),
         ),
-    )[:3]
+    )[:5]
     summary_rows = []
     for item in top_items:
         summary_rows.append(
             {
                 "Title": item.get("title"),
                 "Status": item.get("status"),
-                "Priority": str(item.get("priority") or "medium").title(),
                 "Owner": item.get("owner") or "Unassigned",
                 "Due": item.get("due_date") or "Not set",
                 "Potential Savings": float(item.get("estimated_savings") or 0),
@@ -1252,8 +1249,7 @@ with st.sidebar:
         ("Plans & Billing", "ðŸ’³")
     ]
     nav_labels = [page for page, _ in nav_pages]
-    current_page = st.session_state.get("selected_page", "Dashboard")
-    default_index = nav_labels.index(current_page) if current_page in nav_labels else 0
+    default_index = nav_labels.index("Dashboard") if "Dashboard" in nav_labels else 0
     selected = st.radio("Go to:", nav_labels, index=default_index)
     st.session_state["selected_page"] = nav_pages[nav_labels.index(selected)][0]
     st.markdown("---")
