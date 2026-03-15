@@ -78,7 +78,8 @@ def init_pg_db():
 
 
 def get_db():
-    conn = sqlite3.connect(SQLITE_DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(SQLITE_DB_PATH, check_same_thread=False, timeout=30)
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -107,16 +108,21 @@ def _billing_duplicate_count_query():
 
 def _cleanup_billing_duplicates(conn):
     duplicate_count = conn.execute(_billing_duplicate_count_query()).fetchone()[0]
-    conn.execute(
-        """
-        DELETE FROM billing_data
-        WHERE rowid NOT IN (
-            SELECT MAX(rowid)
-            FROM billing_data
-            GROUP BY COALESCE(date, ''), COALESCE(account, ''), COALESCE(service, '')
+    try:
+        conn.execute(
+            """
+            DELETE FROM billing_data
+            WHERE rowid NOT IN (
+                SELECT MAX(rowid)
+                FROM billing_data
+                GROUP BY COALESCE(date, ''), COALESCE(account, ''), COALESCE(service, '')
+            )
+            """
         )
-        """
-    )
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc).lower():
+            return 0
+        raise
     return int(duplicate_count or 0)
 
 

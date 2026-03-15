@@ -54,6 +54,39 @@ def predict_cost_months(cost_history, months_ahead=1):
     return next_month[0]
 
 
+def _build_forecast_spike_recommendation(cost_series, forecast_value, forecast_period, model_choice):
+    if forecast_value is None or cost_series is None or len(cost_series) < 7:
+        return None
+
+    recent_window = min(14, len(cost_series))
+    recent_average = float(np.mean(cost_series[-recent_window:]))
+    if recent_average <= 0:
+        return None
+
+    projected_change = float(forecast_value - recent_average)
+    projected_change_ratio = projected_change / recent_average
+    if projected_change_ratio < 0.10:
+        return None
+
+    priority = "high" if projected_change_ratio >= 0.25 else "medium"
+    due_date = (datetime.datetime.utcnow().date() + datetime.timedelta(days=3)).isoformat()
+    return {
+        "title": f"Investigate {forecast_period}-month forecast spike",
+        "description": (
+            f"The {model_choice} forecast projects ${forecast_value:,.0f} versus a recent average of "
+            f"${recent_average:,.0f}, a {projected_change_ratio:.0%} increase. Review demand drivers, "
+            "capacity changes, and commitment coverage before month-end decisions."
+        ),
+        "resource": "shared:forecast-spike",
+        "priority": priority,
+        "estimated_savings": max(int(round(projected_change * 30)), 0),
+        "due_date": due_date,
+        "recent_average": recent_average,
+        "projected_change": projected_change,
+        "projected_change_ratio": projected_change_ratio,
+    }
+
+
 def _get_analytics_connection():
     try:
         return get_pg_connection(), "PostgreSQL"
@@ -276,6 +309,45 @@ def cost_forecast_page():
         except Exception:
             metrics_text += "ARIMA metrics: error"
         st.info(f"Model Performance (CV):\n{metrics_text}")
+
+        forecast_recommendation = _build_forecast_spike_recommendation(
+            y_true,
+            forecast_value,
+            forecast_period,
+            model_choice,
+        )
+        if forecast_recommendation:
+            st.warning(
+                "Projected spend is materially above the recent baseline. Create a workflow item so the team can track and manage it."
+            )
+            insight_col1, insight_col2, insight_col3 = st.columns([1.1, 1.1, 1.6])
+            insight_col1.metric("Recent Average", f"${forecast_recommendation['recent_average']:,.0f}")
+            insight_col2.metric("Projected Increase", f"{forecast_recommendation['projected_change_ratio']:.0%}")
+            if insight_col3.button("Create Forecast Recommendation", key=f"forecast_recommendation_{model_choice}_{forecast_period}", use_container_width=True):
+                recommendation_id = save_recommendation(
+                    username=st.session_state.get("username", "guest"),
+                    category="forecast",
+                    title=forecast_recommendation["title"],
+                    description=forecast_recommendation["description"],
+                    source="cost_forecast",
+                    resource=forecast_recommendation["resource"],
+                    owner=st.session_state.get("username", "guest"),
+                    priority=forecast_recommendation["priority"],
+                    estimated_savings=forecast_recommendation["estimated_savings"],
+                    due_date=forecast_recommendation["due_date"],
+                )
+                log_audit_event(
+                    st.session_state.get("username", "guest"),
+                    "create_forecast_recommendation",
+                    f"recommendation_id={recommendation_id}, model={model_choice}, period={forecast_period}",
+                )
+                st.success("Forecast recommendation saved to the workflow inbox.")
+            if insight_col3.button("Open AI Recommendations", key=f"forecast_open_recommendations_{model_choice}_{forecast_period}", use_container_width=True):
+                st.session_state["selected_page"] = "AI Recommendations"
+                st.rerun()
+        else:
+            st.caption("No material forecast spike detected against the recent baseline.")
+
         # Downloadable forecast report
         if not forecast_data.empty:
             csv = forecast_data.to_csv(index=False).encode('utf-8')
@@ -483,14 +555,14 @@ def _render_my_open_recommendations(username):
 
     st.markdown("---")
     header_col, action_col = st.columns([3, 1])
-    header_col.subheader("My Open Recommendations")
+    header_col.subheader("My Open AI Recommendations")
     action_col.button(
-        "Open Inbox",
+        "Open AI Recommendations",
         key="dashboard_open_recommendations_inbox",
         use_container_width=True,
-        on_click=lambda: st.session_state.update(selected_page="Recommendations"),
+        on_click=lambda: st.session_state.update(selected_page="AI Recommendations"),
     )
-    st.caption("Dashboard keeps this lightweight. Use Recommendations for full workflow management.")
+    st.caption("Dashboard keeps this lightweight. Use AI Recommendations for full workflow management.")
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     metric_col1.metric("Open", len(open_items))
     metric_col2.metric("Assigned to Me", len(assigned_items))
@@ -525,6 +597,149 @@ def _render_my_open_recommendations(username):
         )
 
     st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+
+def _render_forecast_risk_summary(username):
+    workflow_items = list_recommendations(username=username, source="cost_forecast", limit=20)
+    role = st.session_state.get("role", "user")
+    if role not in {"admin", "premium"}:
+        workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
+
+    open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
+    st.markdown("---")
+    header_col, action_col = st.columns([3, 1])
+    header_col.subheader("Forecast Risk")
+    action_col.button(
+        "Open Forecast",
+        key="dashboard_open_cost_forecast",
+        use_container_width=True,
+        on_click=lambda: st.session_state.update(selected_page="Cost Forecast (Premium)"),
+    )
+
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    metric_col1.metric("Open Forecast Risks", len(open_items))
+    metric_col2.metric(
+        "Potential Exposure",
+        f"${sum(float(item.get('estimated_savings') or 0) for item in open_items):,.0f}",
+    )
+    metric_col3.metric(
+        "High Priority",
+        sum(1 for item in open_items if str(item.get("priority") or "").lower() == "high"),
+    )
+
+    if not open_items:
+        st.caption("No open forecast risk workflow items right now. Create one from Cost Forecast when a material spike is detected.")
+        return
+
+    st.caption("Forecast spike recommendations created from Cost Forecast appear here for quick review.")
+    top_items = sorted(
+        open_items,
+        key=lambda item: (
+            0 if str(item.get("priority") or "").lower() == "high" else 1,
+            item.get("due_date") or "9999-12-31",
+        ),
+    )[:3]
+    summary_rows = [
+        {
+            "Title": item.get("title"),
+            "Status": item.get("status"),
+            "Priority": str(item.get("priority") or "medium").title(),
+            "Owner": item.get("owner") or "Unassigned",
+            "Due": item.get("due_date") or "Not set",
+            "Potential Exposure": float(item.get("estimated_savings") or 0),
+        }
+        for item in top_items
+    ]
+    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+    if st.button("Open Forecast Recommendations", key="dashboard_open_forecast_recommendations", use_container_width=True):
+        st.session_state["selected_page"] = "AI Recommendations"
+        st.rerun()
+
+
+def _dashboard_summary_metrics(username, active_demo=None):
+    conn, _ = _get_analytics_connection()
+    billing_df = None
+    try:
+        billing_df = pd.read_sql_query("SELECT account, date, cost FROM billing_data", conn)
+    except Exception:
+        billing_df = pd.DataFrame()
+    finally:
+        conn.close()
+
+    if billing_df.empty:
+        return {
+            "total_monthly_cost": 0.0,
+            "total_monthly_delta": None,
+            "forecast_next_month": 0.0,
+            "forecast_delta": None,
+            "potential_savings": 0.0,
+            "idle_resources": 0,
+            "account_names": active_demo.get("account_names", []) if active_demo else [],
+        }
+
+    billing_df["date"] = pd.to_datetime(billing_df["date"], errors="coerce")
+    billing_df["cost"] = pd.to_numeric(billing_df["cost"], errors="coerce").fillna(0.0)
+    billing_df = billing_df.dropna(subset=["date"])
+
+    account_scope = []
+    if active_demo and active_demo.get("account_names"):
+        account_scope = active_demo["account_names"]
+    else:
+        account_scope = [account.get("account_name") for account in list_cloud_accounts(username) if account.get("account_name")]
+
+    if account_scope:
+        scoped_df = billing_df[billing_df["account"].isin(account_scope)].copy()
+        if not scoped_df.empty:
+            billing_df = scoped_df
+
+    if billing_df.empty:
+        return {
+            "total_monthly_cost": 0.0,
+            "total_monthly_delta": None,
+            "forecast_next_month": 0.0,
+            "forecast_delta": None,
+            "potential_savings": 0.0,
+            "idle_resources": 0,
+            "account_names": account_scope,
+        }
+
+    latest_date = billing_df["date"].max().normalize()
+    recent_start = latest_date - pd.Timedelta(days=29)
+    previous_start = latest_date - pd.Timedelta(days=59)
+    previous_end = latest_date - pd.Timedelta(days=30)
+    recent_df = billing_df[billing_df["date"] >= recent_start]
+    previous_df = billing_df[(billing_df["date"] >= previous_start) & (billing_df["date"] <= previous_end)]
+
+    total_monthly_cost = float(recent_df["cost"].sum())
+    previous_monthly_cost = float(previous_df["cost"].sum()) if not previous_df.empty else None
+    total_monthly_delta = None
+    if previous_monthly_cost and previous_monthly_cost > 0:
+        total_monthly_delta = ((total_monthly_cost - previous_monthly_cost) / previous_monthly_cost) * 100
+
+    daily_totals = recent_df.groupby(recent_df["date"].dt.date)["cost"].sum().sort_index()
+    recent_daily_average = float(daily_totals.mean()) if not daily_totals.empty else 0.0
+    forecast_next_month = recent_daily_average * 30
+    forecast_delta = None
+    if total_monthly_cost > 0:
+        forecast_delta = ((forecast_next_month - total_monthly_cost) / total_monthly_cost) * 100
+
+    workflow_items = list_recommendations(username=username, limit=100)
+    open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
+    potential_savings = float(sum(float(item.get("estimated_savings") or 0) for item in open_items))
+    idle_resources = sum(
+        1
+        for item in open_items
+        if str(item.get("category") or "").lower() in {"waste", "rightsizing", "storage", "compute"}
+    )
+    return {
+        "total_monthly_cost": total_monthly_cost,
+        "total_monthly_delta": total_monthly_delta,
+        "forecast_next_month": forecast_next_month,
+        "forecast_delta": forecast_delta,
+        "potential_savings": potential_savings,
+        "idle_resources": idle_resources,
+        "account_names": account_scope,
+    }
 
 
 def _seed_dashboard_recommendations(username):
@@ -572,69 +787,69 @@ def _seed_dashboard_recommendations(username):
 
 
 def _seed_ai_advisor_recommendations(username):
-    recommendations = [
-        {
-            "category": "compute",
-            "title": "Downsize underutilized EC2 instances",
-            "description": "Several EC2 instances show sustained low CPU and memory utilization and can move to smaller instance classes.",
-            "resource": "aws-prod:EC2",
-            "estimated_savings": 840,
-            "priority": "high",
-        },
-        {
-            "category": "commitments",
-            "title": "Evaluate Savings Plans coverage gaps",
-            "description": "Current on-demand usage patterns indicate a Savings Plans opportunity across stable workloads.",
-            "resource": "aws-shared:SavingsPlans",
-            "estimated_savings": 1260,
-            "priority": "high",
-        },
-        {
-            "category": "storage",
-            "title": "Archive stale snapshots and cold backups",
-            "description": "Backup retention appears higher than required for several low-access datasets.",
-            "resource": "shared:backups",
-            "estimated_savings": 430,
-            "priority": "medium",
-        },
-    ]
-    for item in recommendations:
-        save_recommendation(
-            username=username,
-            category=item["category"],
-            title=item["title"],
-            description=item["description"],
-            source="ai_advisor",
-            resource=item["resource"],
-            estimated_savings=item["estimated_savings"],
-            priority=item["priority"],
-        )
-    return recommendations
+    from services.recommendation_workflow import seed_ai_advisor_recommendations
+
+    return seed_ai_advisor_recommendations(username)
 
 def dashboard_page():
     anomaly_feedback = []
     rec_feedback = []
     st.title("Cloud Cost Dashboard")
     username = st.session_state.get("username", "guest")
+    active_demo = st.session_state.get("active_demo_environment")
+    if active_demo:
+        st.info(
+            f"Demo scenario active: {active_demo['label']} | "
+            f"Accounts: {active_demo.get('accounts', 0)} | "
+            f"Billing rows: {active_demo.get('billing_rows', 0)} | "
+            f"Workflow items: {active_demo.get('recommendations', 0)}"
+        )
+        st.caption(active_demo.get("description", ""))
+    summary_metrics = _dashboard_summary_metrics(username, active_demo=active_demo)
     _render_cloud_operations_summary(username)
     _render_my_open_recommendations(username)
+    _render_forecast_risk_summary(username)
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Monthly Cost", "$12,450", "+8%")
-    col2.metric("Forecast Next Month", "$13,100", "+5%")
-    col3.metric("Potential Savings", "$2,150", "-15%")
-    col4.metric("Idle Resources", "17", "Needs action")
+    total_monthly_delta_text = (
+        f"{summary_metrics['total_monthly_delta']:+.1f}% vs prior 30d"
+        if summary_metrics["total_monthly_delta"] is not None
+        else "No prior baseline"
+    )
+    forecast_delta_text = (
+        f"{summary_metrics['forecast_delta']:+.1f}% vs recent month"
+        if summary_metrics["forecast_delta"] is not None
+        else "Awaiting baseline"
+    )
+    savings_delta_text = f"{len(summary_metrics['account_names'])} account(s) in scope"
+    idle_delta_text = "Needs action" if summary_metrics["idle_resources"] else "Under control"
+    col1.metric("Total Monthly Cost", f"${summary_metrics['total_monthly_cost']:,.0f}", total_monthly_delta_text)
+    col2.metric("Forecast Next Month", f"${summary_metrics['forecast_next_month']:,.0f}", forecast_delta_text)
+    col3.metric("Potential Savings", f"${summary_metrics['potential_savings']:,.0f}", savings_delta_text)
+    col4.metric("Idle Resources", f"{summary_metrics['idle_resources']}", idle_delta_text)
+    if summary_metrics["account_names"]:
+        st.caption("Dashboard metrics are currently scoped to: " + ", ".join(summary_metrics["account_names"]))
 
     action_col1, action_col2 = st.columns([1.2, 3])
     if action_col1.button("Generate Recommendations", key="dashboard_generate_recommendations", use_container_width=True):
         dashboard_count = _seed_dashboard_recommendations(username)
         ai_count = len(_seed_ai_advisor_recommendations(username))
-        st.success(f"Recommendations inbox refreshed with {dashboard_count + ai_count} workflow items.")
-        st.session_state["selected_page"] = "Recommendations"
+        st.success(f"AI Recommendations refreshed with {dashboard_count + ai_count} workflow items.")
+        st.session_state["selected_page"] = "AI Recommendations"
         st.rerun()
     action_col2.caption("Create a fresh set of workflow items from dashboard signals and AI advisor heuristics.")
 
-    # --- Scheduled Report Emails (manual trigger for demo) ---
     st.markdown("---")
+    show_legacy_lab = st.toggle(
+        "Show legacy feedback and model lab",
+        value=False,
+        key="dashboard_show_legacy_lab",
+        help="Reveals older experimental feedback, retraining, and AutoML panels that are not scenario-specific.",
+    )
+    if not show_legacy_lab:
+        st.caption("Legacy feedback, retraining, and experimental model panels are hidden by default so the scenario-driven dashboard stays focused.")
+        return
+
+    # --- Scheduled Report Emails (manual trigger for demo) ---
     st.subheader("Email Feedback Analytics")
     st.caption("Set SMTP env: YAGMAIL_USER, YAGMAIL_PASSWORD")
     st.markdown("""
@@ -1111,9 +1326,7 @@ def dashboard_page():
 
 def ai_advisor_page():
     st.title("AI FinOps Advisor")
-    username = st.session_state.get("username", "guest")
-
-    st.write("AI-driven cloud cost optimization recommendations")
+    st.write("Preview the types of AI-generated optimization opportunities that will be managed in Recommendations.")
 
     recommendation_preview = pd.DataFrame(
         [
@@ -1123,22 +1336,16 @@ def ai_advisor_page():
         ]
     )
     st.dataframe(recommendation_preview, use_container_width=True, hide_index=True)
+    st.markdown("""
+    **AI Advisor role**
 
-    if st.button("Generate AI Recommendations"):
-        seeded_recommendations = _seed_ai_advisor_recommendations(username)
-        st.success("Recommendations Generated")
-        st.markdown("""
-        **EC2 Optimization**
-
-        - 3 EC2 instances are underutilized  
-        - Recommended: downgrade from m5.large to t3.medium  
-
-        **Estimated Monthly Savings:** $840
-        """)
-        st.caption(f"{len(seeded_recommendations)} workflow items were added to Recommendations Inbox.")
-        if st.button("Open Recommendations Inbox", key="ai_advisor_open_inbox", use_container_width=True):
-            st.session_state["selected_page"] = "Recommendations"
-            st.rerun()
+    - Explains the kinds of optimization opportunities the system can identify
+    - Previews likely savings themes before workflow tracking begins
+    - Leaves generation and status management to Recommendations
+    """)
+    if st.button("Open AI Recommendations", key="ai_advisor_open_recommendations", use_container_width=True):
+        st.session_state["selected_page"] = "AI Recommendations"
+        st.rerun()
 
 def cost_explorer_page():
     st.title("Cost Explorer")
@@ -1386,8 +1593,7 @@ with st.sidebar:
     st.markdown("## Quick Navigation")
     nav_pages = [
         ("Dashboard", "ðŸ "),
-        ("Recommendations", "RI"),
-        ("AI Advisor", "ðŸ¤–"),
+        ("AI Recommendations", "RI"),
         ("Cost Explorer", "ðŸ’¸"),
         ("Reports", "ðŸ“‘"),
         ("Cost Forecast (Premium)", "ðŸ”®"),
@@ -1419,11 +1625,12 @@ Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
 selected_page = st.session_state.get("selected_page", "Dashboard")
 if selected_page == "Dashboard":
     dashboard_page()
-elif selected_page == "Recommendations":
+elif selected_page == "AI Recommendations":
     from views.recommendations import render_recommendations_page
     render_recommendations_page()
 elif selected_page == "AI Advisor":
-    ai_advisor_page()
+    st.session_state["selected_page"] = "AI Recommendations"
+    st.rerun()
 elif selected_page == "Cost Explorer":
     cost_explorer_page()
 elif selected_page == "Reports":

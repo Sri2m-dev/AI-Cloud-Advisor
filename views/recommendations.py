@@ -10,6 +10,7 @@ from database.db import (
     update_recommendation_details,
     update_recommendation_status,
 )
+from services.recommendation_workflow import seed_ai_advisor_recommendations
 
 
 STATUS_OPTIONS = ["new", "accepted", "snoozed", "dismissed", "completed"]
@@ -23,19 +24,23 @@ def render_recommendations_page():
 
     username = st.session_state.get("username", "guest")
     role = st.session_state.get("role", "user")
-    action_col1, action_col2 = st.columns([1, 3])
+    action_col1, action_col2, action_col3 = st.columns([1, 1.2, 2.2])
     if action_col1.button("Back to Dashboard", key="recommendations_back_to_dashboard", use_container_width=True):
         st.session_state["selected_page"] = "Dashboard"
         st.rerun()
-    action_col2.caption("This is the full workflow inbox. The dashboard only shows a compact summary.")
-    st.title("Recommendations Inbox")
-    st.write("Manage optimization and FinOps workflow items in one place.")
+    if action_col2.button("Generate AI Recommendations", key="recommendations_generate_ai", use_container_width=True):
+        seeded_recommendations = seed_ai_advisor_recommendations(username)
+        st.success(f"Added {len(seeded_recommendations)} AI-generated workflow item(s) to AI Recommendations.")
+        st.rerun()
+    action_col3.caption("This is the full AI recommendation workflow surface. Generate and manage recommendations here; the dashboard only shows a compact summary.")
+    st.title("AI Recommendations")
+    st.write("Generate, review, assign, and manage AI-driven optimization recommendations in one place.")
 
     workflow_items = list_recommendations(username=username, limit=200)
     if role not in {"admin", "premium"}:
         workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
     if not workflow_items:
-        st.info("No workflow items yet. Save recommendations from the dashboard or optimization pages to start tracking them here.")
+        st.info("No recommendations yet. Use Generate AI Recommendations to create workflow items here.")
         return
 
     open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
@@ -78,13 +83,14 @@ def render_recommendations_page():
             "Status": item.get("status") or "new",
             "Priority": item.get("priority") or "medium",
             "Owner": item.get("owner") or "Unassigned",
-            "Potential Savings": float(item.get("estimated_savings") or 0),
+            "Potential Savings ($/month)": float(item.get("estimated_savings") or 0),
             "Due": item.get("due_date") or "Not set",
             "Source": item.get("source") or "unknown",
         }
         for item in filtered_items
     ]
     if summary_rows:
+        st.caption("All recommendation sources are unified here, including AI-generated, forecast, dashboard, and optimization workflow items.")
         st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
     else:
         st.caption("No workflow items match the current filters.")
