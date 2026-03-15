@@ -1,7 +1,41 @@
 /* Custom Streamlit Branding */
 body {
-    font-family: 'Segoe UI', Arial, sans-serif;
     background: #f7fafd;
+}
+
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+label,
+input,
+textarea {
+    font-family: 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', Arial, sans-serif;
+}
+
+[data-testid="stSidebar"] .brand-text,
+[data-testid="stSidebar"] .nav-text,
+[data-testid="stSidebar"] .brand-badge,
+[data-testid="stSidebar"] .nav-badge {
+    font-family: 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', Arial, sans-serif;
+}
+
+.material-symbols-rounded,
+.material-symbols-outlined,
+[class^="material-symbols"],
+[class*=" material-symbols"] {
+    font-family: 'Material Symbols Rounded' !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
+    word-wrap: normal !important;
+    direction: ltr !important;
 }
 
 /* Sidebar */
@@ -45,4 +79,86 @@ body {
 .stExpanderHeader {
     color: #0D8ABC !important;
     font-weight: 600;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.brand-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.8rem;
+    background: linear-gradient(135deg, #0D8ABC 0%, #2E8B57 100%);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+}
+
+.brand-text {
+    color: #1f2937;
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+[data-testid="stSidebar"] a.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    margin: 0.35rem 0;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid #d7e7f2;
+    border-radius: 0.9rem;
+    background: #ffffff;
+    color: #1f2937 !important;
+    text-decoration: none !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+[data-testid="stSidebar"] a.nav-link:hover {
+    border-color: #0D8ABC;
+    background: #f0f8fd;
+    transform: translateY(-1px);
+}
+
+[data-testid="stSidebar"] a.nav-link.active {
+    border-color: #0D8ABC;
+    background: #e6f2fa;
+}
+
+.nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    border-radius: 0.7rem;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+}
+
+.nav-badge.dashboard { background: #0D8ABC; }
+.nav-badge.ai { background: #7c3aed; }
+.nav-badge.cost { background: #d97706; }
+.nav-badge.reports { background: #2563eb; }
+.nav-badge.forecast { background: #059669; }
+.nav-badge.accounts { background: #0f766e; }
+.nav-badge.billing { background: #9333ea; }
+
+.nav-text {
+    font-size: 0.96rem;
+    font-weight: 600;
+    color: #1f2937;
 }

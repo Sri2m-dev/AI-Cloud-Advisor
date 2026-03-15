@@ -93,11 +93,11 @@ def cost_forecast_page():
     finally:
         conn.close()
     if df is not None and not df.empty:
-        st.markdown("## 📊 Cost History Trend")
+        st.markdown("## Cost History Trend")
         with st.expander("Show/Hide Cost History Chart", expanded=True):
             st.line_chart(df.set_index("date")["total_cost"])
         st.markdown("---")
-        st.markdown("## 🔮 Forecast Settings")
+        st.markdown("## Forecast Settings")
         col1, col2 = st.columns([2,1])
         with col1:
             model_choice = st.selectbox("Select Forecast Model", ["Linear Regression", "Prophet", "ARIMA"], help="Choose a forecasting algorithm. Prophet is best for seasonality, ARIMA for trends, Linear Regression for simplicity.")
@@ -109,7 +109,7 @@ def cost_forecast_page():
         arima_q = st.number_input("ARIMA q (MA)", min_value=0, max_value=5, value=1, help="ARIMA moving average order.") if model_choice == "ARIMA" else 1
         prophet_seasonality = st.selectbox("Prophet Seasonality Mode", ["additive", "multiplicative"], help="Prophet seasonality mode.") if model_choice == "Prophet" else "additive"
         st.markdown("---")
-        st.markdown("## 🧮 Forecast Result")
+        st.markdown("## Forecast Result")
         forecast_value = None
         forecast_data = pd.DataFrame()
         with st.spinner("Calculating forecast..."):
@@ -286,7 +286,7 @@ def login_page():
     }
     </style>
     """, unsafe_allow_html=True)
-    st.title("☁️ Cloud Advisory Platform")
+    st.title("Cloud Advisory Platform")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -312,10 +312,35 @@ def login_page():
 # -------------------
 # PAGE FUNCTIONS
 # -------------------
+import tempfile
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+
+def create_pdf_report(df, title):
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    c = canvas.Canvas(tmp.name, pagesize=letter)
+    width, height = letter
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(30, height-40, title)
+    c.setFont("Helvetica", 10)
+    y = height-70
+    for col in df.columns:
+        c.drawString(30, y, f"{col}")
+        y -= 15
+    y -= 10
+    for idx, row in df.iterrows():
+        y -= 15
+        if y < 40:
+            c.showPage()
+            y = height-40
+        c.drawString(30, y, ", ".join(str(x) for x in row.values))
+    c.save()
+    return tmp.name
+
 def dashboard_page():
     anomaly_feedback = []
     rec_feedback = []
-    st.title("☁️ Cloud Cost Dashboard")
+    st.title("Cloud Cost Dashboard")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Monthly Cost", "$12,450", "+8%")
     col2.metric("Forecast Next Month", "$13,100", "+5%")
@@ -540,7 +565,7 @@ def dashboard_page():
     import pandas as pd
     import plotly.express as px
     st.title("Dashboard")
-    st.write("Unified Cloud Cost Analytics Dashboard 🚀")
+    st.write("Unified Cloud Cost Analytics Dashboard")
 
     # Load data
     conn = get_pg_connection()
@@ -808,8 +833,8 @@ def ai_advisor_page():
         st.markdown("""
         **EC2 Optimization**
 
-        • 3 EC2 instances are underutilized  
-        • Recommended: downgrade from m5.large → t3.medium  
+        - 3 EC2 instances are underutilized  
+        - Recommended: downgrade from m5.large to t3.medium  
 
         **Estimated Monthly Savings:** $840
         """)
@@ -854,9 +879,9 @@ def optimization_page():
     st.warning("Idle resources detected")
 
     st.write("""
-    • 5 unattached EBS volumes  
-    • 2 idle load balancers  
-    • 3 underutilized EC2 instances
+    - 5 unattached EBS volumes  
+    - 2 idle load balancers  
+    - 3 underutilized EC2 instances
     """)
 
     st.metric("Potential Savings", "$1,750 / month")
@@ -1017,15 +1042,27 @@ def audit_log_page():
         conn.close()
 
 # --- Supabase Sign Up Page ---
-import streamlit as st
-from supabase import create_client, Client
+try:
+    from importlib import import_module
+    supabase_ = import_module("supabase")
+except ImportError:
+    supabase_ = None
 
-SUPABASE_URL = "https://your-project.supabase.co"  # TODO: Replace with your Supabase URL
-SUPABASE_KEY = "your-anon-or-service-key"  # TODO: Replace with your Supabase anon key
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+supabase = None
+
+if supabase_ and SUPABASE_URL and SUPABASE_KEY:
+    supabase = supabase_.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def supabase_signup_page():
     st.title("Sign Up (Supabase)")
+    if supabase_ is None:
+        st.warning("Supabase support is unavailable because the supabase package is not installed in this Python environment.")
+        return
+    if supabase is None:
+        st.warning("Supabase support is not configured. Set SUPABASE_URL and SUPABASE_KEY to enable sign-up.")
+        return
     email = st.text_input("Email", key="sb_email")
     password = st.text_input("Password", type="password", key="sb_password")
     company = st.text_input("Company", key="sb_company")
@@ -1051,28 +1088,28 @@ if not st.session_state.authenticated:
 
 # Sidebar enhancements: theme toggle, navigation, avatar, help, and logout
 with st.sidebar:
-    st.markdown("# 🌥️ Cloud Advisor")
+    st.markdown("# Cloud Advisor")
     # User avatar (placeholder)
     avatar_url = "https://ui-avatars.com/api/?name=" + st.session_state.get("username", "Guest") + "&background=0D8ABC&color=fff&size=128"
     st.image(avatar_url, width=64)
     st.caption(f"Signed in as: {st.session_state.get('username', 'Guest')}")
     st.markdown("---")
-    st.markdown("## 🧭 Quick Navigation")
+    st.markdown("## Quick Navigation")
     nav_pages = [
-        ("Dashboard", "🏠"),
-        ("AI Advisor", "🤖"),
-        ("Cost Explorer", "💸"),
-        ("Reports", "📑"),
-        ("Cost Forecast (Premium)", "🔮"),
-        ("Cloud Accounts", "☁️"),
-        ("Plans & Billing", "💳")
+        ("Dashboard", "ðŸ "),
+        ("AI Advisor", "ðŸ¤–"),
+        ("Cost Explorer", "ðŸ’¸"),
+        ("Reports", "ðŸ“‘"),
+        ("Cost Forecast (Premium)", "ðŸ”®"),
+        ("Cloud Accounts", "â˜ï¸"),
+        ("Plans & Billing", "ðŸ’³")
     ]
-    nav_labels = [f"{icon} {page}" for page, icon in nav_pages]
-    default_index = nav_labels.index(f"🏠 Dashboard") if f"🏠 Dashboard" in nav_labels else 0
+    nav_labels = [page for page, _ in nav_pages]
+    default_index = nav_labels.index("Dashboard") if "Dashboard" in nav_labels else 0
     selected = st.radio("Go to:", nav_labels, index=default_index)
     st.session_state["selected_page"] = nav_pages[nav_labels.index(selected)][0]
     st.markdown("---")
-    with st.expander("❓ Help & FAQ", expanded=False):
+    with st.expander("Help & FAQ", expanded=False):
         st.markdown("""
 **How do I use the Cost Forecast?**  
 Select a model, choose how many months to forecast, and view the results. You can download the forecast and add notes.
