@@ -25,10 +25,12 @@ st.markdown(hide_pages, unsafe_allow_html=True)
 import datetime
 from database.db import (
     can_manage_recommendation,
+    get_db,
     get_pg_connection,
     list_cloud_accounts,
     list_recommendations,
     list_sync_runs,
+    save_recommendation,
 )
 import pandas as pd
 import numpy as np
@@ -51,11 +53,37 @@ def predict_cost_months(cost_history, months_ahead=1):
     next_month = model.predict([[len(cost_history) + months_ahead - 1]])
     return next_month[0]
 
+
+def _get_analytics_connection():
+    try:
+        return get_pg_connection(), "PostgreSQL"
+    except Exception:
+        return get_db(), "SQLite"
+
 def cost_forecast_page():
     import optuna
+    st.title("Cost Forecast (Premium)")
+    conn, backend_name = _get_analytics_connection()
+    df = None
+    try:
+        df = pd.read_sql_query("SELECT date, SUM(cost) as total_cost FROM billing_data GROUP BY date ORDER BY date", conn)
+    except Exception as e:
+        st.error(f"Error loading cost history: {e}")
+    finally:
+        conn.close()
+
+    if backend_name == "SQLite":
+        st.caption("Using local SQLite data because PostgreSQL is not configured for this screen.")
+
+    automl_best_params = st.session_state.get("forecast_automl_best_params", {})
+    automl_best_score = st.session_state.get("forecast_automl_best_score")
+
     st.markdown("---")
     st.subheader("Automated Model Selection & Hyperparameter Tuning")
     if st.button("Run AutoML (Optuna)"):
+        if df is None or df.empty:
+            st.warning("Load billing data before running AutoML.")
+            return
         st.info("Running Optuna study for best model and hyperparameters. This may take a minute...")
         def objective(trial):
             model_type = trial.suggest_categorical("model", ["Linear Regression", "Prophet", "ARIMA"])
@@ -87,33 +115,55 @@ def cost_forecast_page():
                     return float('inf')
         study = optuna.create_study(direction="minimize")
         study.optimize(objective, n_trials=20, show_progress_bar=False)
-        st.success(f"Best model: {study.best_params['model']} with MAE={study.best_value:.2f}")
-        st.json(study.best_params)
-    st.title("Cost Forecast (Premium)")
-    conn = get_pg_connection()
-    df = None
-    try:
-        df = pd.read_sql_query("SELECT date, SUM(cost) as total_cost FROM billing_data GROUP BY date ORDER BY date", conn)
-    except Exception as e:
-        st.error(f"Error loading cost history: {e}")
-    finally:
-        conn.close()
+        st.session_state["forecast_automl_best_params"] = study.best_params
+        st.session_state["forecast_automl_best_score"] = float(study.best_value)
+        automl_best_params = study.best_params
+        automl_best_score = float(study.best_value)
+
+    if automl_best_params:
+        best_model = automl_best_params.get("model", "Linear Regression")
+        detail_parts = []
+        if "seasonality_mode" in automl_best_params:
+            detail_parts.append(f"Seasonality: {automl_best_params['seasonality_mode'].title()}")
+        if {"p", "d", "q"}.issubset(automl_best_params):
+            detail_parts.append(
+                f"ARIMA order: ({automl_best_params['p']}, {automl_best_params['d']}, {automl_best_params['q']})"
+            )
+        details_text = " | ".join(detail_parts) if detail_parts else "Recommended settings applied below."
+        score_suffix = f" with MAE={automl_best_score:.2f}" if automl_best_score is not None else ""
+        st.success(f"Best model: {best_model}{score_suffix}")
+        st.caption(details_text)
+
     if df is not None and not df.empty:
         st.markdown("## Cost History Trend")
         with st.expander("Show/Hide Cost History Chart", expanded=True):
             st.line_chart(df.set_index("date")["total_cost"])
         st.markdown("---")
         st.markdown("## Forecast Settings")
+        model_options = ["Linear Regression", "Prophet", "ARIMA"]
+        default_model = automl_best_params.get("model", "Linear Regression")
         col1, col2 = st.columns([2,1])
         with col1:
-            model_choice = st.selectbox("Select Forecast Model", ["Linear Regression", "Prophet", "ARIMA"], help="Choose a forecasting algorithm. Prophet is best for seasonality, ARIMA for trends, Linear Regression for simplicity.")
+            model_choice = st.selectbox(
+                "Select Forecast Model",
+                model_options,
+                index=model_options.index(default_model) if default_model in model_options else 0,
+                help="Choose a forecasting algorithm. Prophet is best for seasonality, ARIMA for trends, Linear Regression for simplicity.",
+            )
         with col2:
             forecast_period = st.number_input("Months to Forecast Ahead", min_value=1, max_value=12, value=1, help="How many months into the future to predict.")
         # --- Model hyperparameter controls ---
-        arima_p = st.number_input("ARIMA p (AR)", min_value=0, max_value=5, value=1, help="ARIMA autoregressive order.") if model_choice == "ARIMA" else 1
-        arima_d = st.number_input("ARIMA d (I)", min_value=0, max_value=2, value=1, help="ARIMA differencing order.") if model_choice == "ARIMA" else 1
-        arima_q = st.number_input("ARIMA q (MA)", min_value=0, max_value=5, value=1, help="ARIMA moving average order.") if model_choice == "ARIMA" else 1
-        prophet_seasonality = st.selectbox("Prophet Seasonality Mode", ["additive", "multiplicative"], help="Prophet seasonality mode.") if model_choice == "Prophet" else "additive"
+        arima_p = st.number_input("ARIMA p (AR)", min_value=0, max_value=5, value=int(automl_best_params.get("p", 1)), help="ARIMA autoregressive order.") if model_choice == "ARIMA" else 1
+        arima_d = st.number_input("ARIMA d (I)", min_value=0, max_value=2, value=int(automl_best_params.get("d", 1)), help="ARIMA differencing order.") if model_choice == "ARIMA" else 1
+        arima_q = st.number_input("ARIMA q (MA)", min_value=0, max_value=5, value=int(automl_best_params.get("q", 1)), help="ARIMA moving average order.") if model_choice == "ARIMA" else 1
+        prophet_modes = ["additive", "multiplicative"]
+        default_prophet_mode = automl_best_params.get("seasonality_mode", "additive")
+        prophet_seasonality = st.selectbox(
+            "Prophet Seasonality Mode",
+            prophet_modes,
+            index=prophet_modes.index(default_prophet_mode) if default_prophet_mode in prophet_modes else 0,
+            help="Prophet seasonality mode.",
+        ) if model_choice == "Prophet" else "additive"
         st.markdown("---")
         st.markdown("## Forecast Result")
         forecast_value = None
@@ -257,10 +307,6 @@ def cost_forecast_page():
         loaded_note = load_forecast_note(username, forecast_key)
         if loaded_note:
             st.info(f"**Saved Notes:**\n{loaded_note}")
-        # Placeholder for future AI/ML models
-        st.markdown("---")
-        st.subheader("Coming Soon: Advanced AI/ML Forecasting")
-        st.caption("We are working on integrating deep learning and advanced AI models for even more accurate forecasts. Stay tuned!")
     else:
         st.info("Not enough data for forecast.")
 
@@ -480,6 +526,91 @@ def _render_my_open_recommendations(username):
 
     st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
 
+
+def _seed_dashboard_recommendations(username):
+    recommendations = [
+        {
+            "category": "cost-governance",
+            "title": "Review untagged cloud spend",
+            "description": "Some resources are missing cost allocation tags, which makes ownership and showback harder.",
+            "source": "dashboard",
+            "resource": "shared:untagged-spend",
+            "estimated_savings": 600,
+            "priority": "medium",
+        },
+        {
+            "category": "waste",
+            "title": "Investigate idle resources with no recent demand",
+            "description": "Idle resources are contributing avoidable spend and should be rightsized, scheduled, or removed.",
+            "source": "dashboard",
+            "resource": "shared:idle-resources",
+            "estimated_savings": 1750,
+            "priority": "high",
+        },
+        {
+            "category": "forecast",
+            "title": "Validate next-month forecast variance drivers",
+            "description": "Recent trend changes suggest a forecast uplift that should be reviewed before month-end commitment decisions.",
+            "source": "dashboard",
+            "resource": "shared:forecast-variance",
+            "estimated_savings": 900,
+            "priority": "medium",
+        },
+    ]
+    for item in recommendations:
+        save_recommendation(
+            username=username,
+            category=item["category"],
+            title=item["title"],
+            description=item["description"],
+            source=item["source"],
+            resource=item["resource"],
+            estimated_savings=item["estimated_savings"],
+            priority=item["priority"],
+        )
+    return len(recommendations)
+
+
+def _seed_ai_advisor_recommendations(username):
+    recommendations = [
+        {
+            "category": "compute",
+            "title": "Downsize underutilized EC2 instances",
+            "description": "Several EC2 instances show sustained low CPU and memory utilization and can move to smaller instance classes.",
+            "resource": "aws-prod:EC2",
+            "estimated_savings": 840,
+            "priority": "high",
+        },
+        {
+            "category": "commitments",
+            "title": "Evaluate Savings Plans coverage gaps",
+            "description": "Current on-demand usage patterns indicate a Savings Plans opportunity across stable workloads.",
+            "resource": "aws-shared:SavingsPlans",
+            "estimated_savings": 1260,
+            "priority": "high",
+        },
+        {
+            "category": "storage",
+            "title": "Archive stale snapshots and cold backups",
+            "description": "Backup retention appears higher than required for several low-access datasets.",
+            "resource": "shared:backups",
+            "estimated_savings": 430,
+            "priority": "medium",
+        },
+    ]
+    for item in recommendations:
+        save_recommendation(
+            username=username,
+            category=item["category"],
+            title=item["title"],
+            description=item["description"],
+            source="ai_advisor",
+            resource=item["resource"],
+            estimated_savings=item["estimated_savings"],
+            priority=item["priority"],
+        )
+    return recommendations
+
 def dashboard_page():
     anomaly_feedback = []
     rec_feedback = []
@@ -492,6 +623,15 @@ def dashboard_page():
     col2.metric("Forecast Next Month", "$13,100", "+5%")
     col3.metric("Potential Savings", "$2,150", "-15%")
     col4.metric("Idle Resources", "17", "Needs action")
+
+    action_col1, action_col2 = st.columns([1.2, 3])
+    if action_col1.button("Generate Recommendations", key="dashboard_generate_recommendations", use_container_width=True):
+        dashboard_count = _seed_dashboard_recommendations(username)
+        ai_count = len(_seed_ai_advisor_recommendations(username))
+        st.success(f"Recommendations inbox refreshed with {dashboard_count + ai_count} workflow items.")
+        st.session_state["selected_page"] = "Recommendations"
+        st.rerun()
+    action_col2.caption("Create a fresh set of workflow items from dashboard signals and AI advisor heuristics.")
 
     # --- Scheduled Report Emails (manual trigger for demo) ---
     st.markdown("---")
@@ -714,7 +854,7 @@ def dashboard_page():
     st.write("Unified Cloud Cost Analytics Dashboard")
 
     # Load data
-    conn = get_pg_connection()
+    conn, _ = _get_analytics_connection()
     df = pd.read_sql_query("SELECT * FROM billing_data", conn)
     conn.close()
 
@@ -971,10 +1111,21 @@ def dashboard_page():
 
 def ai_advisor_page():
     st.title("AI FinOps Advisor")
+    username = st.session_state.get("username", "guest")
 
     st.write("AI-driven cloud cost optimization recommendations")
 
+    recommendation_preview = pd.DataFrame(
+        [
+            {"Recommendation": "Downsize underutilized EC2 instances", "Potential Savings": "$840/month", "Priority": "High"},
+            {"Recommendation": "Evaluate Savings Plans coverage gaps", "Potential Savings": "$1,260/month", "Priority": "High"},
+            {"Recommendation": "Archive stale snapshots and cold backups", "Potential Savings": "$430/month", "Priority": "Medium"},
+        ]
+    )
+    st.dataframe(recommendation_preview, use_container_width=True, hide_index=True)
+
     if st.button("Generate AI Recommendations"):
+        seeded_recommendations = _seed_ai_advisor_recommendations(username)
         st.success("Recommendations Generated")
         st.markdown("""
         **EC2 Optimization**
@@ -984,6 +1135,10 @@ def ai_advisor_page():
 
         **Estimated Monthly Savings:** $840
         """)
+        st.caption(f"{len(seeded_recommendations)} workflow items were added to Recommendations Inbox.")
+        if st.button("Open Recommendations Inbox", key="ai_advisor_open_inbox", use_container_width=True):
+            st.session_state["selected_page"] = "Recommendations"
+            st.rerun()
 
 def cost_explorer_page():
     st.title("Cost Explorer")
@@ -1033,20 +1188,8 @@ def optimization_page():
     st.metric("Potential Savings", "$1,750 / month")
 
 def optimization_insights_page():
-    st.title("Optimization Insights")
-
-    st.info("Top Cost Drivers")
-
-    import pandas as pd
-
-    data = {
-        "Service":["EC2","RDS","S3","Data Transfer"],
-        "Cost":[5000,3000,2000,900]
-    }
-
-    df = pd.DataFrame(data)
-
-    st.bar_chart(df.set_index("Service"))
+    from views.optimization_insights import render_optimization_insights_page
+    render_optimization_insights_page()
 
 def reports_page():
     from reportlab.lib.pagesizes import letter
@@ -1117,7 +1260,7 @@ def reports_page():
 
 def cost_sync_history_page():
     st.title("Cost Sync History")
-    conn = get_pg_connection()
+    conn, _ = _get_analytics_connection()
     df = None
     try:
         df = pd.read_sql_query("SELECT account, service, cost FROM billing_data ORDER BY rowid DESC LIMIT 100", conn)
@@ -1135,7 +1278,7 @@ def audit_log_page():
     if st.session_state.get("role", "user") != "admin":
         st.warning("Only admins can view the audit log.")
         return
-    conn = get_pg_connection()
+    conn, _ = _get_analytics_connection()
     try:
         df = pd.read_sql_query("SELECT username, action, details, timestamp FROM audit_log ORDER BY timestamp DESC LIMIT 500", conn)
         if df.empty:
@@ -1301,7 +1444,8 @@ elif selected_page == "Reports":
     elif selected_tab == "Optimization":
         optimization_page()
     elif selected_tab == "Optimization Insights":
-        optimization_insights_page()
+        from views.optimization_insights import render_optimization_insights_page
+        render_optimization_insights_page()
     elif selected_tab == "Cost Sync History":
         cost_sync_history_page()
     elif selected_tab == "Audit Log":

@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from database.db import get_account_limit, get_connected_account_count, list_cloud_accounts, list_sync_runs
+from services.demo_environment import reset_demo_environment, seed_demo_environment
 from services.cloud_account_service import CloudAccountSyncError, create_cloud_account, sync_cloud_account
 
 
@@ -229,6 +230,33 @@ def cloud_accounts_page():
         st.progress(min(connected_accounts / max(account_limit, 1), 1.0))
     else:
         st.progress(1.0)
+
+    st.markdown("---")
+    demo_col1, demo_col2, demo_col3 = st.columns([1.2, 1.2, 2.1])
+    if demo_col1.button("Load Demo Environment", use_container_width=True):
+        max_demo_accounts = account_limit if account_limit != float('inf') else 3
+        seed_summary = seed_demo_environment(username, max_accounts=max_demo_accounts)
+        st.success(
+            "Demo environment loaded: "
+            f"{seed_summary['accounts']} account(s), "
+            f"{seed_summary['billing_rows']} billing rows, "
+            f"{seed_summary['recommendations']} recommendations."
+        )
+        st.session_state["selected_page"] = "Dashboard"
+        st.rerun()
+    if demo_col2.button("Reset Demo Environment", use_container_width=True):
+        reset_summary = reset_demo_environment(username)
+        st.success(
+            "Demo environment cleared: "
+            f"{reset_summary['accounts']} account(s), "
+            f"{reset_summary['billing_rows']} billing rows, "
+            f"{reset_summary['sync_runs']} sync run(s), "
+            f"{reset_summary['recommendations']} recommendation(s)."
+        )
+        st.rerun()
+    demo_col3.caption(
+        "Seeds mock cloud accounts, recent sync runs, billing history, and recommendations so you can test the full app without live credentials."
+    )
 
     if connected_accounts >= account_limit:
         st.warning(
