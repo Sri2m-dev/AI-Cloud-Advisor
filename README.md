@@ -2,17 +2,9 @@
 
 AI Cloud Advisory Platform built with Streamlit.
 
-## Project Structure
+## Entry Point
 
-- `app.py`: main Streamlit entrypoint and login shell.
-- `1_Dashboard.py`: dashboard KPIs and chart.
-- `2_Cost_Explorer.py`: CUR upload and spend exploration.
-- `3_Optimization.py`: optimization recommendation view.
-- `4_Reports.py`: reports placeholder page.
-- `cost_loader.py`: cost CSV loading helpers.
-- `finops_metrics.py`: FinOps calculations.
-- `ai_recommender.py`: recommendation generation logic.
-- `config.py`: centralized runtime configuration from environment variables.
+- [app.py](c:\Users\SrikanthMudaliar\AI-Cloud-Advisor\app.py): active Streamlit entrypoint and main routing shell.
 
 ## Python Version
 
@@ -20,49 +12,56 @@ This project targets Python 3.11.
 
 ## Local Setup
 
-1. Install dependencies:
+1. Install dependencies.
 
-	 ```bash
-	 pip install -r requirements.txt
-	 ```
+```bash
+pip install -r requirements.txt
+```
 
-2. (Optional) Configure environment variables:
+2. Copy the environment template.
 
-	 ```bash
-	 cp .env.example .env
-	 ```
+```bash
+copy .env.example .env
+```
 
-3. Start the app:
+3. Start the app locally.
 
-	 ```bash
-	 streamlit run app.py
-	 ```
+```bash
+streamlit run app.py
+```
+
+4. Open the local URL shown by Streamlit, typically `http://localhost:8501`.
+
+## Streamlit Cloud Deployment
+
+1. Deploy [app.py](c:\Users\SrikanthMudaliar\AI-Cloud-Advisor\app.py) as the app entrypoint.
+2. Add the required secrets from [.streamlit/secrets.toml.example](c:\Users\SrikanthMudaliar\AI-Cloud-Advisor\.streamlit\secrets.toml.example) into the Streamlit Cloud secrets manager.
+3. Make sure the deployed database contains the client users you intend to share access with.
+4. Confirm the deployed app opens your branded login page directly rather than a Streamlit platform access gate.
+5. Log in with a non-admin client account and verify the selected plan hides unavailable pages.
+
+For a detailed checklist, see [DEPLOYMENT.md](c:\Users\SrikanthMudaliar\AI-Cloud-Advisor\DEPLOYMENT.md).
 
 ## Testing And Quality
 
-- Run unit tests:
+Run unit tests:
 
-	```bash
-	pytest -q
-	```
+```bash
+pytest -q
+```
 
-- Run linting:
+Run linting:
 
-	```bash
-	ruff check .
-	```
+```bash
+ruff check .
+```
 
-- Run type checks:
+Run type checks:
 
-	```bash
-	mypy
-	```
+```bash
+mypy
+```
 
 ## CI
 
-GitHub Actions workflow is defined in `.github/workflows/ci.yml` and runs on push/PR with:
-
-- Python 3.11
-- `ruff check .`
-- `mypy`
-- `pytest -q`
+GitHub Actions workflow is defined in `.github/workflows/ci.yml` and runs on push and pull request with Python 3.11 plus linting, typing, and tests.
