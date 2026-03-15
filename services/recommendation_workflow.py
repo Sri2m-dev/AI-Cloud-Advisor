@@ -10,6 +10,14 @@ def seed_ai_advisor_recommendations(username):
             "resource": "aws-prod:EC2",
             "estimated_savings": 840,
             "priority": "high",
+            "confidence_score": 0.91,
+            "rationale": "The workload profile is steady enough that sustained under-utilization is unlikely to be a short-lived demand trough.",
+            "effort_level": "medium",
+            "action_steps": [
+                "Review the last 14 days of CPU and memory utilization by instance family.",
+                "Select one smaller target size per workload and validate reservation or Savings Plan coverage.",
+                "Schedule a controlled resize during the next maintenance window and confirm performance after cutover.",
+            ],
         },
         {
             "category": "commitments",
@@ -18,6 +26,14 @@ def seed_ai_advisor_recommendations(username):
             "resource": "aws-shared:SavingsPlans",
             "estimated_savings": 1260,
             "priority": "high",
+            "confidence_score": 0.87,
+            "rationale": "The spend pattern is broad-based and persistent, which makes commitment planning more defensible than a one-off anomaly response.",
+            "effort_level": "medium",
+            "action_steps": [
+                "Measure the recurring hourly spend that remained on-demand for the past month.",
+                "Compare one-year and three-year Savings Plans scenarios against expected workload volatility.",
+                "Create a commitment proposal with break-even assumptions and review it with engineering owners.",
+            ],
         },
         {
             "category": "storage",
@@ -26,6 +42,14 @@ def seed_ai_advisor_recommendations(username):
             "resource": "shared:backups",
             "estimated_savings": 430,
             "priority": "medium",
+            "confidence_score": 0.78,
+            "rationale": "Snapshot age and low recovery demand suggest the current retention window is wider than the likely recovery requirement.",
+            "effort_level": "low",
+            "action_steps": [
+                "Identify snapshots older than the policy baseline and group them by application owner.",
+                "Confirm legal and recovery retention requirements before deleting or archiving copies.",
+                "Apply lifecycle rules so the cleanup does not need to be repeated manually.",
+            ],
         },
     ]
 
@@ -39,6 +63,10 @@ def seed_ai_advisor_recommendations(username):
             resource=item["resource"],
             estimated_savings=item["estimated_savings"],
             priority=item["priority"],
+            confidence_score=item["confidence_score"],
+            rationale=item["rationale"],
+            effort_level=item["effort_level"],
+            action_steps=item["action_steps"],
         )
 
     return recommendations

@@ -16,15 +16,183 @@ SQLITE_DB_PATH = "cloud_advisor.db"
 FERNET_KEY_ENV = "CLOUD_ADVISOR_CREDENTIAL_KEY"
 FERNET_KEY_FILE = Path(__file__).resolve().parent.parent / ".streamlit" / "credential.key"
 
+PLAN_CATALOG = {
+    "Starter": {
+        "price": "$49/month",
+        "cloud_accounts": 1,
+        "user_seats": 2,
+        "features": [
+            "Dashboard",
+            "Cost Explorer",
+            "Cloud Accounts",
+            "Basic finance summary",
+        ],
+        "feature_flags": {
+            "dashboard",
+            "cost_explorer",
+            "cloud_accounts",
+            "basic_reports",
+            "plans_billing",
+        },
+        "pages": [
+            "Dashboard",
+            "Cost Explorer",
+            "Cloud Accounts",
+            "Plans & Billing",
+        ],
+    },
+    "Growth": {
+        "price": "$149/month",
+        "cloud_accounts": 5,
+        "user_seats": 5,
+        "features": [
+            "All Starter features",
+            "AI Recommendations",
+            "Forecasting",
+            "Finance and executive reports",
+        ],
+        "feature_flags": {
+            "dashboard",
+            "cost_explorer",
+            "cloud_accounts",
+            "basic_reports",
+            "ai_recommendations",
+            "cost_forecast",
+            "reports",
+            "executive_reports",
+            "plans_billing",
+        },
+        "pages": [
+            "Dashboard",
+            "AI Recommendations",
+            "Cost Explorer",
+            "Reports",
+            "Cost Forecast (Premium)",
+            "Cloud Accounts",
+            "Plans & Billing",
+        ],
+    },
+    "Enterprise": {
+        "price": "$499/month",
+        "cloud_accounts": float("inf"),
+        "user_seats": float("inf"),
+        "features": [
+            "All Growth features",
+            "Operations",
+            "Automation workflows",
+            "Board and strategy packs",
+            "Unlimited scale",
+        ],
+        "feature_flags": {
+            "dashboard",
+            "cost_explorer",
+            "cloud_accounts",
+            "basic_reports",
+            "ai_recommendations",
+            "cost_forecast",
+            "reports",
+            "executive_reports",
+            "operations",
+            "automation",
+            "board_packs",
+            "plans_billing",
+        },
+        "pages": [
+            "Dashboard",
+            "AI Recommendations",
+            "Cost Explorer",
+            "Reports",
+            "Operations",
+            "Cost Forecast (Premium)",
+            "Cloud Accounts",
+            "Plans & Billing",
+        ],
+    },
+}
+
 
 def get_account_limit(plan="Free"):
-    limits = {
-        "Free": 1,
-        "Starter": 3,
-        "Pro": 10,
-        "Enterprise": 50,
-    }
-    return limits.get(plan, 1)
+    return get_plan_definition(plan).get("cloud_accounts", 1)
+
+
+def get_plan_catalog():
+    return PLAN_CATALOG
+
+
+def get_plan_names():
+    return list(PLAN_CATALOG.keys())
+
+
+def get_plan_definition(plan_name=None):
+    return PLAN_CATALOG.get(plan_name or "Starter", PLAN_CATALOG["Starter"])
+
+
+def get_user_seat_limit(plan_name=None):
+    return get_plan_definition(plan_name).get("user_seats", 1)
+
+
+def get_plan_features(plan_name=None):
+    return list(get_plan_definition(plan_name).get("features", []))
+
+
+def get_plan_pages(plan_name=None):
+    return list(get_plan_definition(plan_name).get("pages", []))
+
+
+def plan_has_feature(plan_name, feature_flag):
+    return feature_flag in get_plan_definition(plan_name).get("feature_flags", set())
+
+
+def _ensure_subscriptions_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            username TEXT PRIMARY KEY,
+            plan TEXT NOT NULL DEFAULT 'Starter',
+            updated_at TEXT
+        )
+        """
+    )
+    _ensure_column(conn, "subscriptions", "username", "TEXT")
+    _ensure_column(conn, "subscriptions", "plan", "TEXT NOT NULL DEFAULT 'Starter'")
+    _ensure_column(conn, "subscriptions", "updated_at", "TEXT")
+
+
+def get_user_plan(username):
+    if not username:
+        return "Starter"
+    conn = get_db()
+    _ensure_subscriptions_table(conn)
+    row = conn.execute("SELECT plan FROM subscriptions WHERE username = ?", (username,)).fetchone()
+    if row is None:
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        conn.execute(
+            "INSERT OR IGNORE INTO subscriptions (username, plan, updated_at) VALUES (?, ?, ?)",
+            (username, "Starter", now),
+        )
+        conn.commit()
+        conn.close()
+        return "Starter"
+    conn.close()
+    return row[0] or "Starter"
+
+
+def update_user_plan(username, plan_name):
+    normalized_plan = plan_name if plan_name in PLAN_CATALOG else "Starter"
+    conn = get_db()
+    _ensure_subscriptions_table(conn)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    conn.execute(
+        """
+        INSERT INTO subscriptions (username, plan, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET plan = excluded.plan, updated_at = excluded.updated_at
+        """,
+        (username, normalized_plan, now),
+    )
+    conn.commit()
+    conn.close()
+    return normalized_plan
 
 
 def get_pg_connection():
@@ -248,6 +416,10 @@ def _ensure_recommendations_table(conn):
             dismiss_reason TEXT,
             source TEXT,
             resource TEXT,
+            confidence_score REAL,
+            rationale TEXT,
+            effort_level TEXT,
+            action_steps TEXT,
             created_at TEXT,
             updated_at TEXT,
             completed_at TEXT
@@ -269,6 +441,10 @@ def _ensure_recommendations_table(conn):
     _ensure_column(conn, "recommendations", "dismiss_reason", "TEXT")
     _ensure_column(conn, "recommendations", "source", "TEXT")
     _ensure_column(conn, "recommendations", "resource", "TEXT")
+    _ensure_column(conn, "recommendations", "confidence_score", "REAL")
+    _ensure_column(conn, "recommendations", "rationale", "TEXT")
+    _ensure_column(conn, "recommendations", "effort_level", "TEXT")
+    _ensure_column(conn, "recommendations", "action_steps", "TEXT")
     _ensure_column(conn, "recommendations", "created_at", "TEXT")
     _ensure_column(conn, "recommendations", "updated_at", "TEXT")
     _ensure_column(conn, "recommendations", "completed_at", "TEXT")
@@ -351,6 +527,7 @@ def create_tables():
     conn = get_db()
     _ensure_billing_data_table(conn)
     _ensure_users_table(conn)
+    _ensure_subscriptions_table(conn)
     _ensure_audit_log_table(conn)
     _ensure_forecast_notes_table(conn)
     _ensure_cloud_accounts_table(conn)
@@ -497,6 +674,14 @@ def get_user(username):
     user = cur.fetchone()
     conn.close()
     return user
+
+
+def list_users():
+    conn = get_db()
+    _ensure_users_table(conn)
+    rows = [dict(row) for row in conn.execute("SELECT username, role FROM users ORDER BY username ASC").fetchall()]
+    conn.close()
+    return rows
 
 
 def get_user_role(username):
@@ -918,10 +1103,15 @@ def save_recommendation(
     priority="medium",
     estimated_savings=None,
     due_date=None,
+    confidence_score=None,
+    rationale=None,
+    effort_level=None,
+    action_steps=None,
 ):
     conn = get_db()
     _ensure_recommendations_table(conn)
     now = datetime.utcnow().isoformat(timespec="seconds")
+    serialized_steps = json.dumps(action_steps) if action_steps is not None else None
     existing = conn.execute(
         """
         SELECT id, status
@@ -936,7 +1126,9 @@ def save_recommendation(
             UPDATE recommendations
             SET description = ?, account_identifier = ?, provider = ?, owner = COALESCE(?, owner),
                 priority = COALESCE(?, priority), estimated_savings = COALESCE(?, estimated_savings),
-                due_date = COALESCE(?, due_date), updated_at = ?
+                due_date = COALESCE(?, due_date), confidence_score = COALESCE(?, confidence_score),
+                rationale = COALESCE(?, rationale), effort_level = COALESCE(?, effort_level),
+                action_steps = COALESCE(?, action_steps), updated_at = ?
             WHERE id = ?
             """,
             (
@@ -947,6 +1139,10 @@ def save_recommendation(
                 priority,
                 estimated_savings,
                 due_date,
+                confidence_score,
+                rationale,
+                effort_level,
+                serialized_steps,
                 now,
                 existing[0],
             ),
@@ -957,8 +1153,9 @@ def save_recommendation(
             """
             INSERT INTO recommendations (
                 username, account_identifier, provider, category, title, description, status,
-                owner, priority, estimated_savings, due_date, source, resource, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?)
+                owner, priority, estimated_savings, due_date, source, resource,
+                confidence_score, rationale, effort_level, action_steps, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
@@ -973,6 +1170,10 @@ def save_recommendation(
                 due_date,
                 source,
                 resource,
+                confidence_score,
+                rationale,
+                effort_level,
+                serialized_steps,
                 now,
                 now,
             ),
@@ -989,7 +1190,8 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
     query = """
         SELECT id, username, account_identifier, provider, category, title, description,
                status, owner, priority, estimated_savings, realized_savings, due_date,
-               dismiss_reason, source, resource, created_at, updated_at, completed_at
+               dismiss_reason, source, resource, confidence_score, rationale, effort_level,
+               action_steps, created_at, updated_at, completed_at
         FROM recommendations
     """
     conditions = []
@@ -1007,7 +1209,18 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY updated_at DESC, created_at DESC LIMIT ?"
     params.append(limit)
-    rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
+    rows = []
+    for row in conn.execute(query, tuple(params)).fetchall():
+        item = dict(row)
+        raw_steps = item.get("action_steps")
+        if raw_steps:
+            try:
+                item["action_steps"] = json.loads(raw_steps)
+            except (TypeError, json.JSONDecodeError):
+                item["action_steps"] = [str(raw_steps)]
+        else:
+            item["action_steps"] = []
+        rows.append(item)
     conn.close()
     return rows
 
@@ -1082,6 +1295,8 @@ def update_recommendation_details(
     owner=None,
     priority=None,
     due_date=None,
+    clear_owner=False,
+    clear_due_date=False,
     notes=None,
 ):
     conn = get_db()
@@ -1105,6 +1320,8 @@ def update_recommendation_details(
 
     role = get_user_role(username)
     effective_owner = owner if role in {"admin", "premium"} else row[0]
+    if role in {"admin", "premium"} and clear_owner:
+        effective_owner = None
 
     old_snapshot = {
         "owner": row[0],
@@ -1112,23 +1329,25 @@ def update_recommendation_details(
         "due_date": row[2],
     }
     new_snapshot = {
-        "owner": effective_owner if effective_owner is not None else row[0],
+        "owner": None if clear_owner else (effective_owner if effective_owner is not None else row[0]),
         "priority": priority if priority is not None else row[1],
-        "due_date": due_date if due_date is not None else row[2],
+        "due_date": None if clear_due_date else (due_date if due_date is not None else row[2]),
     }
 
     conn.execute(
         """
         UPDATE recommendations
-        SET owner = COALESCE(?, owner),
+        SET owner = CASE WHEN ? THEN NULL ELSE COALESCE(?, owner) END,
             priority = COALESCE(?, priority),
-            due_date = COALESCE(?, due_date),
+            due_date = CASE WHEN ? THEN NULL ELSE COALESCE(?, due_date) END,
             updated_at = ?
         WHERE id = ?
         """,
         (
+            1 if clear_owner else 0,
             effective_owner,
             priority,
+            1 if clear_due_date else 0,
             due_date,
             datetime.utcnow().isoformat(timespec="seconds"),
             recommendation_id,

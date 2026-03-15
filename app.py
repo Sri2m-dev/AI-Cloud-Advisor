@@ -27,11 +27,17 @@ from database.db import (
     can_manage_recommendation,
     get_db,
     get_pg_connection,
+    get_plan_definition,
+    get_plan_names,
+    get_plan_pages,
+    get_user_plan,
     list_cloud_accounts,
     list_recommendations,
     list_sync_runs,
     save_recommendation,
+    update_user_plan,
 )
+from services.demo_environment import get_demo_account_profiles
 import pandas as pd
 import numpy as np
 from prophet import Prophet
@@ -81,6 +87,14 @@ def _build_forecast_spike_recommendation(cost_series, forecast_value, forecast_p
         "priority": priority,
         "estimated_savings": max(int(round(projected_change * 30)), 0),
         "due_date": due_date,
+        "confidence_score": 0.88 if projected_change_ratio >= 0.25 else 0.74,
+        "rationale": "The projected increase materially exceeds the recent cost baseline, so this is likely to affect next-month spend and planning decisions if left unexplained.",
+        "effort_level": "low",
+        "action_steps": [
+            "Review the service-level contributors behind the recent trend change.",
+            "Check whether the increase is expected demand, an anomaly, or a commitment coverage gap.",
+            "Record the outcome before month-end forecast and budgeting decisions are finalized.",
+        ],
         "recent_average": recent_average,
         "projected_change": projected_change,
         "projected_change_ratio": projected_change_ratio,
@@ -335,6 +349,10 @@ def cost_forecast_page():
                     priority=forecast_recommendation["priority"],
                     estimated_savings=forecast_recommendation["estimated_savings"],
                     due_date=forecast_recommendation["due_date"],
+                    confidence_score=forecast_recommendation["confidence_score"],
+                    rationale=forecast_recommendation["rationale"],
+                    effort_level=forecast_recommendation["effort_level"],
+                    action_steps=forecast_recommendation["action_steps"],
                 )
                 log_audit_event(
                     st.session_state.get("username", "guest"),
@@ -414,6 +432,7 @@ def login_page():
             st.session_state["authenticated"] = True
             st.session_state["username"] = user[0]
             st.session_state["role"] = user[2]
+            st.session_state["plan"] = get_user_plan(user[0])
             log_audit_event(user[0], "login")
             st.success("Login successful")
             st.rerun()
@@ -480,7 +499,40 @@ def _cloud_operations_snapshot(username):
     }
 
 
-def _render_cloud_operations_summary(username):
+def _scenario_account_deltas(snapshot_accounts, active_demo):
+    if not active_demo:
+        return []
+
+    baseline_accounts = {
+        account["account_name"]: account
+        for account in get_demo_account_profiles("healthy")
+    }
+    delta_rows = []
+    for account in snapshot_accounts:
+        baseline = baseline_accounts.get(account.get("account_name"))
+        if not baseline:
+            continue
+        current_health = int(account.get("health_score") or 0)
+        baseline_health = int(baseline.get("details", {}).get("health_score") or 0)
+        current_status = str(account.get("validation_status") or account.get("status") or "pending")
+        baseline_status = str(baseline.get("details", {}).get("status") or "pending")
+        current_issue = account.get("last_error") or account.get("validation_message") or "Healthy"
+        if current_health == baseline_health and current_status == baseline_status and current_issue == "Healthy":
+            continue
+        delta_rows.append(
+            {
+                "Provider": account.get("provider", "").upper(),
+                "Account": account.get("account_name", ""),
+                "Healthy Baseline": f"{baseline_status.title()} / {baseline_health}",
+                "Current State": f"{current_status.title()} / {current_health}",
+                "Health Delta": current_health - baseline_health,
+                "Primary Change": current_issue,
+            }
+        )
+    return delta_rows
+
+
+def _render_cloud_operations_summary(username, active_demo=None):
     snapshot = _cloud_operations_snapshot(username)
     st.markdown("---")
     st.subheader("Cloud Operations")
@@ -518,11 +570,18 @@ def _render_cloud_operations_summary(username):
         }
         for run in snapshot["sync_runs"][:5]
     ]
+    delta_rows = _scenario_account_deltas(snapshot["accounts"], active_demo)
 
     left_col, right_col = st.columns([1.2, 1])
     with left_col:
-        st.markdown("#### Accounts Requiring Attention")
-        if attention_accounts:
+        if active_demo and active_demo.get("key") != "healthy":
+            st.markdown("#### Changed vs Healthy Baseline")
+        else:
+            st.markdown("#### Accounts Requiring Attention")
+
+        if active_demo and active_demo.get("key") != "healthy" and delta_rows:
+            st.dataframe(pd.DataFrame(delta_rows), use_container_width=True, hide_index=True)
+        elif attention_accounts:
             st.dataframe(pd.DataFrame(attention_accounts), use_container_width=True, hide_index=True)
         else:
             st.success("All connected accounts are currently healthy.")
@@ -656,26 +715,18 @@ def _render_forecast_risk_summary(username):
         st.rerun()
 
 
-def _dashboard_summary_metrics(username, active_demo=None):
+def _load_dashboard_billing_scope(username, active_demo=None):
     conn, _ = _get_analytics_connection()
     billing_df = None
     try:
-        billing_df = pd.read_sql_query("SELECT account, date, cost FROM billing_data", conn)
+        billing_df = pd.read_sql_query("SELECT account, date, service, cost FROM billing_data", conn)
     except Exception:
         billing_df = pd.DataFrame()
     finally:
         conn.close()
 
     if billing_df.empty:
-        return {
-            "total_monthly_cost": 0.0,
-            "total_monthly_delta": None,
-            "forecast_next_month": 0.0,
-            "forecast_delta": None,
-            "potential_savings": 0.0,
-            "idle_resources": 0,
-            "account_names": active_demo.get("account_names", []) if active_demo else [],
-        }
+        return pd.DataFrame(), active_demo.get("account_names", []) if active_demo else []
 
     billing_df["date"] = pd.to_datetime(billing_df["date"], errors="coerce")
     billing_df["cost"] = pd.to_numeric(billing_df["cost"], errors="coerce").fillna(0.0)
@@ -691,6 +742,23 @@ def _dashboard_summary_metrics(username, active_demo=None):
         scoped_df = billing_df[billing_df["account"].isin(account_scope)].copy()
         if not scoped_df.empty:
             billing_df = scoped_df
+
+    return billing_df, account_scope
+
+
+def _dashboard_summary_metrics(username, active_demo=None):
+    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+
+    if billing_df.empty:
+        return {
+            "total_monthly_cost": 0.0,
+            "total_monthly_delta": None,
+            "forecast_next_month": 0.0,
+            "forecast_delta": None,
+            "potential_savings": 0.0,
+            "idle_resources": 0,
+            "account_names": account_scope,
+        }
 
     if billing_df.empty:
         return {
@@ -742,6 +810,127 @@ def _dashboard_summary_metrics(username, active_demo=None):
     }
 
 
+def _render_scenario_impact_summary(username, active_demo, summary_metrics):
+    if not active_demo:
+        return
+
+    scenario_messages = {
+        "healthy": {
+            "title": "Stable demo baseline",
+            "tone": "success",
+            "points": [
+                "Cloud accounts are healthy and syncing on schedule.",
+                "Recommendation pressure should remain low.",
+                "Use this scenario as the comparison point for the others.",
+            ],
+        },
+        "cost_spike": {
+            "title": "Spend acceleration detected",
+            "tone": "warning",
+            "points": [
+                "Recent compute and analytics demand is driving a sharp cost increase.",
+                "Forecast risk items should appear in AI Recommendations.",
+                "Use this scenario to test anomaly review and month-end escalation workflows.",
+            ],
+        },
+        "waste_heavy": {
+            "title": "Optimization-heavy estate",
+            "tone": "warning",
+            "points": [
+                "Idle or oversized resources should push potential savings up.",
+                "Use this scenario to test rightsizing and cleanup workflows.",
+                "Service mix should skew more heavily toward compute and storage.",
+            ],
+        },
+        "governance_failure": {
+            "title": "Operational control gaps present",
+            "tone": "error",
+            "points": [
+                "Validation and policy failures should increase attention-required accounts.",
+                "Billing-export and governance fixes should dominate recommendations.",
+                "Use this scenario to test remediation tracking rather than pure cost savings.",
+            ],
+        },
+        "mixed_failures": {
+            "title": "Cross-functional triage scenario",
+            "tone": "info",
+            "points": [
+                "One account is healthy while others require cost and governance follow-up.",
+                "Forecast risk and operational issues should coexist in the same workflow queue.",
+                "Use this scenario to test the full end-to-end operating model.",
+            ],
+        },
+    }
+    scenario_state = scenario_messages.get(active_demo.get("key"), scenario_messages["mixed_failures"])
+    snapshot = _cloud_operations_snapshot(username)
+    workflow_items = list_recommendations(username=username, limit=100)
+    open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
+    high_priority_count = sum(1 for item in open_items if str(item.get("priority") or "").lower() == "high")
+    forecast_risk_count = sum(1 for item in open_items if item.get("source") == "cost_forecast")
+
+    st.markdown("---")
+    st.subheader("Scenario Impact Summary")
+    getattr(st, scenario_state["tone"])(scenario_state["title"])
+    impact_col1, impact_col2, impact_col3 = st.columns(3)
+    impact_col1.metric("Accounts Requiring Attention", snapshot["accounts_in_error"])
+    impact_col2.metric("High-Priority AI Recommendations", high_priority_count)
+    impact_col3.metric("Forecast Risk Items", forecast_risk_count)
+    for point in scenario_state["points"]:
+        st.caption(f"- {point}")
+    st.caption(
+        f"Current scenario monthly cost: ${summary_metrics['total_monthly_cost']:,.0f} across {len(summary_metrics['account_names'])} account(s)."
+    )
+
+
+def _render_dashboard_charts(username, active_demo=None):
+    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+    if billing_df.empty:
+        return
+
+    st.markdown("---")
+    st.subheader("Scenario Spend View")
+    chart_col1, chart_col2 = st.columns([1.4, 1])
+
+    daily_totals = (
+        billing_df.groupby(billing_df["date"].dt.date)["cost"]
+        .sum()
+        .reset_index(name="cost")
+        .rename(columns={"date": "Date", "cost": "Daily Cost"})
+    )
+    service_mix = (
+        billing_df.groupby("service", as_index=False)["cost"]
+        .sum()
+        .sort_values("cost", ascending=False)
+        .head(6)
+        .rename(columns={"service": "Service", "cost": "Cost"})
+    )
+
+    with chart_col1:
+        trend_fig = px.line(
+            daily_totals,
+            x="Date",
+            y="Daily Cost",
+            markers=True,
+            title="Daily spend trend",
+        )
+        trend_fig.update_layout(margin=dict(l=10, r=10, t=50, b=10), height=320)
+        st.plotly_chart(trend_fig, use_container_width=True)
+
+    with chart_col2:
+        mix_fig = px.bar(
+            service_mix,
+            x="Cost",
+            y="Service",
+            orientation="h",
+            title="Top cost drivers",
+        )
+        mix_fig.update_layout(margin=dict(l=10, r=10, t=50, b=10), height=320, yaxis=dict(categoryorder="total ascending"))
+        st.plotly_chart(mix_fig, use_container_width=True)
+
+    scope_text = ", ".join(account_scope) if account_scope else "all connected accounts"
+    st.caption(f"Charts are scoped to: {scope_text}")
+
+
 def _seed_dashboard_recommendations(username):
     recommendations = [
         {
@@ -752,6 +941,14 @@ def _seed_dashboard_recommendations(username):
             "resource": "shared:untagged-spend",
             "estimated_savings": 600,
             "priority": "medium",
+            "confidence_score": 0.8,
+            "rationale": "Tagging gaps degrade cost attribution and usually block later optimization work from being assigned cleanly.",
+            "effort_level": "medium",
+            "action_steps": [
+                "List the highest-spend untagged resources by account.",
+                "Apply the minimum required ownership and cost-center tags.",
+                "Re-check showback quality after the next sync completes.",
+            ],
         },
         {
             "category": "waste",
@@ -761,6 +958,14 @@ def _seed_dashboard_recommendations(username):
             "resource": "shared:idle-resources",
             "estimated_savings": 1750,
             "priority": "high",
+            "confidence_score": 0.86,
+            "rationale": "Idle-resource findings usually translate into direct savings quickly once ownership and shutdown windows are agreed.",
+            "effort_level": "medium",
+            "action_steps": [
+                "Confirm which idle assets are truly non-production or safe to schedule down.",
+                "Choose delete, resize, or schedule actions per resource group.",
+                "Track the realized savings after the cleanup is completed.",
+            ],
         },
         {
             "category": "forecast",
@@ -770,6 +975,14 @@ def _seed_dashboard_recommendations(username):
             "resource": "shared:forecast-variance",
             "estimated_savings": 900,
             "priority": "medium",
+            "confidence_score": 0.76,
+            "rationale": "Forecast variance is not automatically waste, but it is a strong planning signal when trend changes persist.",
+            "effort_level": "low",
+            "action_steps": [
+                "Compare the latest trend to the prior two-week baseline.",
+                "Check whether the uplift is tied to known launches, renewals, or anomalies.",
+                "Capture a finance-ready explanation for the expected variance.",
+            ],
         },
     ]
     for item in recommendations:
@@ -782,6 +995,10 @@ def _seed_dashboard_recommendations(username):
             resource=item["resource"],
             estimated_savings=item["estimated_savings"],
             priority=item["priority"],
+            confidence_score=item["confidence_score"],
+            rationale=item["rationale"],
+            effort_level=item["effort_level"],
+            action_steps=item["action_steps"],
         )
     return len(recommendations)
 
@@ -806,7 +1023,9 @@ def dashboard_page():
         )
         st.caption(active_demo.get("description", ""))
     summary_metrics = _dashboard_summary_metrics(username, active_demo=active_demo)
-    _render_cloud_operations_summary(username)
+    _render_scenario_impact_summary(username, active_demo, summary_metrics)
+    _render_dashboard_charts(username, active_demo=active_demo)
+    _render_cloud_operations_summary(username, active_demo=active_demo)
     _render_my_open_recommendations(username)
     _render_forecast_risk_summary(username)
     col1, col2, col3, col4 = st.columns(4)
@@ -1350,23 +1569,188 @@ def ai_advisor_page():
 def cost_explorer_page():
     st.title("Cost Explorer")
 
-    import pandas as pd
+    def _compact_metric_value(value):
+        text = str(value or "N/A")
+        compact_map = {
+            "Virtual Machines": "VMs",
+            "SQL Database": "SQL DB",
+            "Compute Engine": "Compute Eng.",
+            "Cloud Functions": "Functions",
+            "Cloud Storage": "Storage",
+            "Data Transfer": "Transfer",
+        }
+        if text in compact_map:
+            return compact_map[text]
+        return text if len(text) <= 18 else f"{text[:15]}..."
 
-    data = {
-        "Service": ["EC2","S3","RDS","Lambda"],
-        "Cost": [5000,2000,3000,450]
-    }
+    username = st.session_state.get("username", "guest")
+    active_demo = st.session_state.get("active_demo_environment")
+    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
 
-    df = pd.DataFrame(data)
+    if billing_df.empty:
+        st.info("No billing data is available yet. Connect a cloud account or load a demo scenario to explore costs.")
+        return
 
-    st.subheader("Service Cost Breakdown")
+    explorer_df = billing_df.copy()
+    explorer_df["date"] = pd.to_datetime(explorer_df["date"], errors="coerce")
+    explorer_df["cost"] = pd.to_numeric(explorer_df["cost"], errors="coerce").fillna(0.0)
+    explorer_df = explorer_df.dropna(subset=["date"])
 
-    st.dataframe(df)
+    if explorer_df.empty:
+        st.info("Billing data exists, but it does not contain usable dates for exploration.")
+        return
 
-    st.bar_chart(df.set_index("Service"))
+    explorer_df["provider"] = explorer_df["account"].fillna("").astype(str).str.extract(r"^(aws|azure|gcp)", expand=False).fillna("other").str.upper()
 
-def finops_insights_page():
-    st.title("FinOps Insights")
+    min_date = explorer_df["date"].min().date()
+    max_date = explorer_df["date"].max().date()
+
+    provider_options = sorted(provider for provider in explorer_df["provider"].dropna().unique().tolist() if provider)
+    account_options = sorted(account for account in explorer_df["account"].dropna().unique().tolist() if account)
+    service_options = sorted(service for service in explorer_df["service"].dropna().unique().tolist() if service)
+    provider_filter_options = ["All Providers", *provider_options]
+    account_filter_options = ["All Accounts", *account_options]
+    service_filter_options = ["All Services", *service_options]
+
+    metric_container = st.container()
+
+    st.markdown("#### Filters")
+    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1.1, 1.35, 1.35, 1.5])
+    with filter_col1:
+        selected_provider = st.selectbox("Provider", provider_filter_options, index=0)
+    with filter_col2:
+        selected_account = st.selectbox(
+            "Account",
+            account_filter_options,
+            index=0,
+        )
+    with filter_col3:
+        selected_service = st.selectbox("Service", service_filter_options, index=0)
+    with filter_col4:
+        date_range = st.date_input(
+            "Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+        )
+
+    selected_providers = provider_options if selected_provider == "All Providers" else [selected_provider]
+    selected_accounts = account_options if selected_account == "All Accounts" else [selected_account]
+    selected_services = service_options if selected_service == "All Services" else [selected_service]
+    start_date, end_date = (date_range if isinstance(date_range, tuple) and len(date_range) == 2 else (min_date, max_date))
+    filtered_df = explorer_df[
+        explorer_df["provider"].isin(selected_providers or provider_options)
+        & explorer_df["account"].isin(selected_accounts or account_options)
+        & explorer_df["service"].isin(selected_services or service_options)
+        & (explorer_df["date"].dt.date >= start_date)
+        & (explorer_df["date"].dt.date <= end_date)
+    ].copy()
+
+    if filtered_df.empty:
+        st.warning("No billing rows match the current Cost Explorer filters.")
+        return
+
+    filter_summary_col1, filter_summary_col2, filter_summary_col3 = st.columns([1.1, 1.4, 2.2])
+    filter_summary_col1.caption(f"Provider: {selected_provider}")
+    filter_summary_col2.caption(f"Account: {selected_account}")
+    filter_summary_col3.caption(f"Service: {selected_service} | Window: {start_date.isoformat()} to {end_date.isoformat()}")
+
+    total_spend = float(filtered_df["cost"].sum())
+    day_count = max((end_date - start_date).days + 1, 1)
+    avg_daily_spend = total_spend / day_count
+    top_service_row = filtered_df.groupby("service", as_index=False)["cost"].sum().sort_values("cost", ascending=False).head(1)
+    top_account_row = filtered_df.groupby("account", as_index=False)["cost"].sum().sort_values("cost", ascending=False).head(1)
+
+    with metric_container:
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        metric_col1.metric("Filtered Spend", f"${total_spend:,.0f}")
+        metric_col2.metric("Avg Daily Spend", f"${avg_daily_spend:,.0f}")
+        metric_col3.metric(
+            "Top Service",
+            _compact_metric_value(top_service_row.iloc[0]["service"] if not top_service_row.empty else "N/A"),
+        )
+        metric_col4.metric(
+            "Top Account",
+            _compact_metric_value(top_account_row.iloc[0]["account"] if not top_account_row.empty else "N/A"),
+        )
+
+    daily_trend = (
+        filtered_df.assign(Date=filtered_df["date"].dt.date)
+        .groupby("Date", as_index=False)["cost"]
+        .sum()
+        .rename(columns={"cost": "Cost"})
+    )
+    service_breakdown = (
+        filtered_df.groupby("service", as_index=False)["cost"]
+        .sum()
+        .sort_values("cost", ascending=False)
+        .head(10)
+        .rename(columns={"service": "Service", "cost": "Cost"})
+    )
+    account_breakdown = (
+        filtered_df.groupby("account", as_index=False)["cost"]
+        .sum()
+        .sort_values("cost", ascending=False)
+        .rename(columns={"account": "Account", "cost": "Cost"})
+    )
+    provider_breakdown = (
+        filtered_df.groupby("provider", as_index=False)["cost"]
+        .sum()
+        .sort_values("cost", ascending=False)
+        .rename(columns={"provider": "Provider", "cost": "Cost"})
+    )
+    overview_tab, breakdown_tab, data_tab = st.tabs(["Overview", "Breakdowns", "Raw Data"])
+
+    with overview_tab:
+        trend_col, breakdown_col = st.columns([1.6, 1])
+        with trend_col:
+            trend_fig = px.line(daily_trend, x="Date", y="Cost", markers=True, title="Daily spend trend")
+            trend_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=340)
+            st.plotly_chart(trend_fig, use_container_width=True)
+        with breakdown_col:
+            service_fig = px.bar(service_breakdown, x="Service", y="Cost", title="Top services")
+            service_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=340)
+            st.plotly_chart(service_fig, use_container_width=True)
+
+        summary_col1, summary_col2 = st.columns([1.1, 1.1])
+        with summary_col1:
+            st.markdown("#### Service Summary")
+            st.dataframe(service_breakdown, use_container_width=True, hide_index=True)
+        with summary_col2:
+            st.markdown("#### Account Summary")
+            st.dataframe(account_breakdown.head(10), use_container_width=True, hide_index=True)
+
+    with breakdown_tab:
+        lower_col1, lower_col2 = st.columns([1.1, 1.1])
+        with lower_col1:
+            account_fig = px.bar(account_breakdown.head(10), x="Cost", y="Account", orientation="h", title="Top accounts")
+            account_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=320, yaxis=dict(categoryorder="total ascending"))
+            st.plotly_chart(account_fig, use_container_width=True)
+        with lower_col2:
+            provider_fig = px.pie(provider_breakdown, names="Provider", values="Cost", title="Provider mix")
+            provider_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=320)
+            st.plotly_chart(provider_fig, use_container_width=True)
+
+    with data_tab:
+        st.subheader("Filtered Cost Details")
+        detail_scope = filtered_df[["date", "account", "provider", "service", "cost"]].copy()
+        detail_scope["date"] = detail_scope["date"].dt.date.astype(str)
+        detail_scope = detail_scope.sort_values(["date", "account", "service"], ascending=[False, True, True])
+        csv_bytes = detail_scope.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download Filtered CSV",
+            data=csv_bytes,
+            file_name="cost_explorer_filtered.csv",
+            mime="text/csv",
+            use_container_width=False,
+        )
+        st.dataframe(detail_scope, use_container_width=True, hide_index=True)
+
+def finops_insights_page(embedded=False):
+    if embedded:
+        st.subheader("FinOps Insights")
+    else:
+        st.title("FinOps Insights")
 
     st.subheader("Cost Allocation by Team")
 
@@ -1381,8 +1765,11 @@ def finops_insights_page():
 
     st.bar_chart(df.set_index("Team"))
 
-def optimization_page():
-    st.title("Optimization Opportunities")
+def optimization_page(embedded=False):
+    if embedded:
+        st.subheader("Optimization Opportunities")
+    else:
+        st.title("Optimization Opportunities")
 
     st.warning("Idle resources detected")
 
@@ -1398,75 +1785,268 @@ def optimization_insights_page():
     from views.optimization_insights import render_optimization_insights_page
     render_optimization_insights_page()
 
+
+def insights_page():
+    st.title("Insights")
+    st.caption("Explore analytical views and optimization signals. Use Reports for downloadable artifacts.")
+    insight_tab1, insight_tab2 = st.tabs(["FinOps Insights", "Optimization Insights"])
+    with insight_tab1:
+        finops_insights_page(embedded=True)
+    with insight_tab2:
+        optimization_insights_page()
+
+
+def operations_page():
+    st.title("Operations")
+    st.caption("Review platform operations, sync activity, and audit events.")
+    operations_tab1, operations_tab2 = st.tabs(["Cost Sync History", "Audit Log"])
+    with operations_tab1:
+        cost_sync_history_page(embedded=True)
+    with operations_tab2:
+        audit_log_page(embedded=True)
+
 def reports_page():
-    from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
-    import tempfile
-    st.markdown("---")
-    st.subheader("Export Feedback Analytics as PDF")
-    def create_pdf_report(df, title):
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        c = canvas.Canvas(tmp.name, pagesize=letter)
-        width, height = letter
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(30, height-40, title)
-        c.setFont("Helvetica", 10)
-        y = height-70
-        for col in df.columns:
-            c.drawString(30, y, f"{col}")
-            y -= 15
-        y -= 10
-        for idx, row in df.iterrows():
-            y -= 15
-            if y < 40:
-                c.showPage()
-                y = height-40
-            c.drawString(30, y, ", ".join(str(x) for x in row.values))
-        c.save()
-        return tmp.name
-
-    # Read anomaly feedback
-    feedback_file = "anomaly_feedback.csv"
-    anomaly_feedback = []
-    if os.path.exists(feedback_file):
-        with open(feedback_file, 'r') as f:
-            for line in f:
-                date, label, flag = line.strip().split(',')
-                anomaly_feedback.append({'date': date, 'flag': flag})
-    if anomaly_feedback:
-        df_anom_fb = pd.DataFrame(anomaly_feedback)
-        if st.button("Download Anomaly Feedback PDF"):
-            pdf_path = create_pdf_report(df_anom_fb, "Anomaly Feedback Report")
-            with open(pdf_path, "rb") as f:
-                st.download_button("Download PDF", f.read(), "anomaly_feedback_report.pdf", "application/pdf")
-
-    # Read recommendation feedback
-    rec_feedback_file = "recommendation_feedback.csv"
-    rec_feedback = []
-    if os.path.exists(rec_feedback_file):
-        with open(rec_feedback_file, 'r') as f:
-            for line in f:
-                resource, rtype, flag = line.strip().split(',')
-                rec_feedback.append({'resource': resource, 'type': rtype, 'flag': flag})
-    if rec_feedback:
-        df_rec_fb = pd.DataFrame(rec_feedback)
-        if st.button("Download Recommendation Feedback PDF"):
-            pdf_path = create_pdf_report(df_rec_fb, "Recommendation Feedback Report")
-            with open(pdf_path, "rb") as f:
-                st.download_button("Download PDF", f.read(), "recommendation_feedback_report.pdf", "application/pdf")
+    current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
+    current_plan_def = get_plan_definition(current_plan)
+    if "reports" not in current_plan_def.get("feature_flags", set()):
+        st.warning(f"Reports are not included in the {current_plan} plan.")
+        st.info("Upgrade to Growth or Enterprise to unlock exportable reports.")
+        return
 
     st.title("Reports")
-    st.write("Generate FinOps reports")
-    if st.session_state.get("role", "user") == "admin":
-        if st.button("Generate Monthly Report"):
-            st.success("Report generated successfully")
-    else:
-        st.info("Only admins can generate monthly reports.")
-    if st.button("Download CSV"):
-        st.info("Download feature coming soon")
+    st.write("Download and generate report artifacts for finance and governance review.")
+    st.caption("Choose the output format based on audience: finance, executive leadership, or board review.")
 
-def cost_sync_history_page():
-    st.title("Cost Sync History")
+    username = st.session_state.get("username", "guest")
+    active_demo = st.session_state.get("active_demo_environment")
+    summary_metrics = _dashboard_summary_metrics(username, active_demo=active_demo)
+    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+    operations_snapshot = _cloud_operations_snapshot(username)
+
+    service_cost = pd.DataFrame(columns=["Service", "Cost"])
+    if not billing_df.empty:
+        service_cost = (
+            billing_df.groupby("service", as_index=False)["cost"]
+            .sum()
+            .sort_values("cost", ascending=False)
+            .rename(columns={"service": "Service", "cost": "Cost"})
+        )
+
+    client_name = "Cloud Advisory Client"
+    if active_demo:
+        client_name = active_demo.get("label") or active_demo.get("name") or client_name
+    elif len(account_scope) == 1:
+        client_name = account_scope[0]
+    elif username and username != "guest":
+        client_name = f"{username.title()} Portfolio"
+
+    top_service = service_cost.iloc[0]["Service"] if not service_cost.empty else "N/A"
+    maturity_score = int(operations_snapshot.get("avg_health_score") or 78)
+    readiness_adjustment = 8 if operations_snapshot.get("accounts_in_error", 0) == 0 else -5
+    readiness_score = max(40, min(100, maturity_score + readiness_adjustment))
+
+    summary_df = pd.DataFrame(
+        {
+            "Metric": [
+                "Client",
+                "Accounts in Scope",
+                "Monthly Spend",
+                "Forecast Next Month",
+                "Potential Savings",
+                "Top Service",
+                "Healthy Accounts",
+                "Accounts in Error",
+                "Cloud Maturity",
+                "Transformation Readiness",
+            ],
+            "Value": [
+                client_name,
+                len(account_scope),
+                f"${summary_metrics['total_monthly_cost']:,.0f}",
+                f"${summary_metrics['forecast_next_month']:,.0f}",
+                f"${summary_metrics['potential_savings']:,.0f}",
+                top_service,
+                operations_snapshot.get("healthy_accounts", 0),
+                operations_snapshot.get("accounts_in_error", 0),
+                f"{maturity_score}/100",
+                f"{readiness_score}/100",
+            ],
+        }
+    )
+
+    def _render_download(state_key, label, mime):
+        report_path = st.session_state.get(state_key)
+        if report_path and os.path.exists(report_path):
+            with open(report_path, "rb") as report_file:
+                st.download_button(
+                    label,
+                    report_file.read(),
+                    os.path.basename(report_path),
+                    mime,
+                    key=f"download_{state_key}",
+                    use_container_width=True,
+                )
+
+    def _prepare_report(state_key, generator, success_message):
+        try:
+            report_path = generator()
+        except Exception as exc:
+            st.error(f"Could not prepare report: {exc}")
+            return
+        st.session_state[state_key] = report_path
+        st.success(success_message)
+
+    finance_tab, leadership_tab, board_tab = st.tabs(["Finance", "Leadership", "Board Packs"])
+
+    with finance_tab:
+        finance_col1, finance_col2 = st.columns(2)
+        with finance_col1:
+            st.markdown("#### Finance Summary PDF")
+            st.caption("Compact PDF with current spend, forecast, savings, service concentration, and account health.")
+            if st.button("Prepare Finance PDF", key="prepare_finance_pdf", use_container_width=True):
+                _prepare_report(
+                    "report_finance_pdf",
+                    lambda: create_pdf_report(summary_df, "Finance Summary Report"),
+                    "Finance PDF is ready.",
+                )
+            _render_download("report_finance_pdf", "Download Finance PDF", "application/pdf")
+
+        with finance_col2:
+            st.markdown("#### Cost Workbook")
+            st.caption("Excel workbook with executive summary, service-cost breakdown, and detailed spend tabs.")
+            if st.button("Prepare Excel Workbook", key="prepare_finance_excel", use_container_width=True):
+                from cloud_report_generator import generate_excel_report
+
+                _prepare_report(
+                    "report_finance_excel",
+                    lambda: generate_excel_report(
+                        client_name,
+                        monthly_spend=summary_metrics["total_monthly_cost"],
+                        savings_monthly=summary_metrics["potential_savings"],
+                        top_service_name=top_service,
+                        maturity_score=maturity_score,
+                        service_cost=service_cost,
+                        df=billing_df,
+                    ),
+                    "Excel workbook is ready.",
+                )
+            _render_download(
+                "report_finance_excel",
+                "Download Excel Workbook",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+    with leadership_tab:
+        leadership_col1, leadership_col2 = st.columns(2)
+        with leadership_col1:
+            st.markdown("#### Executive Presentation")
+            st.caption("Management-ready PowerPoint with KPIs, cost distribution, and recommended next steps.")
+            if st.button("Prepare Executive Deck", key="prepare_executive_deck", use_container_width=True):
+                from ppt_report_generator import generate_executive_ppt
+
+                _prepare_report(
+                    "report_executive_deck",
+                    lambda: generate_executive_ppt(
+                        client_name,
+                        monthly_spend=summary_metrics["total_monthly_cost"],
+                        savings_monthly=summary_metrics["potential_savings"],
+                        maturity_score=maturity_score,
+                        readiness_score=readiness_score,
+                        service_cost=service_cost,
+                    ),
+                    "Executive deck is ready.",
+                )
+            _render_download(
+                "report_executive_deck",
+                "Download Executive Deck",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+
+        with leadership_col2:
+            st.markdown("#### CEO Strategy Pack")
+            st.caption("Narrative-heavy strategy pack focused on business value, risk of inaction, and reinvestment story.")
+            if st.button("Prepare CEO Strategy Pack", key="prepare_ceo_pack", use_container_width=True):
+                from ceo_strategy_pack_generator import generate_ceo_strategy_pack
+
+                _prepare_report(
+                    "report_ceo_pack",
+                    lambda: generate_ceo_strategy_pack(
+                        client_name,
+                        monthly_spend=summary_metrics["total_monthly_cost"],
+                        savings_monthly=summary_metrics["potential_savings"],
+                        maturity_score=maturity_score,
+                        readiness_score=readiness_score,
+                        top_service=top_service,
+                    ),
+                    "CEO strategy pack is ready.",
+                )
+            _render_download(
+                "report_ceo_pack",
+                "Download CEO Strategy Pack",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+
+    with board_tab:
+        if "board_packs" not in current_plan_def.get("feature_flags", set()):
+            st.info("Board and strategy packs are available on the Enterprise plan.")
+        else:
+            board_col1, board_col2 = st.columns(2)
+            with board_col1:
+                st.markdown("#### Partner Board Pack")
+                st.caption("Board-style presentation covering spend concentration, risks, ROI, and transformation roadmap.")
+                if st.button("Prepare Board Pack", key="prepare_board_pack", use_container_width=True):
+                    from ppt_report_generator import generate_partner_board_pack
+
+                    _prepare_report(
+                        "report_board_pack",
+                        lambda: generate_partner_board_pack(
+                            client_name,
+                            monthly_spend=summary_metrics["total_monthly_cost"],
+                            savings_monthly=summary_metrics["potential_savings"],
+                            maturity_score=maturity_score,
+                            readiness_score=readiness_score,
+                            top_service=top_service,
+                            service_cost=service_cost if not service_cost.empty else pd.DataFrame({"Service": ["N/A"], "Cost": [0]}),
+                        ),
+                        "Board pack is ready.",
+                    )
+                _render_download(
+                    "report_board_pack",
+                    "Download Board Pack",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
+
+            with board_col2:
+                st.markdown("#### McKinsey-Style Deck")
+                st.caption("Consulting-style transformation summary for senior stakeholders and steering-committee reviews.")
+                if st.button("Prepare McKinsey-Style Deck", key="prepare_mckinsey_deck", use_container_width=True):
+                    from mckinsey_deck_generator import generate_mckinsey_deck
+
+                    _prepare_report(
+                        "report_mckinsey_deck",
+                        lambda: generate_mckinsey_deck(
+                            client_name,
+                            monthly_spend=summary_metrics["total_monthly_cost"],
+                            savings_monthly=summary_metrics["potential_savings"],
+                            maturity_score=maturity_score,
+                            readiness_score=readiness_score,
+                            top_service=top_service,
+                        ),
+                        "McKinsey-style deck is ready.",
+                    )
+                _render_download(
+                    "report_mckinsey_deck",
+                    "Download McKinsey-Style Deck",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
+
+    st.caption("Use Cost Explorer and Audit Log for interactive analysis. Reports is reserved for exportable outputs.")
+
+def cost_sync_history_page(embedded=False):
+    if embedded:
+        st.subheader("Cost Sync History")
+    else:
+        st.title("Cost Sync History")
     conn, _ = _get_analytics_connection()
     df = None
     try:
@@ -1480,8 +2060,11 @@ def cost_sync_history_page():
     else:
         st.info("No cost sync history available.")
 
-def audit_log_page():
-    st.title("Audit Log")
+def audit_log_page(embedded=False):
+    if embedded:
+        st.subheader("Audit Log")
+    else:
+        st.title("Audit Log")
     if st.session_state.get("role", "user") != "admin":
         st.warning("Only admins can view the audit log.")
         return
@@ -1585,10 +2168,14 @@ if not st.session_state.authenticated:
 # Sidebar enhancements: theme toggle, navigation, avatar, help, and logout
 with st.sidebar:
     st.markdown("# Cloud Advisor")
+    current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
+    st.session_state["plan"] = current_plan
+    allowed_pages = set(get_plan_pages(current_plan))
     # User avatar (placeholder)
     avatar_url = "https://ui-avatars.com/api/?name=" + st.session_state.get("username", "Guest") + "&background=0D8ABC&color=fff&size=128"
     st.image(avatar_url, width=64)
     st.caption(f"Signed in as: {st.session_state.get('username', 'Guest')}")
+    st.caption(f"Plan: {current_plan}")
     st.markdown("---")
     st.markdown("## Quick Navigation")
     nav_pages = [
@@ -1596,10 +2183,12 @@ with st.sidebar:
         ("AI Recommendations", "RI"),
         ("Cost Explorer", "ðŸ’¸"),
         ("Reports", "ðŸ“‘"),
+        ("Operations", "ðŸ› "),
         ("Cost Forecast (Premium)", "ðŸ”®"),
         ("Cloud Accounts", "â˜ï¸"),
         ("Plans & Billing", "ðŸ’³")
     ]
+    nav_pages = [item for item in nav_pages if item[0] in allowed_pages]
     nav_labels = [page for page, _ in nav_pages]
     current_page = st.session_state.get("selected_page", "Dashboard")
     default_index = nav_labels.index(current_page) if current_page in nav_labels else 0
@@ -1623,6 +2212,12 @@ Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
 
 # Main page routing logic
 selected_page = st.session_state.get("selected_page", "Dashboard")
+current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
+if selected_page not in set(get_plan_pages(current_plan)):
+    st.warning(f"{selected_page} is not included in the {current_plan} plan.")
+    st.session_state["selected_page"] = "Plans & Billing"
+    st.rerun()
+
 if selected_page == "Dashboard":
     dashboard_page()
 elif selected_page == "AI Recommendations":
@@ -1633,30 +2228,13 @@ elif selected_page == "AI Advisor":
     st.rerun()
 elif selected_page == "Cost Explorer":
     cost_explorer_page()
+elif selected_page == "Insights":
+    st.session_state["selected_page"] = "AI Recommendations"
+    st.rerun()
 elif selected_page == "Reports":
-    # Advanced pages as tabs within Reports
-    report_tabs = [
-        "Main Reports",
-        "FinOps Insights",
-        "Optimization",
-        "Optimization Insights",
-        "Cost Sync History",
-        "Audit Log"
-    ]
-    selected_tab = st.selectbox("Report Sections", report_tabs, key="report_tab")
-    if selected_tab == "Main Reports":
-        reports_page()
-    elif selected_tab == "FinOps Insights":
-        finops_insights_page()
-    elif selected_tab == "Optimization":
-        optimization_page()
-    elif selected_tab == "Optimization Insights":
-        from views.optimization_insights import render_optimization_insights_page
-        render_optimization_insights_page()
-    elif selected_tab == "Cost Sync History":
-        cost_sync_history_page()
-    elif selected_tab == "Audit Log":
-        audit_log_page()
+    reports_page()
+elif selected_page == "Operations":
+    operations_page()
 elif selected_page == "Cost Forecast (Premium)":
     cost_forecast_page()
 elif selected_page == "Cloud Accounts":
@@ -1664,24 +2242,56 @@ elif selected_page == "Cloud Accounts":
     cloud_accounts_page()
 elif selected_page == "Plans & Billing":
     st.title("Plans & Billing")
-    st.markdown("""
-    ### Choose the right plan for your business
-    | Plan        | Price      | Cloud Accounts | Features                                 |
-    |-------------|------------|---------------|------------------------------------------|
-    | Starter     | $49/month  | 1             | Basic analytics & dashboards             |
-    | Growth      | $149/month | 5             | All Starter features, AI insights        |
-    | Enterprise  | $499/month | Unlimited     | All Growth features, Automation, Reports |
-    """)
+    current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
+    plan_names = get_plan_names()
+    plan_rows = []
+    for plan_name in plan_names:
+        plan_def = get_plan_definition(plan_name)
+        account_limit = plan_def["cloud_accounts"]
+        seat_limit = plan_def["user_seats"]
+        plan_rows.append(
+            {
+                "Plan": plan_name,
+                "Price": plan_def["price"],
+                "Cloud Accounts": "Unlimited" if account_limit == float("inf") else account_limit,
+                "User Licenses": "Unlimited" if seat_limit == float("inf") else seat_limit,
+                "Included": ", ".join(plan_def["features"]),
+            }
+        )
+
+    st.markdown("### Choose the right plan for your business")
+    st.table(pd.DataFrame(plan_rows))
     st.markdown("---")
     st.markdown("#### Feature Comparison")
-    st.table({
-        "Feature": ["Cloud Accounts", "AI Insights", "Automation", "Advanced Reports"],
-        "Starter": ["1", "-", "-", "Basic"],
-        "Growth": ["5", "Yes", "-", "Standard"],
-        "Enterprise": ["Unlimited", "Yes", "Yes", "Full"]
-    })
+    st.table(
+        {
+            "Capability": [
+                "Cloud Accounts",
+                "User Licenses",
+                "AI Recommendations",
+                "Cost Forecast",
+                "Reports",
+                "Operations",
+                "Board Packs",
+            ],
+            "Starter": ["1", "2", "-", "-", "Basic finance only", "-", "-"],
+            "Growth": ["5", "5", "Yes", "Yes", "Finance + executive", "-", "-"],
+            "Enterprise": ["Unlimited", "Unlimited", "Yes", "Yes", "All reports", "Yes", "Yes"],
+        }
+    )
+    st.info("When you select a pack, the app assigns access automatically. You do not need to turn each feature on one by one unless you want a custom enterprise contract.")
     st.info("For annual discounts or custom needs, reach out to sales@aicloudadvisor.com.")
-    current_plan = st.session_state.get("plan", "Starter")
+    current_plan_def = get_plan_definition(current_plan)
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    metric_col1.metric("Current Plan", current_plan)
+    metric_col2.metric(
+        "Cloud Accounts",
+        "Unlimited" if current_plan_def["cloud_accounts"] == float("inf") else current_plan_def["cloud_accounts"],
+    )
+    metric_col3.metric(
+        "User Licenses",
+        "Unlimited" if current_plan_def["user_seats"] == float("inf") else current_plan_def["user_seats"],
+    )
     st.success(f"Your current plan: {current_plan}")
     # Only allow plan changes for admin users
     user = st.session_state.get("username", "guest")
@@ -1692,9 +2302,9 @@ elif selected_page == "Plans & Billing":
         st.markdown("**Change Plan**")
         col1, _ = st.columns([1, 3])
         with col1:
-            new_plan = st.selectbox("Select new plan:", ["Starter", "Growth", "Enterprise"], index=["Starter", "Growth", "Enterprise"].index(current_plan), key="plan_select")
+            new_plan = st.selectbox("Select new plan:", plan_names, index=plan_names.index(current_plan), key="plan_select")
             if st.button("Update Plan"):
-                st.session_state["plan"] = new_plan
-                st.success(f"Plan updated to: {new_plan}")
+                st.session_state["plan"] = update_user_plan(user, new_plan)
+                st.success(f"Plan updated to: {new_plan}. Feature access and page visibility were updated automatically.")
     else:
         st.warning("Only admin users can change the plan.")

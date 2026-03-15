@@ -21,6 +21,14 @@ def _seed_optimization_recommendations(username):
             "resource": "aws-prod:EC2",
             "estimated_savings": 4200,
             "priority": "high",
+            "confidence_score": 0.9,
+            "rationale": "Consistent under-utilization makes this a strong candidate for near-term savings without waiting for a new billing cycle.",
+            "effort_level": "medium",
+            "action_steps": [
+                "Validate CPU and memory headroom for the target workloads.",
+                "Select the next smaller instance class for each low-risk node.",
+                "Resize in a maintenance window and verify performance after deployment.",
+            ],
         },
         {
             "category": "database",
@@ -29,6 +37,14 @@ def _seed_optimization_recommendations(username):
             "resource": "aws-prod:RDS",
             "estimated_savings": 2100,
             "priority": "high",
+            "confidence_score": 0.84,
+            "rationale": "Database sizing signals are stable enough that a controlled rightsize review is likely to return savings.",
+            "effort_level": "medium",
+            "action_steps": [
+                "Review recent utilization, storage growth, and connection peaks.",
+                "Select a smaller instance tier with rollback criteria defined.",
+                "Apply the resize during a maintenance window and confirm service health.",
+            ],
         },
         {
             "category": "storage",
@@ -37,6 +53,14 @@ def _seed_optimization_recommendations(username):
             "resource": "aws-dev:EBS",
             "estimated_savings": 800,
             "priority": "medium",
+            "confidence_score": 0.94,
+            "rationale": "Detached storage with no recent attachment history is one of the clearest low-risk cleanup opportunities.",
+            "effort_level": "low",
+            "action_steps": [
+                "Confirm the volumes are detached and not part of a pending recovery workflow.",
+                "Snapshot any data that must be retained before deletion.",
+                "Delete the orphaned volumes and monitor the next billing cycle for the reduction.",
+            ],
         },
         {
             "category": "lifecycle",
@@ -45,6 +69,14 @@ def _seed_optimization_recommendations(username):
             "resource": "aws-analytics:S3",
             "estimated_savings": 1200,
             "priority": "medium",
+            "confidence_score": 0.82,
+            "rationale": "Object age and access patterns suggest lifecycle automation will reduce spend with limited operational risk.",
+            "effort_level": "low",
+            "action_steps": [
+                "Identify buckets with old objects and low read frequency.",
+                "Define lifecycle transitions that match retention and retrieval needs.",
+                "Roll out the policy and validate storage-class mix over the next week.",
+            ],
         },
     ]
     for item in recommendations:
@@ -57,6 +89,10 @@ def _seed_optimization_recommendations(username):
             resource=item["resource"],
             estimated_savings=item["estimated_savings"],
             priority=item["priority"],
+            confidence_score=item["confidence_score"],
+            rationale=item["rationale"],
+            effort_level=item["effort_level"],
+            action_steps=item["action_steps"],
         )
 
 

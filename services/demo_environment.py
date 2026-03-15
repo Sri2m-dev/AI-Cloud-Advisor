@@ -311,6 +311,10 @@ def _demo_accounts(scenario="mixed_failures"):
     return accounts
 
 
+def get_demo_account_profiles(scenario="mixed_failures"):
+    return deepcopy(_demo_accounts(scenario))
+
+
 def _demo_recommendation_resources():
     return {
         "aws-prod-finops:EC2",
@@ -331,6 +335,96 @@ def _demo_recommendation_resources():
         "shared:governance-gap",
         "aws-shared:SavingsPlans",
         "shared:backups",
+    }
+
+
+def _demo_recommendation_details(item, scenario):
+    category = str(item.get("category") or "").lower()
+    priority = str(item.get("priority") or "medium").lower()
+    title = item.get("title") or "this recommendation"
+    provider = (item.get("provider") or "shared").upper()
+
+    confidence_score = {
+        "high": 0.9,
+        "medium": 0.78,
+        "low": 0.66,
+    }.get(priority, 0.72)
+
+    effort_level = {
+        "governance": "medium",
+        "policy": "high",
+        "billing-export": "high",
+        "anomaly": "medium",
+        "forecast": "low",
+        "rightsizing": "medium",
+        "storage": "low",
+        "commitments": "medium",
+        "query-optimization": "medium",
+    }.get(category, "medium")
+
+    rationale = (
+        f"This {scenario.replace('_', ' ')} demo scenario was seeded to make {title.lower()} a visible operational follow-up "
+        f"for the {provider} estate."
+    )
+
+    default_steps = [
+        "Confirm the affected account scope and validate the issue against the seeded demo signals.",
+        "Assign an owner and capture the remediation decision in the workflow notes or activity history.",
+        "Re-check the dashboard after remediation to verify the scenario impact moved in the expected direction.",
+    ]
+    category_steps = {
+        "anomaly": [
+            "Compare the last two weeks of spend against the prior baseline to isolate the spike window.",
+            "Review the top services and accounts contributing to the variance.",
+            "Decide whether the increase is expected demand or avoidable waste before month-end actions are taken.",
+        ],
+        "forecast": [
+            "Validate whether the forecast jump is driven by a recent spike or a broader trend shift.",
+            "Check if commitments, reservations, or scheduling changes could offset the projected increase.",
+            "Document the decision so the finance review has a clear explanation for the variance.",
+        ],
+        "rightsizing": [
+            "Review utilization and instance-sizing evidence for the affected workloads.",
+            "Select the lowest-risk resize candidates and confirm owner approval.",
+            "Implement the change in a maintenance window and monitor post-change performance.",
+        ],
+        "storage": [
+            "Identify cold or duplicated data that no longer matches recent access patterns.",
+            "Choose archive, lifecycle, or deletion actions for each storage tier.",
+            "Apply policy changes so the waste pattern does not recur in the demo workflow.",
+        ],
+        "governance": [
+            "List the missing tags, owners, or budget controls affecting cost accountability.",
+            "Apply the minimum policy or tagging remediation needed to restore showback quality.",
+            "Re-run validation and confirm the governance gap disappears from the scenario view.",
+        ],
+        "policy": [
+            "Restore the missing access assignment or policy binding blocking cost controls.",
+            "Validate budget and reader coverage across the affected subscription or project.",
+            "Capture the fix in the workflow so the operations team can audit the remediation.",
+        ],
+        "billing-export": [
+            "Repair the export pipeline or dataset permissions causing incomplete billing data.",
+            "Backfill the missing usage window and confirm labels needed for showback are present.",
+            "Re-run sync validation and verify the account health score improves.",
+        ],
+        "commitments": [
+            "Quantify recurring baseline demand before proposing new commitments.",
+            "Model savings against likely usage volatility and ownership horizon.",
+            "Prepare a commitment recommendation with explicit break-even assumptions.",
+        ],
+        "query-optimization": [
+            "Inspect the largest query or analytics jobs driving the month-end surge.",
+            "Target partitioning, caching, or scheduling changes that reduce repeated scans.",
+            "Track the cost delta after the change to confirm the optimization impact.",
+        ],
+    }
+
+    return {
+        "confidence_score": item.get("confidence_score", confidence_score),
+        "rationale": item.get("rationale") or rationale,
+        "effort_level": item.get("effort_level") or effort_level,
+        "action_steps": item.get("action_steps") or category_steps.get(category, default_steps),
     }
 
 
@@ -566,20 +660,25 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
 
     recommendation_ids = []
     for item in recommendations:
+        recommendation_payload = {**item, **_demo_recommendation_details(item, scenario)}
         recommendation_ids.append(
             save_recommendation(
                 username=username,
-                category=item["category"],
-                title=item["title"],
-                description=item["description"],
-                source=item["source"],
-                resource=item["resource"],
-                account_identifier=item["account_identifier"],
-                provider=item["provider"],
-                owner=item["owner"],
-                priority=item["priority"],
-                estimated_savings=item["estimated_savings"],
-                due_date=item["due_date"],
+                category=recommendation_payload["category"],
+                title=recommendation_payload["title"],
+                description=recommendation_payload["description"],
+                source=recommendation_payload["source"],
+                resource=recommendation_payload["resource"],
+                account_identifier=recommendation_payload["account_identifier"],
+                provider=recommendation_payload["provider"],
+                owner=recommendation_payload["owner"],
+                priority=recommendation_payload["priority"],
+                estimated_savings=recommendation_payload["estimated_savings"],
+                due_date=recommendation_payload["due_date"],
+                confidence_score=recommendation_payload["confidence_score"],
+                rationale=recommendation_payload["rationale"],
+                effort_level=recommendation_payload["effort_level"],
+                action_steps=recommendation_payload["action_steps"],
             )
         )
 
