@@ -5,6 +5,7 @@ import streamlit as st
 
 from database.db import (
     can_manage_recommendation,
+    is_recommendation_manager_role,
     list_recommendation_events,
     list_recommendations,
     list_users,
@@ -85,7 +86,8 @@ def render_recommendations_page():
 
     username = st.session_state.get("username", "guest")
     role = st.session_state.get("role", "user")
-    available_assignees = [user.get("username") for user in list_users() if user.get("username")]
+    can_manage = is_recommendation_manager_role(role)
+    available_assignees = [user.get("username") for user in list_users(viewer_username=username) if user.get("username")]
     assignee_options = ["Unassigned", *available_assignees]
     header_col1, header_col2 = st.columns([4.2, 1.2])
     with header_col1:
@@ -101,7 +103,7 @@ def render_recommendations_page():
         st.rerun()
 
     workflow_items = list_recommendations(username=username, limit=200)
-    if role not in {"admin", "premium"}:
+    if not can_manage:
         workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
     if not workflow_items:
         st.info("No recommendations yet. Use Generate AI Recommendations to create workflow items here.")
@@ -202,7 +204,7 @@ def render_recommendations_page():
                 assignee_options,
                 index=assignee_options.index(current_owner) if current_owner in assignee_options else 0,
                 key=f"rec_owner_{item['id']}",
-                disabled=role not in {"admin", "premium"},
+                disabled=not can_manage,
                 label_visibility="collapsed",
             )
             if row_cols[10].button("Set", key=f"rec_save_{item['id']}", use_container_width=True, disabled=not can_edit_details):
@@ -247,7 +249,7 @@ def render_recommendations_page():
             assignee_options,
             index=assignee_options.index(current_owner) if current_owner in assignee_options else 0,
             key=f"rec_detail_owner_{selected_item['id']}",
-            disabled=role not in {"admin", "premium"},
+            disabled=not can_manage,
         )
         current_priority = str(selected_item.get("priority") or "medium").lower()
         priority_value = manage_col2.selectbox(
@@ -306,7 +308,7 @@ def render_recommendations_page():
                 selected_item["id"],
                 "accepted",
                 username=username,
-                owner=username if role not in {"admin", "premium"} else None,
+                owner=username if not can_manage else None,
                 notes="Accepted from recommendations inbox",
             )
             if updated:

@@ -15,6 +15,10 @@ from psycopg2.extras import RealDictCursor
 SQLITE_DB_PATH = "cloud_advisor.db"
 FERNET_KEY_ENV = "CLOUD_ADVISOR_CREDENTIAL_KEY"
 FERNET_KEY_FILE = Path(__file__).resolve().parent.parent / ".streamlit" / "credential.key"
+INTERNAL_COMPANY = "Cloud Advisor Internal"
+GLOBAL_ADMIN_ROLES = {"global_admin", "admin"}
+COMPANY_ADMIN_ROLES = {"global_admin", "admin", "client_admin"}
+RECOMMENDATION_MANAGER_ROLES = {"global_admin", "admin", "client_admin", "premium"}
 
 PLAN_CATALOG = {
     "Starter": {
@@ -143,6 +147,127 @@ def plan_has_feature(plan_name, feature_flag):
     return feature_flag in get_plan_definition(plan_name).get("feature_flags", set())
 
 
+def _normalize_role(role):
+    if role == "admin":
+        return "global_admin"
+    return role or "user"
+
+
+def is_global_admin_role(role):
+    return _normalize_role(role) in GLOBAL_ADMIN_ROLES
+
+
+def is_company_admin_role(role):
+    return _normalize_role(role) in COMPANY_ADMIN_ROLES
+
+
+def is_recommendation_manager_role(role):
+    return _normalize_role(role) in RECOMMENDATION_MANAGER_ROLES
+
+
+def _default_company_for_role(role, username):
+    return INTERNAL_COMPANY if is_global_admin_role(role) or role in {"internal_user", "presenter"} else username
+
+
+def _default_user_type_for_role(role):
+    return "internal" if is_global_admin_role(role) or role in {"internal_user", "presenter"} else "client"
+
+
+def _ensure_companies_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS companies (
+            company_name TEXT PRIMARY KEY,
+            company_type TEXT NOT NULL DEFAULT 'client',
+            plan TEXT NOT NULL DEFAULT 'Starter',
+            created_by TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    _ensure_column(conn, "companies", "company_name", "TEXT")
+    _ensure_column(conn, "companies", "company_type", "TEXT NOT NULL DEFAULT 'client'")
+    _ensure_column(conn, "companies", "plan", "TEXT NOT NULL DEFAULT 'Starter'")
+    _ensure_column(conn, "companies", "created_by", "TEXT")
+    _ensure_column(conn, "companies", "created_at", "TEXT")
+    _ensure_column(conn, "companies", "updated_at", "TEXT")
+
+
+def ensure_company(company_name, plan="Starter", company_type="client", created_by=None, conn=None):
+    normalized_company = (company_name or "").strip()
+    if not normalized_company:
+        return None
+    owns_connection = conn is None
+    if owns_connection:
+        conn = get_db()
+    _ensure_companies_table(conn)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    existing = conn.execute(
+        "SELECT company_name FROM companies WHERE company_name = ?",
+        (normalized_company,),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE companies SET plan = COALESCE(?, plan), updated_at = ? WHERE company_name = ?",
+            (plan, now, normalized_company),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO companies (company_name, company_type, plan, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (normalized_company, company_type, plan, created_by, now, now),
+        )
+    if owns_connection:
+        conn.commit()
+        conn.close()
+    return normalized_company
+
+
+def get_company(company_name):
+    conn = get_db()
+    _ensure_companies_table(conn)
+    row = conn.execute(
+        "SELECT company_name, company_type, plan, created_by, created_at, updated_at FROM companies WHERE company_name = ?",
+        (company_name,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_companies(viewer_username=None):
+    conn = get_db()
+    _ensure_companies_table(conn)
+    if viewer_username and not is_global_admin_role(get_user_role(viewer_username)):
+        viewer_company = get_user_company(viewer_username)
+        rows = conn.execute(
+            "SELECT company_name, company_type, plan, created_by, created_at, updated_at FROM companies WHERE company_name = ? ORDER BY company_name ASC",
+            (viewer_company,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT company_name, company_type, plan, created_by, created_at, updated_at FROM companies ORDER BY company_name ASC"
+        ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def update_company_plan(company_name, plan_name):
+    normalized_plan = plan_name if plan_name in PLAN_CATALOG else "Starter"
+    conn = get_db()
+    _ensure_companies_table(conn)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    conn.execute(
+        "UPDATE companies SET plan = ?, updated_at = ? WHERE company_name = ?",
+        (normalized_plan, now, company_name),
+    )
+    conn.commit()
+    conn.close()
+    return normalized_plan
+
+
 def _ensure_subscriptions_table(conn):
     conn.execute(
         """
@@ -159,40 +284,18 @@ def _ensure_subscriptions_table(conn):
 
 
 def get_user_plan(username):
-    if not username:
+    company_name = get_user_company(username) if username else None
+    if not company_name:
         return "Starter"
-    conn = get_db()
-    _ensure_subscriptions_table(conn)
-    row = conn.execute("SELECT plan FROM subscriptions WHERE username = ?", (username,)).fetchone()
-    if row is None:
-        now = datetime.utcnow().isoformat(timespec="seconds")
-        conn.execute(
-            "INSERT OR IGNORE INTO subscriptions (username, plan, updated_at) VALUES (?, ?, ?)",
-            (username, "Starter", now),
-        )
-        conn.commit()
-        conn.close()
-        return "Starter"
-    conn.close()
-    return row[0] or "Starter"
+    company = get_company(company_name)
+    return company.get("plan", "Starter") if company else "Starter"
 
 
 def update_user_plan(username, plan_name):
-    normalized_plan = plan_name if plan_name in PLAN_CATALOG else "Starter"
-    conn = get_db()
-    _ensure_subscriptions_table(conn)
-    now = datetime.utcnow().isoformat(timespec="seconds")
-    conn.execute(
-        """
-        INSERT INTO subscriptions (username, plan, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(username) DO UPDATE SET plan = excluded.plan, updated_at = excluded.updated_at
-        """,
-        (username, normalized_plan, now),
-    )
-    conn.commit()
-    conn.close()
-    return normalized_plan
+    company_name = get_user_company(username)
+    if not company_name:
+        return "Starter"
+    return update_company_plan(company_name, plan_name)
 
 
 def get_pg_connection():
@@ -317,6 +420,11 @@ def _ensure_users_table(conn):
         )
         """
     )
+    _ensure_column(conn, "users", "company", "TEXT")
+    _ensure_column(conn, "users", "user_type", "TEXT DEFAULT 'client'")
+    _ensure_column(conn, "users", "created_by", "TEXT")
+    _ensure_column(conn, "users", "created_at", "TEXT")
+    _ensure_column(conn, "users", "updated_at", "TEXT")
 
 
 def _ensure_audit_log_table(conn):
@@ -331,6 +439,7 @@ def _ensure_audit_log_table(conn):
         )
         """
     )
+    _ensure_column(conn, "audit_log", "company", "TEXT")
 
 
 def _ensure_billing_data_table(conn):
@@ -382,6 +491,7 @@ def _ensure_cloud_sync_runs_table(conn):
         """
     )
     _ensure_column(conn, "cloud_sync_runs", "username", "TEXT")
+    _ensure_column(conn, "cloud_sync_runs", "company", "TEXT")
     _ensure_column(conn, "cloud_sync_runs", "provider", "TEXT")
     _ensure_column(conn, "cloud_sync_runs", "status", "TEXT")
     _ensure_column(conn, "cloud_sync_runs", "trigger_type", "TEXT")
@@ -426,6 +536,7 @@ def _ensure_recommendations_table(conn):
         )
         """
     )
+    _ensure_column(conn, "recommendations", "company", "TEXT")
     _ensure_column(conn, "recommendations", "username", "TEXT")
     _ensure_column(conn, "recommendations", "account_identifier", "TEXT")
     _ensure_column(conn, "recommendations", "provider", "TEXT")
@@ -473,6 +584,7 @@ def _ensure_recommendation_events_table(conn):
     )
     _ensure_column(conn, "recommendation_events", "recommendation_id", "INTEGER")
     _ensure_column(conn, "recommendation_events", "username", "TEXT")
+    _ensure_column(conn, "recommendation_events", "company", "TEXT")
     _ensure_column(conn, "recommendation_events", "action", "TEXT")
     _ensure_column(conn, "recommendation_events", "old_value", "TEXT")
     _ensure_column(conn, "recommendation_events", "new_value", "TEXT")
@@ -501,6 +613,7 @@ def _ensure_cloud_accounts_table(conn):
         """
     )
     _ensure_column(conn, "cloud_accounts", "username", "TEXT")
+    _ensure_column(conn, "cloud_accounts", "company", "TEXT")
     _ensure_column(conn, "cloud_accounts", "provider", "TEXT")
     _ensure_column(conn, "cloud_accounts", "account_name", "TEXT")
     _ensure_column(conn, "cloud_accounts", "account_identifier", "TEXT")
@@ -525,6 +638,7 @@ def _ensure_cloud_accounts_table(conn):
 
 def create_tables():
     conn = get_db()
+    _ensure_companies_table(conn)
     _ensure_billing_data_table(conn)
     _ensure_users_table(conn)
     _ensure_subscriptions_table(conn)
@@ -534,8 +648,113 @@ def create_tables():
     _ensure_cloud_sync_runs_table(conn)
     _ensure_recommendations_table(conn)
     _ensure_recommendation_events_table(conn)
+    _bootstrap_tenant_defaults(conn)
     conn.commit()
     conn.close()
+
+
+def _bootstrap_tenant_defaults(conn):
+    _ensure_companies_table(conn)
+    _ensure_users_table(conn)
+    _ensure_subscriptions_table(conn)
+    _ensure_column(conn, "cloud_sync_runs", "company", "TEXT")
+    _ensure_column(conn, "recommendations", "company", "TEXT")
+    _ensure_column(conn, "recommendation_events", "company", "TEXT")
+
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    ensure_company(INTERNAL_COMPANY, plan="Enterprise", company_type="internal", created_by="system", conn=conn)
+
+    conn.execute(
+        """
+        UPDATE users
+        SET role = 'global_admin',
+            company = COALESCE(NULLIF(company, ''), ?),
+            user_type = 'internal',
+            updated_at = COALESCE(updated_at, ?)
+        WHERE username = 'admin'
+        """,
+        (INTERNAL_COMPANY, now),
+    )
+
+    user_rows = conn.execute("SELECT username, role, company FROM users").fetchall()
+    for row in user_rows:
+        username = row[0]
+        role = _normalize_role(row[1])
+        company = row[2] or _default_company_for_role(role, username)
+        user_type = _default_user_type_for_role(role)
+        company_type = "internal" if company == INTERNAL_COMPANY else "client"
+        plan = "Enterprise" if company == INTERNAL_COMPANY else "Starter"
+        ensure_company(company, plan=plan, company_type=company_type, created_by="system", conn=conn)
+        conn.execute(
+            """
+            UPDATE users
+            SET role = ?, company = ?, user_type = COALESCE(NULLIF(user_type, ''), ?),
+                created_at = COALESCE(created_at, ?), updated_at = COALESCE(updated_at, ?)
+            WHERE username = ?
+            """,
+            (role, company, user_type, now, now, username),
+        )
+
+    conn.execute(
+        """
+        UPDATE cloud_accounts
+        SET company = COALESCE(
+            NULLIF(company, ''),
+            (SELECT company FROM users WHERE users.username = cloud_accounts.username),
+            username,
+            ?
+        )
+        """,
+        (INTERNAL_COMPANY,),
+    )
+    conn.execute(
+        """
+        UPDATE cloud_sync_runs
+        SET company = COALESCE(
+            NULLIF(company, ''),
+            (SELECT company FROM users WHERE users.username = cloud_sync_runs.username),
+            username,
+            ?
+        )
+        """,
+        (INTERNAL_COMPANY,),
+    )
+    conn.execute(
+        """
+        UPDATE recommendations
+        SET company = COALESCE(
+            NULLIF(company, ''),
+            (SELECT company FROM users WHERE users.username = recommendations.username),
+            username,
+            ?
+        )
+        """,
+        (INTERNAL_COMPANY,),
+    )
+    conn.execute(
+        """
+        UPDATE recommendation_events
+        SET company = COALESCE(
+            NULLIF(company, ''),
+            (SELECT company FROM users WHERE users.username = recommendation_events.username),
+            username,
+            ?
+        )
+        """,
+        (INTERNAL_COMPANY,),
+    )
+    conn.execute(
+        """
+        UPDATE audit_log
+        SET company = COALESCE(
+            NULLIF(company, ''),
+            (SELECT company FROM users WHERE users.username = audit_log.username),
+            username,
+            ?
+        )
+        """,
+        (INTERNAL_COMPANY,),
+    )
 
 
 def _normalize_fernet_key(raw_key):
@@ -656,12 +875,29 @@ def cleanup_billing_data_duplicates():
     return removed_count
 
 
-def add_user(username, password, role):
+def add_user(username, password, role, company=None, user_type=None, created_by=None):
     conn = get_db()
+    _ensure_companies_table(conn)
     _ensure_users_table(conn)
+    normalized_role = _normalize_role(role)
+    normalized_company = (company or _default_company_for_role(normalized_role, username)).strip()
+    normalized_user_type = user_type or _default_user_type_for_role(normalized_role)
+    company_type = "internal" if normalized_company == INTERNAL_COMPANY else "client"
+    default_plan = "Enterprise" if normalized_company == INTERNAL_COMPANY else "Starter"
+    ensure_company(
+        normalized_company,
+        plan=default_plan,
+        company_type=company_type,
+        created_by=created_by,
+        conn=conn,
+    )
+    now = datetime.utcnow().isoformat(timespec="seconds")
     conn.execute(
-        "INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)",
-        (username, password, role),
+        """
+        INSERT OR IGNORE INTO users (username, password, role, company, user_type, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (username, password, normalized_role, normalized_company, normalized_user_type, created_by, now, now),
     )
     conn.commit()
     conn.close()
@@ -670,23 +906,45 @@ def add_user(username, password, role):
 def get_user(username):
     conn = get_db()
     _ensure_users_table(conn)
-    cur = conn.execute("SELECT username, password, role FROM users WHERE username = ?", (username,))
+    cur = conn.execute(
+        "SELECT username, password, role, company, user_type, created_by FROM users WHERE username = ?",
+        (username,),
+    )
     user = cur.fetchone()
     conn.close()
     return user
 
 
-def list_users():
+def get_user_company(username):
+    user = get_user(username) if username else None
+    return user[3] if user and len(user) > 3 else None
+
+
+def get_user_type(username):
+    user = get_user(username) if username else None
+    return user[4] if user and len(user) > 4 else None
+
+
+def list_users(viewer_username=None, company=None):
     conn = get_db()
     _ensure_users_table(conn)
-    rows = [dict(row) for row in conn.execute("SELECT username, role FROM users ORDER BY username ASC").fetchall()]
+    query = "SELECT username, role, company, user_type, created_by FROM users"
+    params = []
+    scoped_company = company
+    if not scoped_company and viewer_username and not is_global_admin_role(get_user_role(viewer_username)):
+        scoped_company = get_user_company(viewer_username)
+    if scoped_company:
+        query += " WHERE company = ?"
+        params.append(scoped_company)
+    query += " ORDER BY username ASC"
+    rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
     conn.close()
     return rows
 
 
 def get_user_role(username):
     user = get_user(username) if username else None
-    return user[2] if user else "user"
+    return _normalize_role(user[2]) if user else "user"
 
 
 def get_recommendation(recommendation_id):
@@ -694,7 +952,7 @@ def get_recommendation(recommendation_id):
     _ensure_recommendations_table(conn)
     row = conn.execute(
         """
-        SELECT id, username, account_identifier, provider, category, title, description,
+        SELECT id, username, company, account_identifier, provider, category, title, description,
                status, owner, priority, estimated_savings, realized_savings, due_date,
                dismiss_reason, source, resource, created_at, updated_at, completed_at
         FROM recommendations
@@ -711,23 +969,28 @@ def can_manage_recommendation(recommendation, acting_username, action="view"):
         return False
 
     role = get_user_role(acting_username)
-    if role in {"admin", "premium"}:
+    if is_global_admin_role(role):
+        return True
+
+    acting_company = get_user_company(acting_username)
+    if acting_company and recommendation.get("company") == acting_company and is_recommendation_manager_role(role):
         return True
 
     owner = recommendation.get("owner")
     if action == "view":
-        return owner == acting_username or not owner
+        return recommendation.get("company") == acting_company and (owner == acting_username or not owner)
     if action == "accept":
-        return owner in {None, "", acting_username}
+        return recommendation.get("company") == acting_company and owner in {None, "", acting_username}
     return owner == acting_username
 
 
 def log_audit_event(username, action, details=None):
     conn = get_db()
     _ensure_audit_log_table(conn)
+    company = get_user_company(username)
     conn.execute(
-        "INSERT INTO audit_log (username, action, details) VALUES (?, ?, ?)",
-        (username, action, details),
+        "INSERT INTO audit_log (username, company, action, details) VALUES (?, ?, ?, ?)",
+        (username, company, action, details),
     )
     conn.commit()
     conn.close()
@@ -736,6 +999,7 @@ def log_audit_event(username, action, details=None):
 def save_cloud_account(username, provider, account_name, account_identifier, credentials, details=None):
     conn = get_db()
     _ensure_cloud_accounts_table(conn)
+    company = get_user_company(username) or _default_company_for_role(get_user_role(username), username)
     encrypted = encrypt_credentials(credentials)
     now = datetime.utcnow().isoformat(timespec="seconds")
     details = details or {}
@@ -744,8 +1008,8 @@ def save_cloud_account(username, provider, account_name, account_identifier, cre
     health_score = int(details.get("health_score", 0) or 0)
     sync_frequency_hours = int(details.get("sync_frequency_hours", 24) or 24)
     existing = conn.execute(
-        "SELECT id FROM cloud_accounts WHERE username = ? AND provider = ? AND account_identifier = ?",
-        (username, provider, account_identifier),
+        "SELECT id FROM cloud_accounts WHERE company = ? AND provider = ? AND account_identifier = ?",
+        (company, provider, account_identifier),
     ).fetchone()
     if existing:
         conn.execute(
@@ -774,14 +1038,15 @@ def save_cloud_account(username, provider, account_name, account_identifier, cre
         cur = conn.execute(
             """
             INSERT INTO cloud_accounts (
-                username, provider, account_name, account_identifier, details,
+                username, company, provider, account_name, account_identifier, details,
                 credentials_encrypted, sync_enabled, status, validation_status,
                 validation_message, health_score, last_validation_at, sync_frequency_hours,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
+                company,
                 provider,
                 account_name,
                 account_identifier,
@@ -805,25 +1070,26 @@ def save_cloud_account(username, provider, account_name, account_identifier, cre
 def list_cloud_accounts(username=None):
     conn = get_db()
     _ensure_cloud_accounts_table(conn)
-    if username:
+    if username and not is_global_admin_role(get_user_role(username)):
+        company = get_user_company(username)
         cur = conn.execute(
             """
-            SELECT id, username, provider, account_name, account_identifier, status,
+            SELECT id, username, company, provider, account_name, account_identifier, status,
                    sync_enabled, last_synced_at, last_error, validation_status,
                    validation_message, health_score, last_validation_at,
                    sync_frequency_hours, coverage_start, coverage_end,
                    last_sync_duration_seconds, last_sync_record_count,
                    next_sync_at, created_at, updated_at
             FROM cloud_accounts
-            WHERE username = ?
+            WHERE company = ?
             ORDER BY created_at DESC
             """,
-            (username,),
+            (company,),
         )
     else:
         cur = conn.execute(
             """
-            SELECT id, username, provider, account_name, account_identifier, status,
+            SELECT id, username, company, provider, account_name, account_identifier, status,
                    sync_enabled, last_synced_at, last_error, validation_status,
                    validation_message, health_score, last_validation_at,
                    sync_frequency_hours, coverage_start, coverage_end,
@@ -955,15 +1221,17 @@ def create_sync_run(cloud_account_id, username=None, provider=None, trigger_type
     conn = get_db()
     _ensure_cloud_sync_runs_table(conn)
     started_at = datetime.utcnow().isoformat(timespec="seconds")
+    company = get_user_company(username) if username else None
     cur = conn.execute(
         """
         INSERT INTO cloud_sync_runs (
-            cloud_account_id, username, provider, status, trigger_type, started_at, metadata
-        ) VALUES (?, ?, ?, 'running', ?, ?, ?)
+            cloud_account_id, username, company, provider, status, trigger_type, started_at, metadata
+        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)
         """,
         (
             cloud_account_id,
             username,
+            company,
             provider,
             trigger_type,
             started_at,
@@ -1035,9 +1303,9 @@ def list_sync_runs(cloud_account_id=None, username=None, limit=20):
     if cloud_account_id is not None:
         conditions.append("cloud_account_id = ?")
         params.append(cloud_account_id)
-    if username is not None:
-        conditions.append("username = ?")
-        params.append(username)
+    if username is not None and not is_global_admin_role(get_user_role(username)):
+        conditions.append("company = ?")
+        params.append(get_user_company(username))
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY started_at DESC LIMIT ?"
@@ -1050,15 +1318,17 @@ def list_sync_runs(cloud_account_id=None, username=None, limit=20):
 def add_recommendation_event(recommendation_id, username, action, old_value=None, new_value=None, notes=None):
     conn = get_db()
     _ensure_recommendation_events_table(conn)
+    company = get_user_company(username)
     conn.execute(
         """
         INSERT INTO recommendation_events (
-            recommendation_id, username, action, old_value, new_value, notes, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            recommendation_id, username, company, action, old_value, new_value, notes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             recommendation_id,
             username,
+            company,
             action,
             old_value,
             new_value,
@@ -1110,15 +1380,16 @@ def save_recommendation(
 ):
     conn = get_db()
     _ensure_recommendations_table(conn)
+    company = get_user_company(username) or _default_company_for_role(get_user_role(username), username)
     now = datetime.utcnow().isoformat(timespec="seconds")
     serialized_steps = json.dumps(action_steps) if action_steps is not None else None
     existing = conn.execute(
         """
         SELECT id, status
         FROM recommendations
-        WHERE username = ? AND source = ? AND category = ? AND title = ? AND COALESCE(resource, '') = COALESCE(?, '')
+        WHERE company = ? AND source = ? AND category = ? AND title = ? AND COALESCE(resource, '') = COALESCE(?, '')
         """,
-        (username, source, category, title, resource),
+        (company, source, category, title, resource),
     ).fetchone()
     if existing:
         conn.execute(
@@ -1152,13 +1423,14 @@ def save_recommendation(
         cur = conn.execute(
             """
             INSERT INTO recommendations (
-                username, account_identifier, provider, category, title, description, status,
+                username, company, account_identifier, provider, category, title, description, status,
                 owner, priority, estimated_savings, due_date, source, resource,
                 confidence_score, rationale, effort_level, action_steps, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
+                company,
                 account_identifier,
                 provider,
                 category,
@@ -1188,7 +1460,7 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
     conn = get_db()
     _ensure_recommendations_table(conn)
     query = """
-        SELECT id, username, account_identifier, provider, category, title, description,
+         SELECT id, username, company, account_identifier, provider, category, title, description,
                status, owner, priority, estimated_savings, realized_savings, due_date,
                dismiss_reason, source, resource, confidence_score, rationale, effort_level,
                action_steps, created_at, updated_at, completed_at
@@ -1196,9 +1468,9 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
     """
     conditions = []
     params = []
-    if username is not None:
-        conditions.append("username = ?")
-        params.append(username)
+    if username is not None and not is_global_admin_role(get_user_role(username)):
+        conditions.append("company = ?")
+        params.append(get_user_company(username))
     if status is not None:
         conditions.append("status = ?")
         params.append(status)
@@ -1319,8 +1591,8 @@ def update_recommendation_details(
         return False
 
     role = get_user_role(username)
-    effective_owner = owner if role in {"admin", "premium"} else row[0]
-    if role in {"admin", "premium"} and clear_owner:
+    effective_owner = owner if is_recommendation_manager_role(role) else row[0]
+    if is_recommendation_manager_role(role) and clear_owner:
         effective_owner = None
 
     old_snapshot = {
@@ -1369,8 +1641,8 @@ def update_recommendation_details(
 def get_connected_account_count(username=None):
     conn = get_db()
     _ensure_cloud_accounts_table(conn)
-    if username:
-        cur = conn.execute("SELECT COUNT(*) FROM cloud_accounts WHERE username = ?", (username,))
+    if username and not is_global_admin_role(get_user_role(username)):
+        cur = conn.execute("SELECT COUNT(*) FROM cloud_accounts WHERE company = ?", (get_user_company(username),))
     else:
         cur = conn.execute("SELECT COUNT(*) FROM cloud_accounts")
     count = cur.fetchone()[0]
