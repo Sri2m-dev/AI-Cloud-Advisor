@@ -36,6 +36,13 @@ REQUIRED_TABLES = {
     "recommendations",
     "recommendation_events",
 }
+REQUIRED_CORE_TABLES = {
+    "companies",
+    "company_subscriptions",
+    "users",
+    "subscriptions",
+    "audit_log",
+}
 
 PLAN_CATALOG = {
     "Starter": {
@@ -270,7 +277,10 @@ def get_company(company_name, conn=None):
     owns_connection = conn is None
     if owns_connection:
         conn = get_db()
-    _ensure_companies_table(conn)
+    if not _table_exists(conn, "companies"):
+        if owns_connection:
+            conn.close()
+        return None
     row = conn.execute(
         "SELECT company_name, company_type, plan, created_by, created_at, updated_at FROM companies WHERE company_name = ?",
         (company_name,),
@@ -282,7 +292,9 @@ def get_company(company_name, conn=None):
 
 def list_companies(viewer_username=None):
     conn = get_db()
-    _ensure_companies_table(conn)
+    if not _table_exists(conn, "companies"):
+        conn.close()
+        return []
     if viewer_username and not is_global_admin_role(get_user_role(viewer_username)):
         viewer_company = get_user_company(viewer_username)
         rows = conn.execute(
@@ -383,42 +395,46 @@ def get_company_subscription(company_name, conn=None):
     owns_connection = conn is None
     if owns_connection:
         conn = get_db()
-    _ensure_company_subscriptions_table(conn)
-    row = conn.execute(
-        """
-        SELECT company_name, plan, billing_cycle, subscription_status, trial_started_at, trial_ends_at,
-               cancel_at_period_end, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id,
-               stripe_price_id, current_period_end, source, last_synced_at, updated_at
-        FROM company_subscriptions
-        WHERE company_name = ?
-        """,
-        (normalized_company,),
-    ).fetchone()
-    if owns_connection:
-        conn.close()
-    if row:
-        subscription = dict(row)
-        subscription["cancel_at_period_end"] = bool(subscription.get("cancel_at_period_end"))
-        return subscription
-    company = get_company(normalized_company, conn=conn)
-    plan = company.get("plan", "Starter") if company else "Starter"
-    return {
-        "company_name": normalized_company,
-        "plan": plan,
-        "billing_cycle": "monthly",
-        "subscription_status": "inactive",
-        "trial_started_at": None,
-        "trial_ends_at": None,
-        "cancel_at_period_end": False,
-        "stripe_customer_id": None,
-        "stripe_subscription_id": None,
-        "stripe_checkout_session_id": None,
-        "stripe_price_id": None,
-        "current_period_end": None,
-        "source": "manual",
-        "last_synced_at": None,
-        "updated_at": None,
-    }
+    try:
+        row = None
+        if _table_exists(conn, "company_subscriptions"):
+            row = conn.execute(
+                """
+                SELECT company_name, plan, billing_cycle, subscription_status, trial_started_at, trial_ends_at,
+                       cancel_at_period_end, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id,
+                       stripe_price_id, current_period_end, source, last_synced_at, updated_at
+                FROM company_subscriptions
+                WHERE company_name = ?
+                """,
+                (normalized_company,),
+            ).fetchone()
+        if row:
+            subscription = dict(row)
+            subscription["cancel_at_period_end"] = bool(subscription.get("cancel_at_period_end"))
+            return subscription
+
+        company = get_company(normalized_company, conn=conn)
+        plan = company.get("plan", "Starter") if company else "Starter"
+        return {
+            "company_name": normalized_company,
+            "plan": plan,
+            "billing_cycle": "monthly",
+            "subscription_status": "inactive",
+            "trial_started_at": None,
+            "trial_ends_at": None,
+            "cancel_at_period_end": False,
+            "stripe_customer_id": None,
+            "stripe_subscription_id": None,
+            "stripe_checkout_session_id": None,
+            "stripe_price_id": None,
+            "current_period_end": None,
+            "source": "manual",
+            "last_synced_at": None,
+            "updated_at": None,
+        }
+    finally:
+        if owns_connection:
+            conn.close()
 
 
 def upsert_company_subscription(
@@ -666,6 +682,18 @@ def _database_ready(conn):
         return recorded_version == SCHEMA_VERSION
     internal_company = get_company(INTERNAL_COMPANY, conn=conn)
     return bool(internal_company)
+
+
+def _core_database_ready(conn):
+    if not all(_table_exists(conn, table_name) for table_name in REQUIRED_CORE_TABLES):
+        return False
+    internal_company = get_company(INTERNAL_COMPANY, conn=conn)
+    if not internal_company:
+        return False
+    admin_user = conn.execute(
+        "SELECT 1 FROM users WHERE username = 'admin' LIMIT 1"
+    ).fetchone()
+    return bool(admin_user)
 
 
 def _billing_duplicate_count_query():
@@ -1038,19 +1066,42 @@ def _bootstrap_core_tenant_defaults(conn):
 
 def initialize_core_tables():
     with _database_init_lock():
-        conn = None
-        try:
-            conn = get_db()
-            _ensure_companies_table(conn)
-            _ensure_company_subscriptions_table(conn)
-            _ensure_users_table(conn)
-            _ensure_subscriptions_table(conn)
-            _ensure_audit_log_table(conn)
-            _bootstrap_core_tenant_defaults(conn)
-            conn.commit()
-        finally:
-            if conn is not None:
-                conn.close()
+        last_error = None
+        for attempt in range(5):
+            conn = None
+            try:
+                conn = get_db()
+                if _core_database_ready(conn):
+                    return
+                _ensure_companies_table(conn)
+                _ensure_company_subscriptions_table(conn)
+                _ensure_users_table(conn)
+                _ensure_subscriptions_table(conn)
+                _ensure_audit_log_table(conn)
+                _bootstrap_core_tenant_defaults(conn)
+                conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                last_error = exc
+                if conn is not None:
+                    conn.rollback()
+                if "locked" in str(exc).lower():
+                    verification_conn = None
+                    try:
+                        verification_conn = get_db()
+                        if _core_database_ready(verification_conn):
+                            return
+                    finally:
+                        if verification_conn is not None:
+                            verification_conn.close()
+                if "locked" not in str(exc).lower() or attempt == 4:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
+            finally:
+                if conn is not None:
+                    conn.close()
+        if last_error:
+            raise last_error
 
 
 def _bootstrap_tenant_defaults(conn):
@@ -1315,7 +1366,9 @@ def add_user(username, password, role, company=None, user_type=None, created_by=
 
 def get_user(username):
     conn = get_db()
-    _ensure_users_table(conn)
+    if not _table_exists(conn, "users"):
+        conn.close()
+        return None
     cur = conn.execute(
         "SELECT username, password, role, company, user_type, created_by FROM users WHERE username = ?",
         (username,),
@@ -1337,7 +1390,9 @@ def get_user_type(username):
 
 def list_users(viewer_username=None, company=None):
     conn = get_db()
-    _ensure_users_table(conn)
+    if not _table_exists(conn, "users"):
+        conn.close()
+        return []
     query = "SELECT username, role, company, user_type, created_by FROM users"
     params = []
     scoped_company = company
@@ -1428,15 +1483,30 @@ def can_manage_recommendation(recommendation, acting_username, action="view"):
 
 
 def log_audit_event(username, action, details=None):
-    conn = get_db()
-    _ensure_audit_log_table(conn)
-    company = get_user_company(username)
-    conn.execute(
-        "INSERT INTO audit_log (username, company, action, details) VALUES (?, ?, ?, ?)",
-        (username, company, action, details),
-    )
-    conn.commit()
-    conn.close()
+    last_error = None
+    for attempt in range(3):
+        conn = None
+        try:
+            conn = get_db()
+            _ensure_audit_log_table(conn)
+            company = get_user_company(username)
+            conn.execute(
+                "INSERT INTO audit_log (username, company, action, details) VALUES (?, ?, ?, ?)",
+                (username, company, action, details),
+            )
+            conn.commit()
+            return True
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            if conn is not None:
+                conn.rollback()
+            if "locked" not in str(exc).lower() or attempt == 2:
+                break
+            time.sleep(0.2 * (attempt + 1))
+        finally:
+            if conn is not None:
+                conn.close()
+    return False
 
 
 def save_cloud_account(username, provider, account_name, account_identifier, credentials, details=None):

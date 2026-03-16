@@ -115,6 +115,7 @@ stanio==0.5.1
 statsmodels==0.14.6
 stripe==12.5.1
 streamlit==1.54.0
+streamlit-cookies-controller==0.0.4
 tabulate==0.9.0
 tenacity==9.1.4
 threadpoolctl==3.6.0

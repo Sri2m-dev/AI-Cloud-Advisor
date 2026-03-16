@@ -5,9 +5,9 @@ import os
 # Disable Streamlit's default multipage navigation sidebar
 os.environ["STREAMLIT_PAGES"] = "0"
 try:
-    import extra_streamlit_components as stx
+    from streamlit_cookies_controller import CookieController as _CookieController
 except ImportError:
-    stx = None
+    _CookieController = None
 import jwt
 
 # Streamlit page config: set title and collapse sidebar by default
@@ -90,14 +90,14 @@ def _initialize_database():
 _initialize_database()
 
 
-def _get_cookie_manager():
-    if stx is None:
-        return None
-    cookie_manager = st.session_state.get("_cookie_manager")
-    if cookie_manager is None:
-        cookie_manager = stx.CookieManager()
-        st.session_state["_cookie_manager"] = cookie_manager
-    return cookie_manager
+# Instantiated once per script run (every Streamlit rerun).
+# Must NOT be cached with @st.cache_resource — it renders a hidden HTML
+# component and must execute in the active session's script context.
+_cookie_ctrl = _CookieController() if _CookieController is not None else None
+
+
+def _get_cookie_controller():
+    return _cookie_ctrl
 
 
 def _auth_cookie_expires_at():
@@ -181,31 +181,39 @@ def _issue_auth_token(username):
 
 
 def _set_auth_cookie(username):
-    cookie_manager = _get_cookie_manager()
-    if cookie_manager is None:
+    controller = _get_cookie_controller()
+    if controller is None:
         return
-    cookie_manager.set(
-        AUTH_COOKIE_NAME,
-        _issue_auth_token(username),
-        expires_at=_auth_cookie_expires_at(),
-        key="set_auth_cookie",
-    )
+    try:
+        controller.set(
+            AUTH_COOKIE_NAME,
+            _issue_auth_token(username),
+            max_age=AUTH_COOKIE_DAYS * 86400,
+        )
+    except Exception:
+        pass
 
 
 def _clear_auth_cookie():
-    cookie_manager = _get_cookie_manager()
-    if cookie_manager is None:
+    controller = _get_cookie_controller()
+    if controller is None:
         return
-    cookie_manager.delete(AUTH_COOKIE_NAME, key="delete_auth_cookie")
+    try:
+        controller.remove(AUTH_COOKIE_NAME)
+    except Exception:
+        pass
 
 
 def _restore_auth_session_from_cookie():
     if st.session_state.get("authenticated"):
         return
-    cookie_manager = _get_cookie_manager()
-    if cookie_manager is None:
+    controller = _get_cookie_controller()
+    if controller is None:
         return
-    token = cookie_manager.get(AUTH_COOKIE_NAME)
+    try:
+        token = controller.get(AUTH_COOKIE_NAME)
+    except Exception:
+        return
     if not token:
         return
     try:
@@ -2686,47 +2694,39 @@ elif selected_page == "Plans & Billing":
         plan_rows.append(
             {
                 "Plan": plan_name,
-                "Monthly Price": f"${plan_def['monthly_price']}/month",
-                "Yearly Price (20% Discount)": f"${plan_def['yearly_price']}/year",
-                "Free Trial": f"{plan_def['trial_days']} days",
-                "Cloud Accounts": "Unlimited" if account_limit == float("inf") else account_limit,
-                "User Licenses": "Unlimited" if seat_limit == float("inf") else seat_limit,
+                "Monthly": f"${plan_def['monthly_price']}",
+                "Annual (20% Off)": f"${plan_def['yearly_price']}",
+                "Trial": f"{plan_def['trial_days']} days",
+                "Cloud Accounts": "Unlimited" if account_limit == float("inf") else str(account_limit),
+                "User Licenses": "Unlimited" if seat_limit == float("inf") else str(seat_limit),
                 "Billing History": _format_plan_history_label(plan_def),
-                "Included": ", ".join(plan_def["features"]),
+                "Included Features": ", ".join(plan_def["features"]),
             }
         )
 
-    st.markdown("### Choose the right plan for your business")
-    st.table(pd.DataFrame(plan_rows).set_index("Plan"))
-    st.markdown("---")
-    st.markdown("#### Feature Comparison")
-    st.table(
-        pd.DataFrame(
-            {
-            "Capability": [
-                "Cloud Accounts",
-                "User Licenses",
-                "Billing History",
-                "Free Trial",
-                "AI Recommendations",
-                "Cost Forecast",
-                "Reports",
-                "Operations",
-                "Board Packs",
-            ],
-            "Starter": ["1", "2", "30 days", "7 days", "-", "-", "Basic finance only", "-", "-"],
-            "Growth": ["5", "5", "180 days", "7 days", "Yes", "Yes", "Finance + executive", "-", "-"],
-            "Enterprise": ["Unlimited", "Unlimited", "Unlimited", "7 days", "Yes", "Yes", "All reports", "Yes", "Yes"],
-            }
-        ).set_index("Capability")
-    )
-    st.info("All plans include a 7-day free trial. Annual billing applies a 20% discount across Starter, Growth, and Enterprise.")
-    st.info("Billing history is plan-limited by design so smaller packs cannot use unlimited historical cloud cost data on a low-tier subscription.")
-    st.info("When you select a pack, the app assigns access automatically. You do not need to turn each feature on one by one unless you want a custom enterprise contract.")
-    st.info("For annual billing, invoicing, or custom needs, reach out to sales@aicloudadvisor.com.")
+
+    # Determine if subscription is active
+    sub_status = str((subscription or {}).get("subscription_status") or "inactive").lower()
+    if sub_status not in ("active", "trialing"):
+        plan_display = "No Active Plan"
+        plan_caption = f"(was {current_plan})" if current_plan else ""
+        plan_color = "#ffcccc"  # Red/pink for inactive
+    else:
+        plan_display = current_plan
+        plan_caption = ""
+        plan_color = "#e9f3fa"  # Blue for active (matches st.metric)
+
     current_plan_def = get_plan_definition(current_plan)
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-    metric_col1.metric("Current Plan", current_plan)
+    with metric_col1:
+        st.markdown(f"""
+            <div style='background:{plan_color};padding:1.2em 0.5em 1em 0.5em;border-radius:0.5em;text-align:center;min-height:4.5em;display:flex;flex-direction:column;justify-content:center;height:100%;'>
+                <div style='font-size:1.1em;font-weight:600;line-height:1.1;color:#38404a;'>Current Plan</div>
+                <div style='font-size:2em;font-weight:700;line-height:1.1;margin:0.1em 0 0.05em 0;color:#38404a;'>{plan_display}</div>
+                <div style='font-size:0.9em;color:#888;margin-bottom:0.1em;'>{plan_caption}</div>
+                {('<span style="color:#b00;font-size:0.95em;font-weight:600;">Subscription Inactive</span>' if sub_status not in ("active", "trialing") else '')}
+            </div>
+        """, unsafe_allow_html=True)
     metric_col2.metric(
         "Cloud Accounts",
         "Unlimited" if current_plan_def["cloud_accounts"] == float("inf") else current_plan_def["cloud_accounts"],
@@ -2736,7 +2736,10 @@ elif selected_page == "Plans & Billing":
         "Unlimited" if current_plan_def["user_seats"] == float("inf") else current_plan_def["user_seats"],
     )
     metric_col4.metric("Billing History", _format_plan_history_label(current_plan_def))
-    st.success(f"Your current plan: {current_plan}")
+    if sub_status not in ("active", "trialing"):
+        st.warning("You do not have an active subscription. Upgrade or renew to unlock full access.")
+    else:
+        st.success(f"Your current plan: {current_plan}")
 
     st.markdown("---")
     st.markdown("#### Subscription Status")
@@ -2804,6 +2807,50 @@ elif selected_page == "Plans & Billing":
                 st.link_button("Open Stripe Billing Portal", portal_url, use_container_width=True)
     else:
         st.caption("Billing is managed by your company administrator.")
+
+    st.markdown("---")
+    st.markdown("### Compare Plans")
+    st.caption("Prices are shown in USD. Choose monthly or annual billing in checkout.")
+    st.dataframe(
+        pd.DataFrame(plan_rows),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Plan": st.column_config.TextColumn(width="small"),
+            "Monthly": st.column_config.TextColumn(width="small"),
+            "Annual (20% Off)": st.column_config.TextColumn(width="small"),
+            "Trial": st.column_config.TextColumn(width="small"),
+            "Cloud Accounts": st.column_config.TextColumn(width="small"),
+            "User Licenses": st.column_config.TextColumn(width="small"),
+            "Billing History": st.column_config.TextColumn(width="small"),
+            "Included Features": st.column_config.TextColumn(width="large"),
+        },
+    )
+    st.markdown("#### Feature Comparison")
+    st.table(
+        pd.DataFrame(
+            {
+            "Capability": [
+                "Cloud Accounts",
+                "User Licenses",
+                "Billing History",
+                "Free Trial",
+                "AI Recommendations",
+                "Cost Forecast",
+                "Reports",
+                "Operations",
+                "Board Packs",
+            ],
+            "Starter": ["1", "2", "30 days", "7 days", "-", "-", "Basic finance only", "-", "-"],
+            "Growth": ["5", "5", "180 days", "7 days", "Yes", "Yes", "Finance + executive", "-", "-"],
+            "Enterprise": ["Unlimited", "Unlimited", "Unlimited", "7 days", "Yes", "Yes", "All reports", "Yes", "Yes"],
+            }
+        ).set_index("Capability")
+    )
+    st.info("All plans include a 7-day free trial. Annual billing applies a 20% discount across Starter, Growth, and Enterprise.")
+    st.info("Billing history is plan-limited by design so smaller packs cannot use unlimited historical cloud cost data on a low-tier subscription.")
+    st.info("When you select a pack, the app assigns access automatically. You do not need to turn each feature on one by one unless you want a custom enterprise contract.")
+    st.info("For annual billing, invoicing, or custom needs, reach out to sales@aicloudadvisor.com.")
 
     if is_company_admin_role(st.session_state.get("role", "user")):
         st.info("User and tenant administration has moved to Access Management below Plans & Billing.")
