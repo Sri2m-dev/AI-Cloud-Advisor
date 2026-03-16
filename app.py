@@ -18,10 +18,25 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Hide only the Streamlit multipage navigation ("app", "cloud accounts")
+# Hide Streamlit chrome that should not be visible to end users
 hide_pages = """
 <style>
 [data-testid="stSidebarNav"] {
+    display: none;
+}
+[data-testid="stHeader"] {
+    display: none;
+}
+[data-testid="stToolbar"] {
+    display: none;
+}
+[data-testid="stDecoration"] {
+    display: none;
+}
+[data-testid="stStatusWidget"] {
+    display: none;
+}
+.stDeployButton {
     display: none;
 }
 </style>
@@ -164,6 +179,7 @@ def _apply_plan_billing_history_limit(billing_df, username):
 
 
 def _apply_authenticated_session(user_row):
+    st.session_state.pop("logout_pending", None)
     st.session_state["authenticated"] = True
     st.session_state["username"] = user_row[0]
     st.session_state["role"] = user_row[2]
@@ -199,13 +215,47 @@ def _clear_auth_cookie():
     if controller is None:
         return
     try:
+        controller.set(AUTH_COOKIE_NAME, "", max_age=0)
+    except Exception:
+        pass
+    try:
         controller.remove(AUTH_COOKIE_NAME)
     except Exception:
         pass
 
 
+def _reset_authenticated_session(mark_logout_pending=False):
+    for key in [
+        "authenticated",
+        "username",
+        "role",
+        "company",
+        "user_type",
+        "plan",
+        "selected_page",
+        "billing_checkout_url",
+        "billing_portal_url",
+        "processed_billing_session_id",
+    ]:
+        st.session_state.pop(key, None)
+    st.session_state["authenticated"] = False
+    if mark_logout_pending:
+        st.session_state["logout_pending"] = True
+    else:
+        st.session_state.pop("logout_pending", None)
+
+
+def _perform_logout():
+    log_audit_event(st.session_state.get("username", "guest"), "logout")
+    _clear_auth_cookie()
+    _reset_authenticated_session(mark_logout_pending=True)
+    _clear_query_params("billing_result", "session_id", "selected_page")
+
+
 def _restore_auth_session_from_cookie():
     if st.session_state.get("authenticated"):
+        return
+    if st.session_state.get("logout_pending"):
         return
     controller = _get_cookie_controller()
     if controller is None:
@@ -285,6 +335,18 @@ def _get_analytics_connection():
         return get_pg_connection(), "PostgreSQL"
     except Exception:
         return get_db(), "SQLite"
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _load_billing_data_frame():
+    conn, _ = _get_analytics_connection()
+    try:
+        billing_df = pd.read_sql_query("SELECT account, date, service, cost FROM billing_data", conn)
+    except Exception:
+        billing_df = pd.DataFrame()
+    finally:
+        conn.close()
+    return billing_df
 
 def cost_forecast_page():
     import optuna
@@ -650,6 +712,7 @@ def create_pdf_report(df, title):
     return tmp.name
 
 
+@st.cache_data(ttl=20, show_spinner=False)
 def _cloud_operations_snapshot(username):
     accounts = list_cloud_accounts(username)
     sync_runs = list_sync_runs(username=username, limit=10)
@@ -900,14 +963,7 @@ def _load_dashboard_billing_scope(username, active_demo=None):
         "history_label": _format_plan_history_label(get_plan_definition(plan_name)),
         "window_start": None,
     }
-    conn, _ = _get_analytics_connection()
-    billing_df = None
-    try:
-        billing_df = pd.read_sql_query("SELECT account, date, service, cost FROM billing_data", conn)
-    except Exception:
-        billing_df = pd.DataFrame()
-    finally:
-        conn.close()
+    billing_df = _load_billing_data_frame().copy()
 
     if billing_df.empty:
         return pd.DataFrame(), active_demo.get("account_names", []) if active_demo else [], plan_scope
@@ -2615,12 +2671,7 @@ Select a model, choose how many months to forecast, and view the results. You ca
 **How do I save notes?**  
 Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
         """)
-    if st.button("Logout"):
-        log_audit_event(st.session_state.get("username", "guest"), "logout")
-        _clear_auth_cookie()
-        st.session_state.clear()
-        st.session_state["authenticated"] = False
-        st.rerun()
+    st.button("Logout", on_click=_perform_logout)
 
 # Main page routing logic
 selected_page = st.session_state.get("selected_page", "Dashboard")
