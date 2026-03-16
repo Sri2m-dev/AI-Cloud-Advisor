@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 
 # Connect to the database
@@ -21,7 +21,7 @@ CREATE TABLE billing_data (
 # Generate sample data for the last 90 days
 accounts = ["aws-prod", "aws-dev", "azure-main", "gcp-analytics"]
 services = ["EC2", "S3", "RDS", "Lambda", "BigQuery", "VM", "Blob Storage", "SQL DB"]
-start_date = datetime.now() - timedelta(days=90)
+start_date = datetime.now(timezone.utc) - timedelta(days=90)
 
 sample_rows = []
 for i in range(90):

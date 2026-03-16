@@ -5,7 +5,7 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -108,6 +108,7 @@ PLAN_CATALOG = {
             "Cost Explorer",
             "Reports",
             "Cost Forecast (Premium)",
+            "Optimization Insights",
             "Cloud Accounts",
             "Plans & Billing",
         ],
@@ -149,6 +150,7 @@ PLAN_CATALOG = {
             "Cost Explorer",
             "Reports",
             "Operations",
+            "Optimization Insights",
             "Cost Forecast (Premium)",
             "Cloud Accounts",
             "Plans & Billing",
@@ -248,7 +250,7 @@ def ensure_company(company_name, plan="Starter", company_type="client", created_
     if owns_connection:
         conn = get_db()
     _ensure_companies_table(conn)
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     existing = conn.execute(
         "SELECT company_name FROM companies WHERE company_name = ?",
         (normalized_company,),
@@ -314,7 +316,7 @@ def update_company_plan(company_name, plan_name):
     conn = get_db()
     _ensure_companies_table(conn)
     _ensure_company_subscriptions_table(conn)
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     conn.execute(
         "UPDATE companies SET plan = ?, updated_at = ? WHERE company_name = ?",
         (normalized_plan, now, company_name),
@@ -474,7 +476,7 @@ def upsert_company_subscription(
         "source": source or current.get("source") or "manual",
         "last_synced_at": last_synced_at if last_synced_at is not None else current.get("last_synced_at"),
     }
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     owns_connection = conn is None
     if owns_connection:
         conn = get_db()
@@ -661,7 +663,7 @@ def _get_app_metadata(conn, key):
 
 def _set_app_metadata(conn, key, value):
     _ensure_app_metadata_table(conn)
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     conn.execute(
         """
         INSERT INTO app_metadata (key, value, updated_at)
@@ -756,6 +758,7 @@ def _ensure_users_table(conn):
     _ensure_column(conn, "users", "created_by", "TEXT")
     _ensure_column(conn, "users", "created_at", "TEXT")
     _ensure_column(conn, "users", "updated_at", "TEXT")
+    _ensure_column(conn, "users", "onboarding_complete", "INTEGER DEFAULT 0")
 
 
 def _ensure_audit_log_table(conn):
@@ -1020,7 +1023,7 @@ def _bootstrap_core_tenant_defaults(conn):
     _ensure_users_table(conn)
     _ensure_subscriptions_table(conn)
 
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     ensure_company(INTERNAL_COMPANY, plan="Enterprise", company_type="internal", created_by="system", conn=conn)
     upsert_company_subscription(
         INTERNAL_COMPANY,
@@ -1113,7 +1116,7 @@ def _bootstrap_tenant_defaults(conn):
     _ensure_column(conn, "recommendations", "company", "TEXT")
     _ensure_column(conn, "recommendation_events", "company", "TEXT")
 
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     ensure_company(INTERNAL_COMPANY, plan="Enterprise", company_type="internal", created_by="system", conn=conn)
     upsert_company_subscription(
         INTERNAL_COMPANY,
@@ -1278,7 +1281,7 @@ def save_cost_data(provider, cost_df, account_name=None):
         return
     conn = get_db()
     _ensure_billing_data_table(conn)
-    synced_at = datetime.utcnow().isoformat(timespec="seconds")
+    synced_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     account_value = account_name or provider
     for _, row in cost_df.iterrows():
         date_value = row.get("date") or row.get("Date") or synced_at[:10]
@@ -1308,11 +1311,11 @@ def insert_cost(account, service, cost, date=None):
         DO UPDATE SET cost = excluded.cost, synced_at = excluded.synced_at
         """,
         (
-            date or datetime.utcnow().date().isoformat(),
+            date or datetime.now(timezone.utc).date().isoformat(),
             account,
             service,
             cost,
-            datetime.utcnow().isoformat(timespec="seconds"),
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
         ),
     )
     conn.commit()
@@ -1352,7 +1355,7 @@ def add_user(username, password, role, company=None, user_type=None, created_by=
         created_by=created_by,
         conn=conn,
     )
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     conn.execute(
         """
         INSERT OR IGNORE INTO users (username, password, role, company, user_type, created_by, created_at, updated_at)
@@ -1438,11 +1441,40 @@ def update_user_password(target_username, new_password, acting_username=None):
     _ensure_users_table(conn)
     conn.execute(
         "UPDATE users SET password = ?, updated_at = ? WHERE username = ?",
-        (new_password, datetime.utcnow().isoformat(timespec="seconds"), target_username),
+        (new_password, datetime.now(timezone.utc).isoformat(timespec="seconds"), target_username),
     )
     conn.commit()
     conn.close()
     return True
+
+
+def is_onboarding_complete(username):
+    """Return True if the user has already completed the onboarding wizard."""
+    if not username:
+        return True
+    conn = get_db()
+    _ensure_users_table(conn)
+    row = conn.execute(
+        "SELECT onboarding_complete FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return True  # unknown user — don't block them
+    return bool(row[0])
+
+
+def mark_onboarding_complete(username):
+    """Persist that the user has completed onboarding so it is not shown again."""
+    if not username:
+        return
+    conn = get_db()
+    _ensure_users_table(conn)
+    conn.execute(
+        "UPDATE users SET onboarding_complete = 1, updated_at = ? WHERE username = ?",
+        (datetime.now(timezone.utc).isoformat(timespec="seconds"), username),
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_recommendation(recommendation_id):
@@ -1514,7 +1546,7 @@ def save_cloud_account(username, provider, account_name, account_identifier, cre
     _ensure_cloud_accounts_table(conn)
     company = get_user_company(username) or _default_company_for_role(get_user_role(username), username)
     encrypted = encrypt_credentials(credentials)
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     details = details or {}
     validation_status = details.get("status", "pending")
     validation_message = details.get("message")
@@ -1635,7 +1667,7 @@ def update_cloud_account_sync_status(account_id, status, last_error=None, synced
         SET status = ?, last_error = ?, last_synced_at = COALESCE(?, last_synced_at), updated_at = ?
         WHERE id = ?
         """,
-        (status, last_error, effective_sync_time, datetime.utcnow().isoformat(timespec="seconds"), account_id),
+        (status, last_error, effective_sync_time, datetime.now(timezone.utc).isoformat(timespec="seconds"), account_id),
     )
     conn.commit()
     conn.close()
@@ -1677,7 +1709,7 @@ def update_cloud_account_health(
             coverage_end,
             next_sync_at,
             sync_frequency_hours,
-            datetime.utcnow().isoformat(timespec="seconds"),
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
             account_id,
         ),
     )
@@ -1722,7 +1754,7 @@ def record_cloud_account_sync_result(
             coverage_start,
             coverage_end,
             next_sync_at,
-            datetime.utcnow().isoformat(timespec="seconds"),
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
             account_id,
         ),
     )
@@ -1733,7 +1765,7 @@ def record_cloud_account_sync_result(
 def create_sync_run(cloud_account_id, username=None, provider=None, trigger_type="scheduled", metadata=None):
     conn = get_db()
     _ensure_cloud_sync_runs_table(conn)
-    started_at = datetime.utcnow().isoformat(timespec="seconds")
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     company = get_user_company(username) if username else None
     cur = conn.execute(
         """
@@ -1787,7 +1819,7 @@ def finish_sync_run(
         """,
         (
             status,
-            finished_at or datetime.utcnow().isoformat(timespec="seconds"),
+            finished_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
             duration_seconds,
             record_count,
             coverage_start,
@@ -1846,7 +1878,7 @@ def add_recommendation_event(recommendation_id, username, action, old_value=None
             old_value,
             new_value,
             notes,
-            datetime.utcnow().isoformat(timespec="seconds"),
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
         ),
     )
     conn.commit()
@@ -1894,7 +1926,7 @@ def save_recommendation(
     conn = get_db()
     _ensure_recommendations_table(conn)
     company = get_user_company(username) or _default_company_for_role(get_user_role(username), username)
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     serialized_steps = json.dumps(action_steps) if action_steps is not None else None
     existing = conn.execute(
         """
@@ -1982,8 +2014,9 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
     conditions = []
     params = []
     if username is not None and not is_global_admin_role(get_user_role(username)):
+        scoped_company = get_user_company(username) or _default_company_for_role(get_user_role(username), username)
         conditions.append("company = ?")
-        params.append(get_user_company(username))
+        params.append(scoped_company)
     if status is not None:
         conditions.append("status = ?")
         params.append(status)
@@ -2022,7 +2055,7 @@ def update_recommendation_status(
     conn = get_db()
     _ensure_recommendations_table(conn)
     row = conn.execute(
-        "SELECT status, owner, realized_savings, dismiss_reason FROM recommendations WHERE id = ?",
+        "SELECT status, owner, realized_savings, dismiss_reason, company FROM recommendations WHERE id = ?",
         (recommendation_id,),
     ).fetchone()
     if not row:
@@ -2034,6 +2067,7 @@ def update_recommendation_status(
         "owner": row[1],
         "realized_savings": row[2],
         "dismiss_reason": row[3],
+        "company": row[4],
     }
     action_name = "accept" if status == "accepted" else f"status:{status}"
     if not can_manage_recommendation(recommendation, username, action=action_name):
@@ -2043,7 +2077,7 @@ def update_recommendation_status(
     effective_owner = owner
     if status == "accepted" and not effective_owner and not row[1]:
         effective_owner = username
-    completed_at = datetime.utcnow().isoformat(timespec="seconds") if status == "completed" else None
+    completed_at = datetime.now(timezone.utc).isoformat(timespec="seconds") if status == "completed" else None
     conn.execute(
         """
         UPDATE recommendations
@@ -2057,7 +2091,7 @@ def update_recommendation_status(
             dismiss_reason,
             realized_savings,
             completed_at,
-            datetime.utcnow().isoformat(timespec="seconds"),
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
             recommendation_id,
         ),
     )
@@ -2087,7 +2121,7 @@ def update_recommendation_details(
     conn = get_db()
     _ensure_recommendations_table(conn)
     row = conn.execute(
-        "SELECT owner, priority, due_date FROM recommendations WHERE id = ?",
+        "SELECT owner, priority, due_date, company FROM recommendations WHERE id = ?",
         (recommendation_id,),
     ).fetchone()
     if not row:
@@ -2098,6 +2132,7 @@ def update_recommendation_details(
         "owner": row[0],
         "priority": row[1],
         "due_date": row[2],
+        "company": row[3],
     }
     if not can_manage_recommendation(recommendation, username, action="details"):
         conn.close()
@@ -2134,7 +2169,7 @@ def update_recommendation_details(
             priority,
             1 if clear_due_date else 0,
             due_date,
-            datetime.utcnow().isoformat(timespec="seconds"),
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
             recommendation_id,
         ),
     )

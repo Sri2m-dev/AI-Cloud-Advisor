@@ -10,6 +10,15 @@ from database.db import (
     update_recommendation_details,
     update_recommendation_status,
 )
+from services.optimization_engine import recommend_ri_purchase_timing
+from views.ui_helpers import render_empty_state, show_toast
+from views.ui_messages import (
+    TOAST_OPT_ACCEPTED,
+    TOAST_OPT_COMPLETED,
+    TOAST_OPT_DETAILS_SAVED,
+    TOAST_OPT_SNOOZED,
+    TOAST_OPT_WORKFLOW_SAVED,
+)
 
 
 def _seed_optimization_recommendations(username):
@@ -150,6 +159,60 @@ def _seed_optimization_recommendations(username):
                 "Test alert delivery with a dummy threshold.",
             ],
         },
+        {
+            "category": "network",
+            "title": "Reduce cross-region and data egress costs",
+            "description": "Data Transfer charges are the most commonly overlooked cost driver. Cross-region traffic, NAT Gateway usage, and Internet egress can be significantly reduced with VPC endpoints and architecture adjustments.",
+            "resource": "aws-prod:DataTransfer",
+            "estimated_savings": 1800,
+            "priority": "high",
+            "confidence_score": 0.80,
+            "rationale": "Data Transfer costs often appear invisible until the bill arrives. VPC endpoints eliminate NAT Gateway charges for AWS service traffic. Co-locating compute and data in the same AZ removes inter-AZ charges entirely.",
+            "effort_level": "medium",
+            "action_steps": [
+                "Run AWS Cost Explorer filtered by 'Data Transfer' service to identify top egress sources.",
+                "Create VPC endpoints for S3, DynamoDB, and other frequently accessed AWS services.",
+                "Move compute workloads to the same AZ as their primary data store to eliminate inter-AZ fees.",
+                "Enable CloudFront for public-facing assets to reduce direct S3/EC2 egress.",
+                "Review NAT Gateway logs — replace with VPC endpoints where possible.",
+            ],
+        },
+        {
+            "category": "ri_timing",
+            "title": "Optimise Reserved Instance purchase timing and sizing",
+            "description": "45% of your compute is already covered by commitments, leaving a 30% coverage gap to the recommended 75% target. Purchasing $3,840/month in additional 1-year Savings Plan commitments now — while spend is stable and trending up — would save $17,472/year.",
+            "resource": "aws-prod:EC2/Commitments",
+            "estimated_savings": 4320,
+            "priority": "high",
+            "confidence_score": 0.88,
+            "rationale": "Spend has been stable (CV < 10%) for 3 consecutive months and is trending +4.2%. This is the optimal window to lock in 1-year commitments. Waiting increases risk of on-demand cost escalation. A Compute Savings Plan provides the same discount with cross-service flexibility.",
+            "effort_level": "low",
+            "action_steps": [
+                "Open AWS Cost Explorer → Savings Plans → Purchase Recommendations.",
+                "Select 'Compute Savings Plan', 1-year, no-upfront for maximum flexibility.",
+                "Start with 60% of the recommended commitment to validate savings before full rollout.",
+                "Review utilisation weekly for the first month to confirm steady-state baseline.",
+                "Increase commitment in 10% increments each month until 75% coverage is reached.",
+            ],
+        },
+        {
+            "category": "tagging",
+            "title": "Enforce resource tagging to unlock attribution and eliminate waste",
+            "description": "An estimated 28% of your cloud spend is untagged, making it impossible to attribute costs to teams, projects, or environments. Untagged resources are also 3x more likely to be orphaned waste.",
+            "resource": "aws-shared:Tagging",
+            "estimated_savings": 2600,
+            "priority": "high",
+            "confidence_score": 0.78,
+            "rationale": "Without tags, cost attribution is guesswork. Teams overprovision because they can't see their spend. Tagging enforcement combined with showback reports drives a natural 10-15% reduction in usage as teams become accountable.",
+            "effort_level": "low",
+            "action_steps": [
+                "Define a mandatory tag policy: Environment, Team, CostCenter, Project, Owner.",
+                "Use AWS Config rules or tag policies to flag non-compliant resources.",
+                "Block resource creation without required tags via SCP (Service Control Policy).",
+                "Run weekly untagged resource reports and assign cleanup ownership per team.",
+                "Implement showback dashboards so each team can see their attributed spend.",
+            ],
+        },
     ]
     for item in recommendations:
         save_recommendation(
@@ -198,13 +261,166 @@ def render_optimization_insights_page():
 
     opportunities = pd.DataFrame(
         {
-            "Resource": ["EC2 Instances", "Spot Instances", "Savings Plans/RI", "Scheduled EC2", "RDS Instances", "EBS Volumes", "S3 Storage"],
-            "Potential Savings ($)": [4200, 6800, 3400, 2800, 2100, 800, 1200],
-            "Priority": ["High", "High", "High", "High", "High", "Medium", "Medium"],
+            "Resource": ["EC2 Instances", "Spot Instances", "Savings Plans/RI", "RI Purchase Timing", "Scheduled EC2", "Network/Egress", "RDS Instances", "Tagging/Attribution", "EBS Volumes", "S3 Storage"],
+            "Est. Savings/Year ($)": [4200, 6800, 3400, 4320, 2800, 1800, 2100, 2600, 800, 1200],
+            "Priority": ["High", "High", "High", "High", "High", "High", "High", "High", "Medium", "Medium"],
+            "Effort": ["Medium", "High", "Low", "Low", "Medium", "Medium", "Medium", "Low", "Low", "Low"],
         }
     )
     st.subheader("Top Optimization Opportunities")
     st.dataframe(opportunities, width="stretch", hide_index=True)
+
+    # RI Purchase Timing
+    st.subheader("Reserved Instance & Savings Plans Purchase Timing")
+
+    # Mock 12-month cost history (in production, from AWS Cost Explorer monthly totals)
+    monthly_cost_history = [48200, 49100, 50300, 51000, 50800, 52100, 51900, 53200, 52800, 54100, 53600, 53661]
+    on_demand_monthly = 53661.0
+    existing_ri_coverage = 0.45
+
+    ri_analysis = recommend_ri_purchase_timing(monthly_cost_history, on_demand_monthly, existing_ri_coverage)
+
+    ri_col1, ri_col2, ri_col3, ri_col4 = st.columns(4)
+    signal = ri_analysis.get("timing_signal", "N/A")
+    signal_color = {"BUY NOW": "🟢", "PARTIAL BUY": "🟡", "WAIT": "🟠", "HOLD": "🔴"}.get(signal, "⚪")
+    ri_col1.metric("Timing Signal", f"{signal_color} {signal}")
+    ri_col2.metric("Current RI Coverage", f"{ri_analysis['existing_ri_coverage_pct']}%", delta=f"-{ri_analysis['coverage_gap_pct']}% to target", delta_color="inverse")
+    ri_col3.metric("Uncovered Spend", f"${ri_analysis['uncovered_monthly_spend']:,.0f}/mo")
+    ri_col4.metric("Spend Trend (3M)", f"{'+' if ri_analysis['trend_pct'] >= 0 else ''}{ri_analysis['trend_pct']}%", delta_color="normal" if ri_analysis['trend_pct'] >= 0 else "inverse")
+
+    st.info(f"**Timing Analysis:** {ri_analysis['timing_reason']}")
+
+    with st.expander("Purchase Option Comparison"):
+        options_data = pd.DataFrame([
+            {
+                "Commitment Type": opt["type"],
+                "Monthly Commitment ($)": f"${opt['commitment_monthly']:,.0f}",
+                "Monthly Savings ($)": f"${opt['monthly_savings']:,.0f}",
+                "Annual Savings ($)": f"${opt['annual_savings']:,.0f}",
+                "Risk": opt["risk"].title(),
+                "Note": opt.get("note", "—"),
+            }
+            for opt in ri_analysis["purchase_options"]
+        ])
+        st.dataframe(options_data, width="stretch", hide_index=True)
+
+        best = ri_analysis["best_option"]
+        st.success(
+            f"**Recommended:** {best['type']} — "
+            f"saves **${best['monthly_savings']:,.0f}/month** (${best['annual_savings']:,.0f}/year). "
+            f"No upfront payment; cancel anytime after 1 year."
+        )
+
+    with st.expander("Coverage Gap Analysis & Sizing Guide"):
+        st.markdown(f"""
+**Current state**
+| Metric | Value |
+|---|---|
+| Average monthly spend (12M) | ${ri_analysis['avg_monthly_cost']:,.0f} |
+| 3-month rolling average | ${ri_analysis['recent_3m_avg']:,.0f} |
+| Spend volatility (CV) | {ri_analysis['spend_volatility_cv']}% |
+| Existing commitment coverage | {ri_analysis['existing_ri_coverage_pct']}% |
+| Industry target coverage | 75% |
+| Coverage gap | {ri_analysis['coverage_gap_pct']}% |
+
+**Sizing strategy**
+1. **Identify steady-state baseline**: Use the lowest monthly spend in the last 6 months as your safe commitment floor.
+2. **Cover 60% first**: Purchase Savings Plans for 60% of baseline — review utilisation after 30 days.
+3. **Grow in 10% steps**: Increase monthly until you reach 70–75% coverage.
+4. **Never commit variable peaks**: Keep bursty or seasonal workloads on Spot or on-demand.
+5. **Prefer Compute Savings Plans**: They apply across EC2 instance families, Fargate, and Lambda — far more flexible than EC2 Instance Savings Plans or specific RIs.
+        """)
+
+    # Network / Data Transfer Analysis
+    st.subheader("Network & Data Transfer Cost Analysis")
+    net_col1, net_col2, net_col3, net_col4 = st.columns(4)
+
+    # Mock data (in production sourced from AWS Cost Explorer Data Transfer breakdown)
+    total_data_transfer_cost = 1730.46
+    nat_gateway_cost = 680.00
+    cross_region_cost = 540.00
+    internet_egress_cost = 510.46
+
+    net_col1.metric("Total Data Transfer", f"${total_data_transfer_cost:,.0f}/mo")
+    net_col2.metric("NAT Gateway", f"${nat_gateway_cost:,.0f}/mo", help="High NAT costs suggest VPC endpoints can reduce this")
+    net_col3.metric("Cross-Region", f"${cross_region_cost:,.0f}/mo", help="Co-locating data and compute eliminates this")
+    net_col4.metric("Internet Egress", f"${internet_egress_cost:,.0f}/mo", help="CloudFront can reduce direct egress charges")
+
+    nat_savings_potential = nat_gateway_cost * 0.70
+    cross_region_savings = cross_region_cost * 0.60
+    egress_savings = internet_egress_cost * 0.40
+    total_network_savings = nat_savings_potential + cross_region_savings + egress_savings
+
+    if total_data_transfer_cost > 500:
+        st.warning(
+            f"📡 Data transfer costs are significant (${total_data_transfer_cost:,.0f}/mo). "
+            f"Estimated savings potential: **${total_network_savings:,.0f}/mo** through VPC endpoints, AZ co-location, and CloudFront."
+        )
+
+    with st.expander("Network Optimization Breakdown"):
+        network_breakdown = pd.DataFrame({
+            "Cost Type": ["NAT Gateway traffic", "Cross-region data transfer", "Internet egress (S3/EC2)", "Inter-AZ traffic"],
+            "Monthly Cost ($)": [nat_gateway_cost, cross_region_cost, internet_egress_cost, round(total_data_transfer_cost - nat_gateway_cost - cross_region_cost - internet_egress_cost, 2)],
+            "Recommended Action": [
+                "Create VPC Interface Endpoints for S3, DynamoDB, SSM",
+                "Consolidate workloads to single region where possible",
+                "Route via CloudFront; cache static assets at edge",
+                "Move compute to same AZ as primary data store",
+            ],
+            "Est. Reduction": ["~70%", "~60%", "~40%", "~80%"],
+        })
+        st.dataframe(network_breakdown, width="stretch", hide_index=True)
+        st.info("ℹ️ VPC endpoint creation is free; you pay only for data processed through them, which is typically 40-70% cheaper than NAT Gateway rates.")
+
+    # Tagging ROI Analysis
+    st.subheader("Tagging Coverage & Attribution ROI")
+    tag_col1, tag_col2, tag_col3, tag_col4 = st.columns(4)
+
+    # Mock data (in production, derived from AWS Resource Groups Tagging API)
+    total_monthly_spend = 53660.90
+    untagged_spend = total_monthly_spend * 0.28       # 28% untagged
+    partially_tagged_spend = total_monthly_spend * 0.22  # 22% partially tagged
+    fully_tagged_spend = total_monthly_spend - untagged_spend - partially_tagged_spend
+    tagging_coverage_pct = round((fully_tagged_spend / total_monthly_spend) * 100, 1)
+
+    tag_col1.metric("Tagging Coverage", f"{tagging_coverage_pct}%", delta="-28% gap", delta_color="inverse")
+    tag_col2.metric("Unattributed Spend", f"${untagged_spend:,.0f}/mo", help="Spend with no tags — cannot be assigned to team or project")
+    tag_col3.metric("Partially Tagged", f"${partially_tagged_spend:,.0f}/mo", help="Has some tags but missing required fields (e.g. CostCenter, Environment)")
+    tag_col4.metric("Attribution Savings*", f"${untagged_spend * 0.12:,.0f}/mo", help="*Teams with cost visibility reduce spend 10–15% on average")
+
+    if tagging_coverage_pct < 80:
+        st.warning(
+            f"🏷️ Only {tagging_coverage_pct}% of spend is fully tagged. "
+            f"**${untagged_spend:,.0f}/month** cannot be attributed to any team or project — "
+            "making it impossible to hold anyone accountable or detect orphaned resources."
+        )
+
+    with st.expander("Tagging Gap Breakdown by Service"):
+        tagging_detail = pd.DataFrame({
+            "Service": ["EC2", "RDS", "Lambda", "EBS", "S3", "ELB", "CloudWatch"],
+            "Monthly Spend ($)": [10510, 5107, 2100, 1800, 2053, 980, 640],
+            "Tagged (%)": [72, 85, 45, 30, 60, 20, 10],
+            "Missing Tags": ["CostCenter, Owner", "Environment", "Team, CostCenter, Owner", "Owner, Project", "CostCenter", "All required tags", "All required tags"],
+            "Risk": ["Medium", "Low", "High", "High", "Medium", "Critical", "Critical"],
+        })
+        st.dataframe(tagging_detail, width="stretch", hide_index=True)
+
+    with st.expander("Recommended Tag Policy"):
+        st.markdown("""
+**Mandatory tags (block resource creation without these):**
+| Tag Key | Example Values | Purpose |
+|---|---|---|
+| `Environment` | prod, staging, dev, test | Isolate cost by lifecycle |
+| `Team` | platform, data-eng, finops | Attribute to engineering team |
+| `CostCenter` | CC-1042, CC-2091 | Finance chargeback |
+| `Project` | payments-v2, migration-q1 | Per-project reporting |
+| `Owner` | user@company.com | Accountability and escalation |
+
+**Enforcement options:**
+- **AWS Config**: Alert on non-compliant resources (reactive)
+- **SCP (Service Control Policy)**: Block creation without required tags (proactive)
+- **AWS Tag Editor**: Bulk-apply missing tags across accounts
+        """)
 
     # Cost Anomaly Detection Dashboard
     st.subheader("Cost Anomaly Detection & Alerts")
@@ -244,14 +460,24 @@ def render_optimization_insights_page():
 
     if st.button("Save Monitoring Recommendations to Workflow", width="stretch"):
         _seed_optimization_recommendations(username)
-        st.success("Monitoring recommendations saved to workflow.")
+        show_toast(*TOAST_OPT_WORKFLOW_SAVED)
         st.rerun()
 
     workflow_items = list_recommendations(username=username, source="optimization_insights", limit=20)
     if role not in {"admin", "premium"}:
         workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
     if not workflow_items:
-        st.info("No optimization workflow items yet. Save the current opportunities to start tracking them.")
+        clicked = render_empty_state(
+            icon="💡",
+            title="No optimization workflow items yet",
+            message="Save the current opportunities above to create trackable workflow items with owners, due dates, and savings tracking.",
+            cta_label="Save Opportunities to Workflow",
+            cta_key="empty_save_opt_workflow",
+        )
+        if clicked:
+            _seed_optimization_recommendations(username)
+            show_toast(*TOAST_OPT_WORKFLOW_SAVED)
+            st.rerun()
         return
 
     summary_col1, summary_col2, summary_col3 = st.columns(3)
@@ -304,6 +530,7 @@ def render_optimization_insights_page():
                     notes="Updated from optimization insights",
                 )
                 if updated:
+                    show_toast(*TOAST_OPT_DETAILS_SAVED)
                     st.rerun()
                 st.error("You do not have permission to update this recommendation.")
             if action_col2.button("Accept", key=f"opt_accept_{item['id']}", width="stretch", disabled=not can_accept):
@@ -315,16 +542,19 @@ def render_optimization_insights_page():
                     notes="Accepted from optimization insights",
                 )
                 if updated:
+                    show_toast(*TOAST_OPT_ACCEPTED)
                     st.rerun()
                 st.error("You do not have permission to accept this recommendation.")
             if action_col3.button("Complete", key=f"opt_complete_{item['id']}", width="stretch", disabled=not can_edit_details):
                 updated = update_recommendation_status(item["id"], "completed", username=username, notes="Completed from optimization insights")
                 if updated:
+                    show_toast(*TOAST_OPT_COMPLETED)
                     st.rerun()
                 st.error("You do not have permission to complete this recommendation.")
             if action_col4.button("Snooze", key=f"opt_snooze_{item['id']}", width="stretch", disabled=not can_edit_details):
                 updated = update_recommendation_status(item["id"], "snoozed", username=username, notes="Snoozed from optimization insights")
                 if updated:
+                    show_toast(*TOAST_OPT_SNOOZED)
                     st.rerun()
                 st.error("You do not have permission to snooze this recommendation.")
 

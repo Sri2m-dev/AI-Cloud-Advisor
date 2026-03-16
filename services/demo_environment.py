@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -50,7 +50,7 @@ def _normalize_demo_scenario(scenario):
 
 
 def _next_sync_at(hours=24):
-    return (datetime.utcnow() + timedelta(hours=hours)).isoformat(timespec="seconds")
+    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
 
 
 def _build_cost_frame(
@@ -65,7 +65,7 @@ def _build_cost_frame(
     recent_spike_multiplier=1.0,
     recent_spike_services=None,
 ):
-    start_date = datetime.utcnow().date() - timedelta(days=days - 1)
+    start_date = datetime.now(timezone.utc).date() - timedelta(days=days - 1)
     anomaly_day_set = set(anomaly_days or [])
     anomaly_service_set = set(anomaly_services or [])
     recent_spike_service_set = set(recent_spike_services or [])
@@ -445,7 +445,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "low",
                 "estimated_savings": 240,
-                "due_date": (datetime.utcnow().date() + timedelta(days=10)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=10)).isoformat(),
             }
         ],
         "cost_spike": [
@@ -460,7 +460,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 3100,
-                "due_date": (datetime.utcnow().date() + timedelta(days=2)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=2)).isoformat(),
             },
             {
                 "category": "forecast",
@@ -473,7 +473,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 1800,
-                "due_date": (datetime.utcnow().date() + timedelta(days=3)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=3)).isoformat(),
             },
             {
                 "category": "query-optimization",
@@ -486,7 +486,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "medium",
                 "estimated_savings": 950,
-                "due_date": (datetime.utcnow().date() + timedelta(days=4)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=4)).isoformat(),
             },
             {
                 "category": "forecast",
@@ -499,7 +499,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 3600,
-                "due_date": (datetime.utcnow().date() + timedelta(days=3)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=3)).isoformat(),
             },
         ],
         "waste_heavy": [
@@ -514,7 +514,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 4700,
-                "due_date": (datetime.utcnow().date() + timedelta(days=5)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=5)).isoformat(),
             },
             {
                 "category": "storage",
@@ -527,7 +527,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 2300,
-                "due_date": (datetime.utcnow().date() + timedelta(days=6)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=6)).isoformat(),
             },
             {
                 "category": "commitments",
@@ -540,7 +540,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": None,
                 "priority": "medium",
                 "estimated_savings": 1400,
-                "due_date": (datetime.utcnow().date() + timedelta(days=7)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=7)).isoformat(),
             },
         ],
         "governance_failure": [
@@ -555,7 +555,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": None,
                 "priority": "high",
                 "estimated_savings": 1200,
-                "due_date": (datetime.utcnow().date() + timedelta(days=2)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=2)).isoformat(),
             },
             {
                 "category": "policy",
@@ -568,7 +568,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 0,
-                "due_date": (datetime.utcnow().date() + timedelta(days=1)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat(),
             },
             {
                 "category": "billing-export",
@@ -581,7 +581,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 1500,
-                "due_date": (datetime.utcnow().date() + timedelta(days=1)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat(),
             },
             {
                 "category": "governance",
@@ -594,7 +594,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": None,
                 "priority": "medium",
                 "estimated_savings": 600,
-                "due_date": (datetime.utcnow().date() + timedelta(days=4)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=4)).isoformat(),
             },
         ],
         "mixed_failures": [
@@ -609,7 +609,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 4200,
-                "due_date": (datetime.utcnow().date() + timedelta(days=5)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=5)).isoformat(),
             },
             {
                 "category": "governance",
@@ -622,7 +622,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": None,
                 "priority": "medium",
                 "estimated_savings": 900,
-                "due_date": (datetime.utcnow().date() - timedelta(days=2)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat(),
             },
             {
                 "category": "billing-export",
@@ -635,7 +635,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "high",
                 "estimated_savings": 1500,
-                "due_date": (datetime.utcnow().date() + timedelta(days=1)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat(),
             },
             {
                 "category": "forecast",
@@ -648,7 +648,7 @@ def _seed_demo_recommendations(username, accounts, scenario="mixed_failures"):
                 "owner": username,
                 "priority": "medium",
                 "estimated_savings": 1800,
-                "due_date": (datetime.utcnow().date() + timedelta(days=4)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).date() + timedelta(days=4)).isoformat(),
             },
         ],
     }
@@ -723,7 +723,7 @@ def seed_demo_environment(username, max_accounts=3, scenario="mixed_failures"):
 
         coverage_start = cost_frame["date"].min()
         coverage_end = cost_frame["date"].max()
-        synced_at = datetime.utcnow().isoformat(timespec="seconds")
+        synced_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         next_sync_at = _next_sync_at(account["details"].get("sync_frequency_hours", 24))
         update_cloud_account_health(
             account_id,

@@ -131,6 +131,7 @@ from database.db import (
     update_company_plan,
     update_user_plan,
     update_user_password,
+    is_onboarding_complete,
 )
 from services.billing_service import (
     billing_is_ready,
@@ -141,6 +142,8 @@ from services.billing_service import (
     sync_company_subscription,
 )
 from services.demo_environment import get_demo_account_profiles
+from views.ui_helpers import render_empty_state, show_toast
+from views.ui_messages import TOAST_LOGIN_WELCOME
 import pandas as pd
 import numpy as np
 from prophet import Prophet
@@ -175,7 +178,7 @@ def _get_cookie_controller():
 
 
 def _auth_cookie_expires_at():
-    return datetime.datetime.now() + datetime.timedelta(days=AUTH_COOKIE_DAYS)
+    return datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=AUTH_COOKIE_DAYS)
 
 
 def _auth_secret():
@@ -264,7 +267,7 @@ def _apply_authenticated_session(user_row):
 def _issue_auth_token(username):
     payload = {
         "sub": username,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=AUTH_COOKIE_DAYS),
+        "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=AUTH_COOKIE_DAYS),
     }
     return jwt.encode(payload, _auth_secret(), algorithm="HS256")
 
@@ -377,7 +380,7 @@ def _build_forecast_spike_recommendation(cost_series, forecast_value, forecast_p
         return None
 
     priority = "high" if projected_change_ratio >= 0.25 else "medium"
-    due_date = (datetime.datetime.utcnow().date() + datetime.timedelta(days=3)).isoformat()
+    due_date = (datetime.datetime.now(datetime.UTC).date() + datetime.timedelta(days=3)).isoformat()
     return {
         "title": f"Investigate {forecast_period}-month forecast spike",
         "description": (
@@ -746,7 +749,7 @@ def login_page():
             _apply_authenticated_session(user)
             _set_auth_cookie(user[0])
             log_audit_event(user[0], "login")
-            st.success("Login successful")
+            show_toast(*TOAST_LOGIN_WELCOME)
             st.rerun()
         else:
             st.error("Invalid credentials")
@@ -910,7 +913,7 @@ def _render_my_open_recommendations(username):
     if role not in {"global_admin", "client_admin", "premium", "admin"}:
         workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
     open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
-    today = pd.Timestamp.utcnow().date()
+    today = pd.Timestamp.now(tz="UTC").date()
     overdue_items = []
     assigned_items = []
 
@@ -1906,7 +1909,25 @@ def cost_explorer_page():
     billing_df, account_scope, plan_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
 
     if billing_df.empty:
-        st.info("No billing data is available yet. Connect a cloud account or load a demo scenario to explore costs.")
+        latest_sync_runs = list_sync_runs(username=username, limit=1)
+        if latest_sync_runs:
+            latest_run = latest_sync_runs[0]
+            latest_status = str(latest_run.get("status") or "unknown").lower()
+            status_icon = "✅" if latest_status == "success" else "⚠️" if latest_status in {"failed", "error"} else "ℹ️"
+            started_at = latest_run.get("started_at") or "n/a"
+            st.caption(f"{status_icon} Last sync: {started_at} | Status: {latest_status.title()}")
+        else:
+            st.caption("ℹ️ Last sync: never")
+        clicked = render_empty_state(
+            icon="📊",
+            title="No billing data available yet",
+            message="Connect a cloud account to sync real cost data, or activate a demo scenario from the Dashboard to explore Cost Explorer with sample data.",
+            cta_label="Go to Cloud Accounts",
+            cta_key="cost_explorer_empty_connect",
+        )
+        if clicked:
+            st.session_state["selected_page"] = "Cloud Accounts"
+            st.rerun()
         return
 
     if plan_scope["history_days"] not in {None, float("inf")}:
@@ -2682,6 +2703,16 @@ if not st.session_state.authenticated:
     login_page()
     st.stop()
 
+# --- Onboarding gate ---
+# Show the first-login wizard to any authenticated non-global-admin user
+# who has not yet completed onboarding.
+_onboard_username = st.session_state.get("username", "")
+_onboard_role = st.session_state.get("role", "user")
+if _onboard_username and not is_global_admin_role(_onboard_role) and not is_onboarding_complete(_onboard_username):
+    from views.onboarding import render_onboarding_wizard
+    render_onboarding_wizard()
+    st.stop()
+
 active_username = st.session_state.get("username", "guest")
 effective_plan = get_user_plan(active_username)
 st.session_state["plan"] = effective_plan
@@ -2718,6 +2749,7 @@ with st.sidebar:
         ("Cost Explorer", "ðŸ’¸"),
         ("Reports", "ðŸ“‘"),
         ("Operations", "ðŸ› "),
+        ("Optimization Insights", "chart_with_upward_trend"),
         ("Cost Forecast (Premium)", "ðŸ”®"),
         ("Cloud Accounts", "â˜ï¸"),
         ("Plans & Billing", "ðŸ’³")
@@ -2775,6 +2807,8 @@ elif selected_page == "Reports":
     reports_page()
 elif selected_page == "Operations":
     operations_page()
+elif selected_page == "Optimization Insights":
+    optimization_insights_page()
 elif selected_page == "Cost Forecast (Premium)":
     cost_forecast_page()
 elif selected_page == "Cloud Accounts":

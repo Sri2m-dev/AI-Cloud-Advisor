@@ -4,7 +4,7 @@ from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
 from pptx.dml.color import RGBColor
 import matplotlib.pyplot as plt
-from datetime import date
+from datetime import datetime, timezone
 
 def create_colored_shape(slide, left, top, width, height, color_rgb, text=None):
     """
@@ -101,7 +101,7 @@ def generate_executive_ppt(client, monthly_spend=None, savings_monthly=None, mat
     subtitle = slide.placeholders[1]
     
     title.text = "Cloud Executive Dashboard"
-    subtitle.text = f"Client: {client}\nDate: {date.today()}"
+    subtitle.text = f"Client: {client}\nDate: {datetime.now(timezone.utc).date()}"
     
     # ===== SLIDE 2: EXECUTIVE SUMMARY =====
     slide_layout = prs.slide_layouts[1]  # Title and content layout

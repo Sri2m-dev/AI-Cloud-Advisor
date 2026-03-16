@@ -6,7 +6,7 @@ from reportlab.platypus import (
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 import tempfile
-from datetime import date
+from datetime import datetime, timezone
 import pandas as pd
 
 print("Report generator loaded")
@@ -56,7 +56,7 @@ def generate_boardroom_pdf(client):
     content.append(Spacer(1, 40))
 
     content.append(Paragraph(f"Client: {client}", styles["Normal"]))
-    content.append(Paragraph(f"Date: {date.today()}", styles["Normal"]))
+    content.append(Paragraph(f"Date: {datetime.now(timezone.utc).date()}", styles["Normal"]))
     content.append(Paragraph("Confidential — For Executive Review", styles["Italic"]))
 
     content.append(PageBreak())
@@ -199,7 +199,7 @@ def generate_executive_pdf(client):
     content.append(Spacer(1, 40))
 
     content.append(Paragraph(f"Client: {client}", styles["Normal"]))
-    content.append(Paragraph(f"Date: {date.today()}", styles["Normal"]))
+    content.append(Paragraph(f"Date: {datetime.now(timezone.utc).date()}", styles["Normal"]))
     content.append(Paragraph("Confidential — For Executive Review", styles["Italic"]))
 
     content.append(PageBreak())
@@ -350,7 +350,7 @@ def generate_boardroom_pdf(client, monthly_spend=None, savings_monthly=None, top
     content.append(Spacer(1, 40))
 
     content.append(Paragraph(f"Client: {client}", styles["Normal"]))
-    content.append(Paragraph(f"Date: {date.today()}", styles["Normal"]))
+    content.append(Paragraph(f"Date: {datetime.now(timezone.utc).date()}", styles["Normal"]))
     content.append(Paragraph("Confidential — For Executive Review", styles["Italic"]))
 
     content.append(PageBreak())
@@ -491,7 +491,7 @@ def generate_excel_report(client, monthly_spend=None, savings_monthly=None, top_
             ],
             "Value": [
                 client,
-                date.today(),
+                datetime.now(timezone.utc).date(),
                 f"₹{monthly_spend:,.0f}",
                 f"₹{monthly_spend*12:,.0f}",
                 f"₹{savings_monthly:,.0f}",
@@ -575,7 +575,7 @@ def generate_dashboard_pdf(client, monthly_spend=None, savings_monthly=None, mat
     content.append(Spacer(1, 120))
     content.append(Paragraph("Cloud Executive Dashboard Report", title_style))
     content.append(Paragraph(f"Client: {client}", styles["Normal"]))
-    content.append(Paragraph(f"Date: {date.today()}", styles["Normal"]))
+    content.append(Paragraph(f"Date: {datetime.now(timezone.utc).date()}", styles["Normal"]))
     content.append(PageBreak())
 
     # ===== EXECUTIVE DASHBOARD =====

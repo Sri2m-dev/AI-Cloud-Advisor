@@ -527,7 +527,12 @@ def cloud_accounts_page():
     st.markdown("### Connected Accounts")
     accounts = list_cloud_accounts(username)
     if not accounts:
-        st.info("No cloud accounts connected yet.")
+        from views.ui_helpers import render_empty_state
+        render_empty_state(
+            icon="☁️",
+            title="No cloud accounts connected yet",
+            message="Add your first AWS, Azure, or GCP account above to start syncing cost data and generating recommendations.",
+        )
         return
 
     for account in accounts:

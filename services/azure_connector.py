@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
@@ -40,7 +40,7 @@ def get_azure_cost(tenant_id, client_id, client_secret, subscription_id, days=30
     credential = _azure_credential(tenant_id, client_id, client_secret)
     token = credential.get_token(AZURE_MANAGEMENT_SCOPE)
 
-    end_date = date.today()
+    end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=days)
     url = (
         f"https://management.azure.com/subscriptions/{subscription_id}"

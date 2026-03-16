@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
@@ -49,7 +49,7 @@ def get_gcp_cost(
     service_account_info = _service_account_info(service_account_json)
     credentials = _refresh_service_account_credentials(service_account_info, [BIGQUERY_SCOPE])
 
-    start_date = (datetime.utcnow().date() - timedelta(days=days)).isoformat()
+    start_date = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
     query = f"""
     SELECT
       DATE(usage_start_time) AS usage_date,

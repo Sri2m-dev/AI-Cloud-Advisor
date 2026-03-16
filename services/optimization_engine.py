@@ -452,21 +452,11 @@ def compare_commitment_scenarios(current_ec2_cost, existing_ri_monthly, scenario
 def model_rightsizing_impact(resources_data, rightsizing_ratio=0.15):
     """
     Model cost impact of rightsizing resources.
-    
-    Args:
-        resources_data: List of resources with costs
-        rightsizing_ratio: Estimated cost savings % from rightsizing (default 15%)
-    
-    Returns:
-        dict with rightsizing impact
     """
     total_current = sum(r.get("cost", 0) for r in resources_data) if resources_data else 0
-    
     if total_current <= 0:
         return {"error": "No resource cost data provided"}
-    
     rightsizing_savings = total_current * (rightsizing_ratio / 100)
-    
     return {
         "current_monthly_cost": round(total_current, 2),
         "rightsizing_savings_percent": rightsizing_ratio,
@@ -476,4 +466,201 @@ def model_rightsizing_impact(resources_data, rightsizing_ratio=0.15):
         "resource_count": len(resources_data),
     }
 
-st.info("Recommendation: Remove unattached EBS volumes")
+# Network and Data Transfer Optimization
+def analyze_network_costs(data_transfer_cost_breakdown):
+    """
+    Analyze network/data transfer costs and identify reduction opportunities.
+
+    Args:
+        data_transfer_cost_breakdown: dict with keys:
+            nat_gateway, cross_region, internet_egress, inter_az
+
+    Returns:
+        dict with optimization opportunities and estimated savings
+    """
+    nat = data_transfer_cost_breakdown.get("nat_gateway", 0)
+    cross_region = data_transfer_cost_breakdown.get("cross_region", 0)
+    egress = data_transfer_cost_breakdown.get("internet_egress", 0)
+    inter_az = data_transfer_cost_breakdown.get("inter_az", 0)
+
+    total = nat + cross_region + egress + inter_az
+
+    opportunities = []
+
+    if nat > 100:
+        savings = nat * 0.70
+        opportunities.append({
+            "type": "vpc_endpoint",
+            "description": "Replace NAT Gateway with VPC Interface Endpoints for AWS services",
+            "current_cost": round(nat, 2),
+            "monthly_savings": round(savings, 2),
+            "annual_savings": round(savings * 12, 2),
+            "effort": "low",
+            "risk": "low",
+        })
+
+    if cross_region > 100:
+        savings = cross_region * 0.60
+        opportunities.append({
+            "type": "region_consolidation",
+            "description": "Consolidate workloads to single region to eliminate cross-region transfer fees",
+            "current_cost": round(cross_region, 2),
+            "monthly_savings": round(savings, 2),
+            "annual_savings": round(savings * 12, 2),
+            "effort": "high",
+            "risk": "medium",
+        })
+
+    if egress > 100:
+        savings = egress * 0.40
+        opportunities.append({
+            "type": "cloudfront_caching",
+            "description": "Route public traffic via CloudFront to cache at edge and reduce origin egress",
+            "current_cost": round(egress, 2),
+            "monthly_savings": round(savings, 2),
+            "annual_savings": round(savings * 12, 2),
+            "effort": "medium",
+            "risk": "low",
+        })
+
+    if inter_az > 50:
+        savings = inter_az * 0.80
+        opportunities.append({
+            "type": "az_colocation",
+            "description": "Move compute to same AZ as primary data store to eliminate inter-AZ transfer charges",
+            "current_cost": round(inter_az, 2),
+            "monthly_savings": round(savings, 2),
+            "annual_savings": round(savings * 12, 2),
+            "effort": "medium",
+            "risk": "medium",
+        })
+
+    total_monthly_savings = sum(o["monthly_savings"] for o in opportunities)
+
+    return {
+        "total_transfer_cost": round(total, 2),
+        "total_monthly_savings": round(total_monthly_savings, 2),
+        "total_annual_savings": round(total_monthly_savings * 12, 2),
+        "savings_percent": round((total_monthly_savings / total * 100), 1) if total > 0 else 0,
+        "opportunities": opportunities,
+        "opportunity_count": len(opportunities),
+    }
+
+
+def recommend_ri_purchase_timing(monthly_costs: list, on_demand_monthly: float, existing_ri_coverage: float = 0.45):
+    """
+    Analyse historical monthly costs to recommend the optimal timing and sizing
+    for new Reserved Instance / Savings Plans purchases.
+
+    Args:
+        monthly_costs: List of recent monthly totals (most-recent last), e.g. last 12 months.
+        on_demand_monthly: Current average on-demand spend per month.
+        existing_ri_coverage: Fraction of compute already covered by commitments (0–1).
+
+    Returns:
+        dict with timing recommendation, coverage gap, projected savings, and purchase options.
+    """
+    if not monthly_costs or len(monthly_costs) < 3:
+        return {"error": "Insufficient cost history — need at least 3 months of data."}
+
+    avg_cost = sum(monthly_costs) / len(monthly_costs)
+    recent_avg = sum(monthly_costs[-3:]) / 3
+    trend_pct = ((recent_avg - avg_cost) / avg_cost * 100) if avg_cost else 0
+
+    # Cost stability score — lower variance = safer to commit
+    if len(monthly_costs) >= 2:
+        mean = avg_cost
+        variance = sum((x - mean) ** 2 for x in monthly_costs) / len(monthly_costs)
+        std_dev = variance ** 0.5
+        cv = (std_dev / mean * 100) if mean else 0  # coefficient of variation %
+    else:
+        cv = 0
+
+    # Coverage gap
+    uncovered_monthly = on_demand_monthly * (1 - existing_ri_coverage)
+    target_coverage = 0.75  # recommended industry target
+    gap_to_target = max(0.0, target_coverage - existing_ri_coverage)
+    incremental_commitment = on_demand_monthly * gap_to_target
+
+    # Savings estimates
+    one_year_savings_pct = 0.38   # avg 1-yr RI discount vs on-demand
+    three_year_savings_pct = 0.57  # avg 3-yr RI discount vs on-demand
+    monthly_savings_1yr = round(incremental_commitment * one_year_savings_pct, 2)
+    monthly_savings_3yr = round(incremental_commitment * three_year_savings_pct, 2)
+
+    # Timing signal
+    if cv < 10 and trend_pct >= 0:
+        timing_signal = "BUY NOW"
+        timing_reason = (
+            f"Spend is stable (CV {cv:.1f}%) and trending +{trend_pct:.1f}%. "
+            "Low variance makes commitment safe; rising trend increases on-demand risk."
+        )
+    elif cv < 10 and trend_pct < -5:
+        timing_signal = "WAIT"
+        timing_reason = (
+            f"Spend is declining ({trend_pct:.1f}%). Wait 1–2 months to confirm new baseline "
+            "before locking in a commitment."
+        )
+    elif cv >= 10 and cv < 20:
+        timing_signal = "PARTIAL BUY"
+        timing_reason = (
+            f"Moderate variance (CV {cv:.1f}%). Purchase commitments for your steady-state base load only; "
+            "keep variable workloads on-demand or Spot."
+        )
+    else:
+        timing_signal = "HOLD"
+        timing_reason = (
+            f"High spend volatility (CV {cv:.1f}%). Resolve architectural instability before committing. "
+            "Consider Compute Savings Plans (most flexible) rather than specific RI types."
+        )
+
+    purchase_options = [
+        {
+            "type": "1-Year No Upfront",
+            "commitment_monthly": round(incremental_commitment * (1 - one_year_savings_pct), 2),
+            "monthly_savings": monthly_savings_1yr,
+            "annual_savings": round(monthly_savings_1yr * 12, 2),
+            "break_even_months": 1,
+            "risk": "low",
+        },
+        {
+            "type": "1-Year All Upfront",
+            "commitment_monthly": round(incremental_commitment * (1 - one_year_savings_pct) * 0.95, 2),
+            "monthly_savings": round(monthly_savings_1yr * 1.05, 2),
+            "annual_savings": round(monthly_savings_1yr * 1.05 * 12, 2),
+            "break_even_months": 1,
+            "risk": "low",
+        },
+        {
+            "type": "3-Year No Upfront",
+            "commitment_monthly": round(incremental_commitment * (1 - three_year_savings_pct), 2),
+            "monthly_savings": monthly_savings_3yr,
+            "annual_savings": round(monthly_savings_3yr * 12, 2),
+            "break_even_months": 3,
+            "risk": "medium",
+        },
+        {
+            "type": "Compute Savings Plan (1-Year)",
+            "commitment_monthly": round(incremental_commitment * (1 - 0.34), 2),
+            "monthly_savings": round(incremental_commitment * 0.34, 2),
+            "annual_savings": round(incremental_commitment * 0.34 * 12, 2),
+            "break_even_months": 1,
+            "risk": "low",
+            "note": "Most flexible — applies across EC2, Fargate, and Lambda",
+        },
+    ]
+
+    return {
+        "avg_monthly_cost": round(avg_cost, 2),
+        "recent_3m_avg": round(recent_avg, 2),
+        "trend_pct": round(trend_pct, 1),
+        "spend_volatility_cv": round(cv, 1),
+        "existing_ri_coverage_pct": round(existing_ri_coverage * 100, 1),
+        "coverage_gap_pct": round(gap_to_target * 100, 1),
+        "uncovered_monthly_spend": round(uncovered_monthly, 2),
+        "incremental_commitment_needed": round(incremental_commitment, 2),
+        "timing_signal": timing_signal,
+        "timing_reason": timing_reason,
+        "purchase_options": purchase_options,
+        "best_option": purchase_options[0],
+    }

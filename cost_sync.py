@@ -1,7 +1,7 @@
 """Automated background sync for saved cloud accounts."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -15,7 +15,7 @@ _scheduler = None
 
 
 def sync_all_cloud_costs():
-    LOGGER.info("[Cost Sync] Running at %s", datetime.now())
+    LOGGER.info("[Cost Sync] Running at %s", datetime.now(timezone.utc))
     accounts = list_cloud_accounts()
     for account in accounts:
         if not account.get("sync_enabled", 1):
@@ -44,7 +44,7 @@ def start_scheduler(interval_hours=24):
         trigger=IntervalTrigger(hours=interval_hours),
         id="cloud-cost-sync",
         replace_existing=True,
-        next_run_time=datetime.now(),
+        next_run_time=datetime.now(timezone.utc),
     )
     scheduler.start()
     _scheduler = scheduler

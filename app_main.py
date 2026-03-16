@@ -428,7 +428,7 @@ def _render_my_open_recommendations(username):
     if role not in {"admin", "premium"}:
         workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
     open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
-    today = pd.Timestamp.utcnow().date()
+    today = pd.Timestamp.now(tz="UTC").date()
     overdue_items = []
     assigned_items = []
 

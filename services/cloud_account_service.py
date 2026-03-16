@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -64,7 +64,7 @@ def _validation_details(frame, extra_details=None):
 
 def _next_sync_at(sync_frequency_hours):
     hours = int(sync_frequency_hours or 24)
-    return (datetime.utcnow() + timedelta(hours=hours)).isoformat(timespec="seconds")
+    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
 
 
 def _aws_cost_dataframe(credentials):
@@ -73,7 +73,7 @@ def _aws_cost_dataframe(credentials):
         raise CloudAccountSyncError("Failed to assume the AWS role with the supplied Role ARN and External ID.")
 
     client = get_cost_explorer_client(temp_creds)
-    end_date = date.today()
+    end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=30)
     response = client.get_cost_and_usage(
         TimePeriod={
@@ -175,7 +175,7 @@ def create_cloud_account(username, provider, account_name, account_identifier, c
         validation_status=validation["details"].get("status"),
         validation_message=validation["details"].get("message"),
         health_score=validation["details"].get("health_score"),
-        last_validation_at=datetime.utcnow().isoformat(timespec="seconds"),
+        last_validation_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         coverage_start=validation["details"].get("coverage_start"),
         coverage_end=validation["details"].get("coverage_end"),
         next_sync_at=_next_sync_at(validation["details"].get("sync_frequency_hours", 24)),
@@ -198,7 +198,7 @@ def sync_cloud_account(account_id, preloaded_cost_df=None, trigger_type="manual"
     username = account.get("username", "guest")
     credentials = decrypt_credentials(account.get("credentials_encrypted"))
     sync_frequency_hours = int(account.get("sync_frequency_hours") or 24)
-    started_at = datetime.utcnow()
+    started_at = datetime.now(timezone.utc)
     run_id = create_sync_run(
         cloud_account_id=account_id,
         username=username,
@@ -219,8 +219,8 @@ def sync_cloud_account(account_id, preloaded_cost_df=None, trigger_type="manual"
             validation_details = validation["details"]
 
         save_cost_data(provider, cost_df, account_name=account["account_name"])
-        synced_at = datetime.utcnow().isoformat(timespec="seconds")
-        duration_seconds = (datetime.utcnow() - started_at).total_seconds()
+        synced_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        duration_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
         record_count = int(len(cost_df.index)) if isinstance(cost_df, pd.DataFrame) else 0
         coverage_start = validation_details.get("coverage_start")
         coverage_end = validation_details.get("coverage_end")
@@ -263,8 +263,8 @@ def sync_cloud_account(account_id, preloaded_cost_df=None, trigger_type="manual"
         )
         log_audit_event(username, "cloud_account_synced", f"provider={provider}, account={account['account_identifier']}")
     except Exception as exc:
-        failed_at = datetime.utcnow().isoformat(timespec="seconds")
-        duration_seconds = (datetime.utcnow() - started_at).total_seconds()
+        failed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        duration_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
         next_sync_at = _next_sync_at(sync_frequency_hours)
         update_cloud_account_health(
             account_id,

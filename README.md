@@ -44,6 +44,12 @@ For a detailed checklist, see [DEPLOYMENT.md](c:\Users\SrikanthMudaliar\AI-Cloud
 
 ## Testing And Quality
 
+## Schema And Timekeeping Notes
+
+- `users.onboarding_complete` is auto-added by database bootstrap (`_ensure_users_table`) and defaults to `0` for existing users.
+- Timestamps written by core database and sync workflows are timezone-aware UTC ISO strings.
+- If you run long-lived environments, start the app once after deploy so schema auto-migrations are applied before user traffic.
+
 Run unit tests:
 
 ```bash

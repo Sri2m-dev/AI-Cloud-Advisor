@@ -13,6 +13,15 @@ from database.db import (
     update_recommendation_status,
 )
 from services.recommendation_workflow import seed_ai_advisor_recommendations
+from views.ui_helpers import render_empty_state, show_toast
+from views.ui_messages import (
+    TOAST_RECOMMENDATION_ACCEPTED,
+    TOAST_RECOMMENDATION_COMPLETED,
+    TOAST_RECOMMENDATION_DISMISSED,
+    TOAST_RECOMMENDATION_SNOOZED,
+    toast_ai_recommendations_added,
+    toast_recommendations_added,
+)
 
 
 STATUS_OPTIONS = ["new", "accepted", "snoozed", "dismissed", "completed"]
@@ -99,14 +108,26 @@ def render_recommendations_page():
         generate_clicked = st.button("Generate AI Recommendations", key="recommendations_generate_ai", width="stretch")
     if generate_clicked:
         seeded_recommendations = seed_ai_advisor_recommendations(username)
-        st.success(f"Added {len(seeded_recommendations)} AI-generated workflow item(s) to AI Recommendations.")
+        toast_message, toast_icon = toast_ai_recommendations_added(len(seeded_recommendations))
+        show_toast(toast_message, icon=toast_icon)
         st.rerun()
 
     workflow_items = list_recommendations(username=username, limit=200)
     if not can_manage:
         workflow_items = [item for item in workflow_items if can_manage_recommendation(item, username, action="view")]
     if not workflow_items:
-        st.info("No recommendations yet. Use Generate AI Recommendations to create workflow items here.")
+        clicked = render_empty_state(
+            icon="🤖",
+            title="No recommendations yet",
+            message="Generate AI-driven optimization recommendations to start building your cost-saving workflow. Each item tracks potential savings, owner, and due date.",
+            cta_label="Generate AI Recommendations",
+            cta_key="empty_generate_recommendations",
+        )
+        if clicked:
+            seeded = seed_ai_advisor_recommendations(username)
+            toast_message, toast_icon = toast_recommendations_added(len(seeded))
+            show_toast(toast_message, icon=toast_icon)
+            st.rerun()
         return
 
     open_items = [item for item in workflow_items if item.get("status") in {"new", "accepted", "snoozed"}]
@@ -168,7 +189,11 @@ def render_recommendations_page():
         ]
 
     if not filtered_items:
-        st.caption("No workflow items match the current filters.")
+        render_empty_state(
+            icon="🔍",
+            title="No items match these filters",
+            message="Try clearing the status, priority, or assignment filters to broaden the results.",
+        )
         return
 
     st.markdown("### Recommendation Queue")
@@ -312,16 +337,19 @@ def render_recommendations_page():
                 notes="Accepted from recommendations inbox",
             )
             if updated:
+                show_toast(*TOAST_RECOMMENDATION_ACCEPTED)
                 st.rerun()
             st.error("You do not have permission to accept this recommendation.")
         if action_col2.button("Snooze", key=f"rec_snooze_{selected_item['id']}", width="stretch", disabled=not can_edit_details):
             updated = update_recommendation_status(selected_item["id"], "snoozed", username=username, notes="Snoozed from recommendations inbox")
             if updated:
+                show_toast(*TOAST_RECOMMENDATION_SNOOZED)
                 st.rerun()
             st.error("You do not have permission to snooze this recommendation.")
         if action_col3.button("Complete", key=f"rec_complete_{selected_item['id']}", width="stretch", disabled=not can_edit_details):
             updated = update_recommendation_status(selected_item["id"], "completed", username=username, notes="Completed from recommendations inbox")
             if updated:
+                show_toast(*TOAST_RECOMMENDATION_COMPLETED)
                 st.rerun()
             st.error("You do not have permission to complete this recommendation.")
         dismiss_reason = action_col4.text_input(
@@ -340,6 +368,7 @@ def render_recommendations_page():
                 notes=dismiss_reason or "Dismissed from recommendations inbox",
             )
             if updated:
+                show_toast(*TOAST_RECOMMENDATION_DISMISSED)
                 st.rerun()
             st.error("You do not have permission to dismiss this recommendation.")
 
