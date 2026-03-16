@@ -947,6 +947,39 @@ def get_user_role(username):
     return _normalize_role(user[2]) if user else "user"
 
 
+def update_user_password(target_username, new_password, acting_username=None):
+    if not target_username or not new_password:
+        return False
+
+    target_user = get_user(target_username)
+    if not target_user:
+        return False
+
+    if acting_username:
+        acting_role = get_user_role(acting_username)
+        target_role = get_user_role(target_username)
+        acting_company = get_user_company(acting_username)
+        target_company = get_user_company(target_username)
+
+        if is_global_admin_role(acting_role):
+            pass
+        elif is_company_admin_role(acting_role):
+            if acting_company != target_company or is_global_admin_role(target_role):
+                return False
+        elif acting_username != target_username:
+            return False
+
+    conn = get_db()
+    _ensure_users_table(conn)
+    conn.execute(
+        "UPDATE users SET password = ?, updated_at = ? WHERE username = ?",
+        (new_password, datetime.utcnow().isoformat(timespec="seconds"), target_username),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
 def get_recommendation(recommendation_id):
     conn = get_db()
     _ensure_recommendations_table(conn)

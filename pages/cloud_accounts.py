@@ -3,7 +3,15 @@ import json
 import pandas as pd
 import streamlit as st
 
-from database.db import get_account_limit, get_connected_account_count, list_cloud_accounts, list_sync_runs
+from database.db import (
+    INTERNAL_COMPANY,
+    get_account_limit,
+    get_connected_account_count,
+    get_user_company,
+    is_global_admin_role,
+    list_cloud_accounts,
+    list_sync_runs,
+)
 from services.demo_environment import list_demo_scenarios, reset_demo_environment, seed_demo_environment
 from services.cloud_account_service import CloudAccountSyncError, create_cloud_account, sync_cloud_account
 
@@ -266,9 +274,16 @@ def cloud_accounts_page():
     st.title("☁️ Cloud Accounts")
     st.subheader("Connect a cloud account once and let the platform sync cost data automatically.")
     st.caption("Saved accounts are encrypted at rest and scheduled for automatic background cost sync.")
-    _render_demo_environment_status()
 
     username = st.session_state.get("username", "guest")
+    role = st.session_state.get("role", "user")
+    current_company = st.session_state.get("company") or get_user_company(username)
+    is_internal_access = is_global_admin_role(role) or current_company == INTERNAL_COMPANY
+    if not is_internal_access:
+        st.session_state.pop("active_demo_environment", None)
+    else:
+        _render_demo_environment_status()
+
     current_plan = st.session_state.get("plan", "Starter")
     account_limit = get_account_limit(current_plan)
     connected_accounts = get_connected_account_count(username)
@@ -282,62 +297,63 @@ def cloud_accounts_page():
     else:
         st.progress(1.0)
 
-    st.markdown("---")
-    demo_scenarios = list_demo_scenarios()
-    scenario_keys = [item["key"] for item in demo_scenarios]
-    scenario_map = {item["key"]: item for item in demo_scenarios}
-    selected_scenario = st.selectbox(
-        "Demo scenario",
-        scenario_keys,
-        index=scenario_keys.index("mixed_failures") if "mixed_failures" in scenario_keys else 0,
-        format_func=lambda key: scenario_map[key]["label"],
-        help="Choose the type of seeded environment you want to test.",
-        key="demo_environment_scenario",
-    )
-    st.caption(scenario_map[selected_scenario]["description"])
-    st.markdown("**What this scenario changes**")
-    for signal in DEMO_SCENARIO_SIGNALS.get(selected_scenario, []):
-        st.caption(f"- {signal}")
+    if is_internal_access:
+        st.markdown("---")
+        demo_scenarios = list_demo_scenarios()
+        scenario_keys = [item["key"] for item in demo_scenarios]
+        scenario_map = {item["key"]: item for item in demo_scenarios}
+        selected_scenario = st.selectbox(
+            "Demo scenario",
+            scenario_keys,
+            index=scenario_keys.index("mixed_failures") if "mixed_failures" in scenario_keys else 0,
+            format_func=lambda key: scenario_map[key]["label"],
+            help="Choose the type of seeded environment you want to test.",
+            key="demo_environment_scenario",
+        )
+        st.caption(scenario_map[selected_scenario]["description"])
+        st.markdown("**What this scenario changes**")
+        for signal in DEMO_SCENARIO_SIGNALS.get(selected_scenario, []):
+            st.caption(f"- {signal}")
 
-    demo_col1, demo_col2, demo_col3 = st.columns([1.2, 1.2, 2.3])
-    if demo_col1.button("Load Demo Environment", use_container_width=True):
-        max_demo_accounts = account_limit if account_limit != float('inf') else 3
-        seed_summary = seed_demo_environment(
-            username,
-            max_accounts=max_demo_accounts,
-            scenario=selected_scenario,
+        demo_col1, demo_col2, demo_col3 = st.columns([1.2, 1.2, 2.3])
+        if demo_col1.button("Load Demo Environment", use_container_width=True):
+            max_demo_accounts = account_limit if account_limit != float('inf') else 3
+            seed_summary = seed_demo_environment(
+                username,
+                max_accounts=max_demo_accounts,
+                scenario=selected_scenario,
+            )
+            st.session_state["active_demo_environment"] = {
+                "key": selected_scenario,
+                "label": scenario_map[selected_scenario]["label"],
+                "description": scenario_map[selected_scenario]["description"],
+                "accounts": seed_summary["accounts"],
+                "account_names": seed_summary.get("account_names", []),
+                "providers": seed_summary.get("providers", []),
+                "billing_rows": seed_summary["billing_rows"],
+                "recommendations": seed_summary["recommendations"],
+            }
+            st.success(
+                f"{scenario_map[selected_scenario]['label']} loaded: "
+                f"{seed_summary['accounts']} account(s), "
+                f"{seed_summary['billing_rows']} billing rows, "
+                f"{seed_summary['recommendations']} recommendations."
+            )
+            st.rerun()
+        if demo_col2.button("Reset Demo Environment", use_container_width=True):
+            reset_summary = reset_demo_environment(username)
+            st.session_state.pop("active_demo_environment", None)
+            st.success(
+                "Demo environment cleared: "
+                f"{reset_summary['accounts']} account(s), "
+                f"{reset_summary['billing_rows']} billing rows, "
+                f"{reset_summary['sync_runs']} sync run(s), "
+                f"{reset_summary['recommendations']} recommendation(s)."
+            )
+            st.rerun()
+        demo_col3.caption(
+            "Seeds scenario-specific mock cloud accounts, sync runs, billing history, and recommendations so you can test the full app without live credentials."
         )
-        st.session_state["active_demo_environment"] = {
-            "key": selected_scenario,
-            "label": scenario_map[selected_scenario]["label"],
-            "description": scenario_map[selected_scenario]["description"],
-            "accounts": seed_summary["accounts"],
-            "account_names": seed_summary.get("account_names", []),
-            "providers": seed_summary.get("providers", []),
-            "billing_rows": seed_summary["billing_rows"],
-            "recommendations": seed_summary["recommendations"],
-        }
-        st.success(
-            f"{scenario_map[selected_scenario]['label']} loaded: "
-            f"{seed_summary['accounts']} account(s), "
-            f"{seed_summary['billing_rows']} billing rows, "
-            f"{seed_summary['recommendations']} recommendations."
-        )
-        st.rerun()
-    if demo_col2.button("Reset Demo Environment", use_container_width=True):
-        reset_summary = reset_demo_environment(username)
-        st.session_state.pop("active_demo_environment", None)
-        st.success(
-            "Demo environment cleared: "
-            f"{reset_summary['accounts']} account(s), "
-            f"{reset_summary['billing_rows']} billing rows, "
-            f"{reset_summary['sync_runs']} sync run(s), "
-            f"{reset_summary['recommendations']} recommendation(s)."
-        )
-        st.rerun()
-    demo_col3.caption(
-        "Seeds scenario-specific mock cloud accounts, sync runs, billing history, and recommendations so you can test the full app without live credentials."
-    )
 
     if connected_accounts >= account_limit:
         st.warning(

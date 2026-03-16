@@ -46,6 +46,7 @@ from database.db import (
     save_recommendation,
     update_company_plan,
     update_user_plan,
+    update_user_password,
 )
 from services.demo_environment import get_demo_account_profiles
 import pandas as pd
@@ -2132,6 +2133,197 @@ def audit_log_page(embedded=False):
     finally:
         conn.close()
 
+
+def access_management_page():
+    username = st.session_state.get("username", "guest")
+    current_role = st.session_state.get("role", "user")
+    current_company = st.session_state.get("company") or get_user_company(username)
+    current_plan = get_user_plan(username)
+    plan_names = get_plan_names()
+    is_global_admin = is_global_admin_role(current_role)
+    is_company_admin = is_company_admin_role(current_role)
+
+    if not (is_global_admin or is_company_admin):
+        st.warning("You do not have access to user or tenant administration.")
+        return
+
+    st.title("Access Management")
+    st.caption("Manage internal users, client organizations, company users, and password resets separately from commercial plans.")
+
+    if is_global_admin:
+        internal_tab, client_tab = st.tabs(["Internal Workspace", "Client Organizations"])
+
+        with internal_tab:
+            st.markdown("**Internal Users**")
+            internal_users = list_users(company=current_company)
+            st.caption("Use internal users for testing, product validation, and presentation-only access.")
+            internal_col1, internal_col2, internal_col3 = st.columns([1.1, 1.1, 0.8])
+            internal_username = internal_col1.text_input("Internal Username", key="internal_username")
+            internal_password = internal_col2.text_input("Temporary Password", type="password", key="internal_password")
+            internal_role = internal_col3.selectbox("Access Type", ["internal_user", "presenter"], key="internal_role")
+            if st.button("Create Internal User"):
+                normalized_username = internal_username.strip()
+                if not normalized_username or not internal_password:
+                    st.error("Enter both a username and a temporary password.")
+                elif any(item.get("username") == normalized_username for item in list_users()):
+                    st.error("That username already exists.")
+                else:
+                    add_user(
+                        normalized_username,
+                        internal_password,
+                        internal_role,
+                        company=current_company,
+                        user_type="internal",
+                        created_by=username,
+                    )
+                    st.success(f"Internal user '{normalized_username}' created successfully.")
+                    st.rerun()
+
+            if internal_users:
+                st.dataframe(pd.DataFrame(internal_users), use_container_width=True, hide_index=True)
+                reset_internal_user = st.selectbox(
+                    "Reset Internal User Password",
+                    [item["username"] for item in internal_users],
+                    key="reset_internal_user",
+                )
+                reset_internal_password = st.text_input(
+                    "New Temporary Password",
+                    type="password",
+                    key="reset_internal_password",
+                )
+                if st.button("Reset Internal Password"):
+                    if not reset_internal_password:
+                        st.error("Enter a new temporary password.")
+                    elif update_user_password(reset_internal_user, reset_internal_password, acting_username=username):
+                        st.success(f"Password reset for '{reset_internal_user}'.")
+                    else:
+                        st.error("Could not reset the password for that user.")
+
+        with client_tab:
+            st.markdown("**Create Client Organization**")
+            client_col1, client_col2 = st.columns([1.2, 1])
+            client_company_name = client_col1.text_input("Client Company", key="client_company_name")
+            client_plan = client_col2.selectbox("Plan", plan_names, index=1 if "Growth" in plan_names else 0, key="client_plan_select")
+            admin_col1, admin_col2 = st.columns([1.1, 1.1])
+            client_admin_username = admin_col1.text_input("Client Admin Username", key="client_admin_username")
+            client_admin_password = admin_col2.text_input("Client Admin Temporary Password", type="password", key="client_admin_password")
+            if st.button("Create Client Organization"):
+                normalized_company = client_company_name.strip()
+                normalized_admin = client_admin_username.strip()
+                if not normalized_company or not normalized_admin or not client_admin_password:
+                    st.error("Enter company name, client admin username, and a temporary password.")
+                elif get_company(normalized_company):
+                    st.error("That client company already exists.")
+                elif any(item.get("username") == normalized_admin for item in list_users()):
+                    st.error("That client admin username already exists.")
+                else:
+                    add_user(
+                        normalized_admin,
+                        client_admin_password,
+                        "client_admin",
+                        company=normalized_company,
+                        user_type="client",
+                        created_by=username,
+                    )
+                    update_company_plan(normalized_company, client_plan)
+                    st.success(f"Client organization '{normalized_company}' and local admin '{normalized_admin}' created successfully.")
+                    st.rerun()
+
+            client_companies = [company for company in list_companies(viewer_username=username) if company.get("company_name") != current_company]
+            if client_companies:
+                st.dataframe(pd.DataFrame(client_companies), use_container_width=True, hide_index=True)
+                selected_company_name = st.selectbox(
+                    "Manage Client Organization",
+                    [company["company_name"] for company in client_companies],
+                    key="manage_client_company",
+                )
+                selected_company = get_company(selected_company_name)
+                selected_plan = st.selectbox(
+                    "Selected Company Plan",
+                    plan_names,
+                    index=plan_names.index(selected_company.get("plan", "Starter")),
+                    key="selected_client_plan",
+                )
+                if st.button("Update Client Plan"):
+                    update_company_plan(selected_company_name, selected_plan)
+                    st.success(f"Plan updated for {selected_company_name}.")
+                    st.rerun()
+
+                client_users = list_users(company=selected_company_name)
+                if client_users:
+                    st.dataframe(pd.DataFrame(client_users), use_container_width=True, hide_index=True)
+                    reset_client_user = st.selectbox(
+                        "Reset Client User Password",
+                        [item["username"] for item in client_users],
+                        key="reset_client_user",
+                    )
+                    reset_client_password = st.text_input(
+                        "New Client Temporary Password",
+                        type="password",
+                        key="reset_client_password",
+                    )
+                    if st.button("Reset Client Password"):
+                        if not reset_client_password:
+                            st.error("Enter a new temporary password.")
+                        elif update_user_password(reset_client_user, reset_client_password, acting_username=username):
+                            st.success(f"Password reset for '{reset_client_user}'.")
+                        else:
+                            st.error("Could not reset the password for that user.")
+
+    else:
+        st.markdown("**Company Users**")
+        company_users = list_users(viewer_username=username)
+        seat_limit = get_user_seat_limit(current_plan)
+        seat_text = "Unlimited" if seat_limit == float("inf") else seat_limit
+        st.caption(f"{current_company} user licenses in use: {len(company_users)} / {seat_text}")
+
+        company_col1, company_col2, company_col3 = st.columns([1.1, 1.1, 0.8])
+        company_username = company_col1.text_input("Username", key="company_user_username")
+        company_password = company_col2.text_input("Temporary Password", type="password", key="company_user_password")
+        company_role = company_col3.selectbox("Role", ["user", "premium"], key="company_user_role")
+        seats_available = seat_limit == float("inf") or len(company_users) < seat_limit
+        if st.button("Create Company User"):
+            normalized_username = company_username.strip()
+            if not normalized_username or not company_password:
+                st.error("Enter both a username and a temporary password.")
+            elif any(item.get("username") == normalized_username for item in list_users(viewer_username=username)):
+                st.error("That username already exists in your company.")
+            elif not seats_available:
+                st.error("No user licenses are available on the current plan.")
+            else:
+                add_user(
+                    normalized_username,
+                    company_password,
+                    company_role,
+                    company=current_company,
+                    user_type="client",
+                    created_by=username,
+                )
+                st.success(f"Company user '{normalized_username}' created successfully.")
+                st.rerun()
+
+        if company_users:
+            st.dataframe(pd.DataFrame(company_users), use_container_width=True, hide_index=True)
+            reset_company_user = st.selectbox(
+                "Reset Company User Password",
+                [item["username"] for item in company_users],
+                key="reset_company_user",
+            )
+            reset_company_password = st.text_input(
+                "New Temporary Password",
+                type="password",
+                key="reset_company_password",
+            )
+            if st.button("Reset Company Password"):
+                if not reset_company_password:
+                    st.error("Enter a new temporary password.")
+                elif update_user_password(reset_company_user, reset_company_password, acting_username=username):
+                    st.success(f"Password reset for '{reset_company_user}'.")
+                else:
+                    st.error("Could not reset the password for that user.")
+
+        st.info("You can manage only your company users here. Client admins do not have Global Admin access.")
+
 # --- Supabase Sign Up Page ---
 try:
     from importlib import import_module
@@ -2175,14 +2367,21 @@ if not st.session_state.authenticated:
     login_page()
     st.stop()
 
+active_username = st.session_state.get("username", "guest")
+effective_plan = get_user_plan(active_username)
+st.session_state["plan"] = effective_plan
+st.session_state["company"] = st.session_state.get("company") or get_user_company(active_username)
+st.session_state["user_type"] = st.session_state.get("user_type") or get_user_type(active_username)
+
 
 
 # Sidebar enhancements: theme toggle, navigation, avatar, help, and logout
 with st.sidebar:
     st.markdown("# Cloud Advisor")
-    current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
+    current_plan = get_user_plan(st.session_state.get("username", "guest"))
     st.session_state["plan"] = current_plan
     allowed_pages = set(get_plan_pages(current_plan))
+    current_role = st.session_state.get("role", "user")
     # User avatar (placeholder)
     avatar_url = "https://ui-avatars.com/api/?name=" + st.session_state.get("username", "Guest") + "&background=0D8ABC&color=fff&size=128"
     st.image(avatar_url, width=64)
@@ -2204,6 +2403,8 @@ with st.sidebar:
         ("Plans & Billing", "ðŸ’³")
     ]
     nav_pages = [item for item in nav_pages if item[0] in allowed_pages]
+    if is_company_admin_role(current_role):
+        nav_pages.append(("Access Management", "ðŸ”"))
     nav_labels = [page for page, _ in nav_pages]
     current_page = st.session_state.get("selected_page", "Dashboard")
     default_index = nav_labels.index(current_page) if current_page in nav_labels else 0
@@ -2227,8 +2428,10 @@ Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
 
 # Main page routing logic
 selected_page = st.session_state.get("selected_page", "Dashboard")
-current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
-if selected_page not in set(get_plan_pages(current_plan)):
+current_plan = get_user_plan(st.session_state.get("username", "guest"))
+st.session_state["plan"] = current_plan
+admin_pages = {"Access Management"} if is_company_admin_role(st.session_state.get("role", "user")) else set()
+if selected_page not in set(get_plan_pages(current_plan)).union(admin_pages):
     st.warning(f"{selected_page} is not included in the {current_plan} plan.")
     st.session_state["selected_page"] = "Plans & Billing"
     st.rerun()
@@ -2257,7 +2460,8 @@ elif selected_page == "Cloud Accounts":
     cloud_accounts_page()
 elif selected_page == "Plans & Billing":
     st.title("Plans & Billing")
-    current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
+    current_plan = get_user_plan(st.session_state.get("username", "guest"))
+    st.session_state["plan"] = current_plan
     plan_names = get_plan_names()
     plan_rows = []
     for plan_name in plan_names:
@@ -2308,141 +2512,10 @@ elif selected_page == "Plans & Billing":
         "Unlimited" if current_plan_def["user_seats"] == float("inf") else current_plan_def["user_seats"],
     )
     st.success(f"Your current plan: {current_plan}")
-    user = st.session_state.get("username", "guest")
-    current_role = st.session_state.get("role", "user")
-    current_company = st.session_state.get("company") or get_user_company(user)
-    is_global_admin = is_global_admin_role(current_role)
-    is_company_admin = is_company_admin_role(current_role)
-
-    if is_global_admin:
-        st.markdown("**Change Plan**")
-        plan_col1, _ = st.columns([1, 3])
-        with plan_col1:
-            new_plan = st.selectbox("Select new plan:", plan_names, index=plan_names.index(current_plan), key="plan_select")
-            if st.button("Update Plan"):
-                st.session_state["plan"] = update_user_plan(user, new_plan)
-                st.success(f"Plan updated to: {new_plan}. Feature access and page visibility were updated automatically.")
-
-        st.markdown("---")
-        internal_tab, client_tab = st.tabs(["Internal Workspace", "Client Organizations"])
-
-        with internal_tab:
-            st.markdown("**Internal Users**")
-            internal_users = list_users(company=current_company)
-            st.caption("Use internal users for product testing, rehearsals, and controlled presentations.")
-            internal_col1, internal_col2, internal_col3 = st.columns([1.1, 1.1, 0.8])
-            internal_username = internal_col1.text_input("Internal Username", key="internal_username")
-            internal_password = internal_col2.text_input("Temporary Password", type="password", key="internal_password")
-            internal_role = internal_col3.selectbox("Access Type", ["internal_user", "presenter"], key="internal_role")
-            if st.button("Create Internal User"):
-                normalized_username = internal_username.strip()
-                if not normalized_username or not internal_password:
-                    st.error("Enter both a username and a temporary password.")
-                elif any(item.get("username") == normalized_username for item in list_users()):
-                    st.error("That username already exists.")
-                else:
-                    add_user(
-                        normalized_username,
-                        internal_password,
-                        internal_role,
-                        company=current_company,
-                        user_type="internal",
-                        created_by=user,
-                    )
-                    st.success(f"Internal user '{normalized_username}' created successfully.")
-                    st.rerun()
-            if internal_users:
-                st.dataframe(pd.DataFrame(internal_users), use_container_width=True, hide_index=True)
-
-        with client_tab:
-            st.markdown("**Create Client Organization**")
-            client_col1, client_col2 = st.columns([1.2, 1])
-            client_company_name = client_col1.text_input("Client Company", key="client_company_name")
-            client_plan = client_col2.selectbox("Plan", plan_names, index=1 if "Growth" in plan_names else 0, key="client_plan_select")
-            admin_col1, admin_col2 = st.columns([1.1, 1.1])
-            client_admin_username = admin_col1.text_input("Client Admin Username", key="client_admin_username")
-            client_admin_password = admin_col2.text_input("Client Admin Temporary Password", type="password", key="client_admin_password")
-            if st.button("Create Client Organization"):
-                normalized_company = client_company_name.strip()
-                normalized_admin = client_admin_username.strip()
-                if not normalized_company or not normalized_admin or not client_admin_password:
-                    st.error("Enter company name, client admin username, and a temporary password.")
-                elif get_company(normalized_company):
-                    st.error("That client company already exists.")
-                elif any(item.get("username") == normalized_admin for item in list_users()):
-                    st.error("That client admin username already exists.")
-                else:
-                    add_user(
-                        normalized_admin,
-                        client_admin_password,
-                        "client_admin",
-                        company=normalized_company,
-                        user_type="client",
-                        created_by=user,
-                    )
-                    update_company_plan(normalized_company, client_plan)
-                    st.success(f"Client organization '{normalized_company}' and local admin '{normalized_admin}' created successfully.")
-                    st.rerun()
-
-            client_companies = [company for company in list_companies(viewer_username=user) if company.get("company_name") != current_company]
-            if client_companies:
-                company_frame = pd.DataFrame(client_companies)
-                st.dataframe(company_frame, use_container_width=True, hide_index=True)
-
-                selected_company_name = st.selectbox(
-                    "Manage Client Plan",
-                    [company["company_name"] for company in client_companies],
-                    key="manage_client_company",
-                )
-                selected_company = get_company(selected_company_name)
-                selected_plan = st.selectbox(
-                    "Selected Company Plan",
-                    plan_names,
-                    index=plan_names.index(selected_company.get("plan", "Starter")),
-                    key="selected_client_plan",
-                )
-                if st.button("Update Client Plan"):
-                    update_company_plan(selected_company_name, selected_plan)
-                    st.success(f"Plan updated for {selected_company_name}.")
-                    st.rerun()
-                client_users = list_users(company=selected_company_name)
-                if client_users:
-                    st.dataframe(pd.DataFrame(client_users), use_container_width=True, hide_index=True)
-
-    elif is_company_admin:
-        st.markdown("**Company Users**")
-        company_users = list_users(viewer_username=user)
-        seat_limit = get_user_seat_limit(current_plan)
-        seat_text = "Unlimited" if seat_limit == float("inf") else seat_limit
-        st.caption(f"{current_company} user licenses in use: {len(company_users)} / {seat_text}")
-
-        company_col1, company_col2, company_col3 = st.columns([1.1, 1.1, 0.8])
-        company_username = company_col1.text_input("Username", key="company_user_username")
-        company_password = company_col2.text_input("Temporary Password", type="password", key="company_user_password")
-        company_role = company_col3.selectbox("Role", ["user", "premium"], key="company_user_role")
-        seats_available = seat_limit == float("inf") or len(company_users) < seat_limit
-        if st.button("Create Company User"):
-            normalized_username = company_username.strip()
-            if not normalized_username or not company_password:
-                st.error("Enter both a username and a temporary password.")
-            elif any(item.get("username") == normalized_username for item in list_users(viewer_username=user)): 
-                st.error("That username already exists in your company.")
-            elif not seats_available:
-                st.error("No user licenses are available on the current plan.")
-            else:
-                add_user(
-                    normalized_username,
-                    company_password,
-                    company_role,
-                    company=current_company,
-                    user_type="client",
-                    created_by=user,
-                )
-                st.success(f"Company user '{normalized_username}' created successfully.")
-                st.rerun()
-
-        if company_users:
-            st.dataframe(pd.DataFrame(company_users), use_container_width=True, hide_index=True)
-        st.info("You can manage only your company users here. Client admins do not have Global Admin access.")
-    else:
-        st.info("Your plan, access, and company boundaries are managed by your Global Admin or Client Admin.")
+    if is_company_admin_role(st.session_state.get("role", "user")):
+        st.info("User and tenant administration has moved to Access Management below Plans & Billing.")
+        if st.button("Open Access Management"):
+            st.session_state["selected_page"] = "Access Management"
+            st.rerun()
+elif selected_page == "Access Management":
+    access_management_page()
