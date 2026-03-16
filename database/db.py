@@ -1,8 +1,10 @@
 import base64
+import contextlib
 import hashlib
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -13,16 +15,36 @@ from psycopg2.extras import RealDictCursor
 
 
 SQLITE_DB_PATH = "cloud_advisor.db"
+DB_INIT_LOCK_PATH = f"{SQLITE_DB_PATH}.init.lock"
+SCHEMA_VERSION = "2026-03-16-tenant-billing-v1"
 FERNET_KEY_ENV = "CLOUD_ADVISOR_CREDENTIAL_KEY"
 FERNET_KEY_FILE = Path(__file__).resolve().parent.parent / ".streamlit" / "credential.key"
 INTERNAL_COMPANY = "Cloud Advisor Internal"
 GLOBAL_ADMIN_ROLES = {"global_admin", "admin"}
 COMPANY_ADMIN_ROLES = {"global_admin", "admin", "client_admin"}
 RECOMMENDATION_MANAGER_ROLES = {"global_admin", "admin", "client_admin", "premium"}
+REQUIRED_TABLES = {
+    "companies",
+    "company_subscriptions",
+    "billing_data",
+    "users",
+    "subscriptions",
+    "audit_log",
+    "forecast_notes",
+    "cloud_accounts",
+    "cloud_sync_runs",
+    "recommendations",
+    "recommendation_events",
+}
 
 PLAN_CATALOG = {
     "Starter": {
-        "price": "$49/month",
+        "price": "$150/month",
+        "monthly_price": 150,
+        "yearly_price": 1440,
+        "annual_discount_pct": 20,
+        "trial_days": 7,
+        "data_history_days": 30,
         "cloud_accounts": 1,
         "user_seats": 2,
         "features": [
@@ -30,6 +52,7 @@ PLAN_CATALOG = {
             "Cost Explorer",
             "Cloud Accounts",
             "Basic finance summary",
+            "30-day billing history",
         ],
         "feature_flags": {
             "dashboard",
@@ -46,7 +69,12 @@ PLAN_CATALOG = {
         ],
     },
     "Growth": {
-        "price": "$149/month",
+        "price": "$250/month",
+        "monthly_price": 250,
+        "yearly_price": 2400,
+        "annual_discount_pct": 20,
+        "trial_days": 7,
+        "data_history_days": 180,
         "cloud_accounts": 5,
         "user_seats": 5,
         "features": [
@@ -54,6 +82,7 @@ PLAN_CATALOG = {
             "AI Recommendations",
             "Forecasting",
             "Finance and executive reports",
+            "180-day billing history",
         ],
         "feature_flags": {
             "dashboard",
@@ -77,7 +106,12 @@ PLAN_CATALOG = {
         ],
     },
     "Enterprise": {
-        "price": "$499/month",
+        "price": "$500/month",
+        "monthly_price": 500,
+        "yearly_price": 4800,
+        "annual_discount_pct": 20,
+        "trial_days": 7,
+        "data_history_days": None,
         "cloud_accounts": float("inf"),
         "user_seats": float("inf"),
         "features": [
@@ -86,6 +120,7 @@ PLAN_CATALOG = {
             "Automation workflows",
             "Board and strategy packs",
             "Unlimited scale",
+            "Full billing history",
         ],
         "feature_flags": {
             "dashboard",
@@ -133,6 +168,10 @@ def get_plan_definition(plan_name=None):
 
 def get_user_seat_limit(plan_name=None):
     return get_plan_definition(plan_name).get("user_seats", 1)
+
+
+def get_plan_billing_history_days(plan_name=None):
+    return get_plan_definition(plan_name).get("data_history_days")
 
 
 def get_plan_features(plan_name=None):
@@ -223,17 +262,21 @@ def ensure_company(company_name, plan="Starter", company_type="client", created_
     if owns_connection:
         conn.commit()
         conn.close()
+        upsert_company_subscription(normalized_company, plan_name=plan)
     return normalized_company
 
 
-def get_company(company_name):
-    conn = get_db()
+def get_company(company_name, conn=None):
+    owns_connection = conn is None
+    if owns_connection:
+        conn = get_db()
     _ensure_companies_table(conn)
     row = conn.execute(
         "SELECT company_name, company_type, plan, created_by, created_at, updated_at FROM companies WHERE company_name = ?",
         (company_name,),
     ).fetchone()
-    conn.close()
+    if owns_connection:
+        conn.close()
     return dict(row) if row else None
 
 
@@ -258,10 +301,21 @@ def update_company_plan(company_name, plan_name):
     normalized_plan = plan_name if plan_name in PLAN_CATALOG else "Starter"
     conn = get_db()
     _ensure_companies_table(conn)
+    _ensure_company_subscriptions_table(conn)
     now = datetime.utcnow().isoformat(timespec="seconds")
     conn.execute(
         "UPDATE companies SET plan = ?, updated_at = ? WHERE company_name = ?",
         (normalized_plan, now, company_name),
+    )
+    conn.execute(
+        """
+        INSERT INTO company_subscriptions (company_name, plan, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(company_name) DO UPDATE SET
+            plan = excluded.plan,
+            updated_at = excluded.updated_at
+        """,
+        (company_name, normalized_plan, now),
     )
     conn.commit()
     conn.close()
@@ -281,6 +335,180 @@ def _ensure_subscriptions_table(conn):
     _ensure_column(conn, "subscriptions", "username", "TEXT")
     _ensure_column(conn, "subscriptions", "plan", "TEXT NOT NULL DEFAULT 'Starter'")
     _ensure_column(conn, "subscriptions", "updated_at", "TEXT")
+
+
+def _ensure_company_subscriptions_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS company_subscriptions (
+            company_name TEXT PRIMARY KEY,
+            plan TEXT NOT NULL DEFAULT 'Starter',
+            billing_cycle TEXT NOT NULL DEFAULT 'monthly',
+            subscription_status TEXT NOT NULL DEFAULT 'inactive',
+            trial_started_at TEXT,
+            trial_ends_at TEXT,
+            cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            stripe_checkout_session_id TEXT,
+            stripe_price_id TEXT,
+            current_period_end TEXT,
+            source TEXT NOT NULL DEFAULT 'manual',
+            last_synced_at TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    _ensure_column(conn, "company_subscriptions", "company_name", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "plan", "TEXT NOT NULL DEFAULT 'Starter'")
+    _ensure_column(conn, "company_subscriptions", "billing_cycle", "TEXT NOT NULL DEFAULT 'monthly'")
+    _ensure_column(conn, "company_subscriptions", "subscription_status", "TEXT NOT NULL DEFAULT 'inactive'")
+    _ensure_column(conn, "company_subscriptions", "trial_started_at", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "trial_ends_at", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "cancel_at_period_end", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "company_subscriptions", "stripe_customer_id", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "stripe_subscription_id", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "stripe_checkout_session_id", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "stripe_price_id", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "current_period_end", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "source", "TEXT NOT NULL DEFAULT 'manual'")
+    _ensure_column(conn, "company_subscriptions", "last_synced_at", "TEXT")
+    _ensure_column(conn, "company_subscriptions", "updated_at", "TEXT")
+
+
+def get_company_subscription(company_name, conn=None):
+    normalized_company = (company_name or "").strip()
+    if not normalized_company:
+        return None
+    owns_connection = conn is None
+    if owns_connection:
+        conn = get_db()
+    _ensure_company_subscriptions_table(conn)
+    row = conn.execute(
+        """
+        SELECT company_name, plan, billing_cycle, subscription_status, trial_started_at, trial_ends_at,
+               cancel_at_period_end, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id,
+               stripe_price_id, current_period_end, source, last_synced_at, updated_at
+        FROM company_subscriptions
+        WHERE company_name = ?
+        """,
+        (normalized_company,),
+    ).fetchone()
+    if owns_connection:
+        conn.close()
+    if row:
+        subscription = dict(row)
+        subscription["cancel_at_period_end"] = bool(subscription.get("cancel_at_period_end"))
+        return subscription
+    company = get_company(normalized_company, conn=conn)
+    plan = company.get("plan", "Starter") if company else "Starter"
+    return {
+        "company_name": normalized_company,
+        "plan": plan,
+        "billing_cycle": "monthly",
+        "subscription_status": "inactive",
+        "trial_started_at": None,
+        "trial_ends_at": None,
+        "cancel_at_period_end": False,
+        "stripe_customer_id": None,
+        "stripe_subscription_id": None,
+        "stripe_checkout_session_id": None,
+        "stripe_price_id": None,
+        "current_period_end": None,
+        "source": "manual",
+        "last_synced_at": None,
+        "updated_at": None,
+    }
+
+
+def upsert_company_subscription(
+    company_name,
+    plan_name=None,
+    billing_cycle=None,
+    subscription_status=None,
+    trial_started_at=None,
+    trial_ends_at=None,
+    cancel_at_period_end=None,
+    stripe_customer_id=None,
+    stripe_subscription_id=None,
+    stripe_checkout_session_id=None,
+    stripe_price_id=None,
+    current_period_end=None,
+    source=None,
+    last_synced_at=None,
+    conn=None,
+):
+    normalized_company = (company_name or "").strip()
+    if not normalized_company:
+        return None
+
+    current = get_company_subscription(normalized_company, conn=conn) or {}
+    merged = {
+        "plan": plan_name or current.get("plan") or "Starter",
+        "billing_cycle": billing_cycle or current.get("billing_cycle") or "monthly",
+        "subscription_status": subscription_status or current.get("subscription_status") or "inactive",
+        "trial_started_at": trial_started_at if trial_started_at is not None else current.get("trial_started_at"),
+        "trial_ends_at": trial_ends_at if trial_ends_at is not None else current.get("trial_ends_at"),
+        "cancel_at_period_end": int(cancel_at_period_end if cancel_at_period_end is not None else bool(current.get("cancel_at_period_end"))),
+        "stripe_customer_id": stripe_customer_id if stripe_customer_id is not None else current.get("stripe_customer_id"),
+        "stripe_subscription_id": stripe_subscription_id if stripe_subscription_id is not None else current.get("stripe_subscription_id"),
+        "stripe_checkout_session_id": stripe_checkout_session_id if stripe_checkout_session_id is not None else current.get("stripe_checkout_session_id"),
+        "stripe_price_id": stripe_price_id if stripe_price_id is not None else current.get("stripe_price_id"),
+        "current_period_end": current_period_end if current_period_end is not None else current.get("current_period_end"),
+        "source": source or current.get("source") or "manual",
+        "last_synced_at": last_synced_at if last_synced_at is not None else current.get("last_synced_at"),
+    }
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    owns_connection = conn is None
+    if owns_connection:
+        conn = get_db()
+    _ensure_company_subscriptions_table(conn)
+    conn.execute(
+        """
+        INSERT INTO company_subscriptions (
+            company_name, plan, billing_cycle, subscription_status, trial_started_at, trial_ends_at,
+            cancel_at_period_end, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id,
+            stripe_price_id, current_period_end, source, last_synced_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(company_name) DO UPDATE SET
+            plan = excluded.plan,
+            billing_cycle = excluded.billing_cycle,
+            subscription_status = excluded.subscription_status,
+            trial_started_at = excluded.trial_started_at,
+            trial_ends_at = excluded.trial_ends_at,
+            cancel_at_period_end = excluded.cancel_at_period_end,
+            stripe_customer_id = excluded.stripe_customer_id,
+            stripe_subscription_id = excluded.stripe_subscription_id,
+            stripe_checkout_session_id = excluded.stripe_checkout_session_id,
+            stripe_price_id = excluded.stripe_price_id,
+            current_period_end = excluded.current_period_end,
+            source = excluded.source,
+            last_synced_at = excluded.last_synced_at,
+            updated_at = excluded.updated_at
+        """,
+        (
+            normalized_company,
+            merged["plan"],
+            merged["billing_cycle"],
+            merged["subscription_status"],
+            merged["trial_started_at"],
+            merged["trial_ends_at"],
+            merged["cancel_at_period_end"],
+            merged["stripe_customer_id"],
+            merged["stripe_subscription_id"],
+            merged["stripe_checkout_session_id"],
+            merged["stripe_price_id"],
+            merged["current_period_end"],
+            merged["source"],
+            merged["last_synced_at"],
+            now,
+        ),
+    )
+    if owns_connection:
+        conn.commit()
+        conn.close()
+        return get_company_subscription(normalized_company)
+    return get_company_subscription(normalized_company, conn=conn)
 
 
 def get_user_plan(username):
@@ -355,14 +583,89 @@ def get_db():
     return conn
 
 
+@contextlib.contextmanager
+def _database_init_lock(timeout_seconds=30):
+    lock_fd = None
+    start_time = time.time()
+    while True:
+        try:
+            lock_fd = os.open(DB_INIT_LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            break
+        except FileExistsError:
+            if time.time() - start_time >= timeout_seconds:
+                raise TimeoutError("Timed out waiting for database initialization lock.")
+            time.sleep(0.25)
+    try:
+        yield
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        try:
+            os.remove(DB_INIT_LOCK_PATH)
+        except FileNotFoundError:
+            pass
+
+
 def _table_columns(conn, table_name):
     cur = conn.execute(f"PRAGMA table_info({table_name})")
     return {row[1] for row in cur.fetchall()}
 
 
+def _table_exists(conn, table_name):
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return bool(row)
+
+
 def _ensure_column(conn, table_name, column_name, column_sql):
     if column_name not in _table_columns(conn, table_name):
         conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+
+def _ensure_app_metadata_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT
+        )
+        """
+    )
+
+
+def _get_app_metadata(conn, key):
+    if not _table_exists(conn, "app_metadata"):
+        return None
+    row = conn.execute("SELECT value FROM app_metadata WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _set_app_metadata(conn, key, value):
+    _ensure_app_metadata_table(conn)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    conn.execute(
+        """
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value, now),
+    )
+
+
+def _database_ready(conn):
+    if not all(_table_exists(conn, table_name) for table_name in REQUIRED_TABLES):
+        return False
+    recorded_version = _get_app_metadata(conn, "schema_version")
+    if recorded_version:
+        return recorded_version == SCHEMA_VERSION
+    internal_company = get_company(INTERNAL_COMPANY, conn=conn)
+    return bool(internal_company)
 
 
 def _billing_duplicate_count_query():
@@ -637,24 +940,122 @@ def _ensure_cloud_accounts_table(conn):
 
 
 def create_tables():
-    conn = get_db()
+    with _database_init_lock():
+        last_error = None
+        for attempt in range(5):
+            conn = None
+            try:
+                conn = get_db()
+                if _database_ready(conn):
+                    return
+                _ensure_companies_table(conn)
+                _ensure_company_subscriptions_table(conn)
+                _ensure_billing_data_table(conn)
+                _ensure_users_table(conn)
+                _ensure_subscriptions_table(conn)
+                _ensure_audit_log_table(conn)
+                _ensure_forecast_notes_table(conn)
+                _ensure_cloud_accounts_table(conn)
+                _ensure_cloud_sync_runs_table(conn)
+                _ensure_recommendations_table(conn)
+                _ensure_recommendation_events_table(conn)
+                _bootstrap_tenant_defaults(conn)
+                _set_app_metadata(conn, "schema_version", SCHEMA_VERSION)
+                conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                last_error = exc
+                if conn is not None:
+                    conn.rollback()
+                if "locked" in str(exc).lower():
+                    verification_conn = None
+                    try:
+                        verification_conn = get_db()
+                        if _database_ready(verification_conn):
+                            return
+                    finally:
+                        if verification_conn is not None:
+                            verification_conn.close()
+                if "locked" not in str(exc).lower() or attempt == 4:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
+            finally:
+                if conn is not None:
+                    conn.close()
+        if last_error:
+            raise last_error
+
+
+def _bootstrap_core_tenant_defaults(conn):
     _ensure_companies_table(conn)
-    _ensure_billing_data_table(conn)
+    _ensure_company_subscriptions_table(conn)
     _ensure_users_table(conn)
     _ensure_subscriptions_table(conn)
-    _ensure_audit_log_table(conn)
-    _ensure_forecast_notes_table(conn)
-    _ensure_cloud_accounts_table(conn)
-    _ensure_cloud_sync_runs_table(conn)
-    _ensure_recommendations_table(conn)
-    _ensure_recommendation_events_table(conn)
-    _bootstrap_tenant_defaults(conn)
-    conn.commit()
-    conn.close()
+
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    ensure_company(INTERNAL_COMPANY, plan="Enterprise", company_type="internal", created_by="system", conn=conn)
+    upsert_company_subscription(
+        INTERNAL_COMPANY,
+        plan_name="Enterprise",
+        billing_cycle="yearly",
+        subscription_status="active",
+        source="internal",
+        last_synced_at=now,
+        conn=conn,
+    )
+
+    conn.execute(
+        """
+        UPDATE users
+        SET role = 'global_admin',
+            company = COALESCE(NULLIF(company, ''), ?),
+            user_type = 'internal',
+            updated_at = COALESCE(updated_at, ?)
+        WHERE username = 'admin'
+        """,
+        (INTERNAL_COMPANY, now),
+    )
+
+    user_rows = conn.execute("SELECT username, role, company FROM users").fetchall()
+    for row in user_rows:
+        username = row[0]
+        role = _normalize_role(row[1])
+        company = row[2] or _default_company_for_role(role, username)
+        user_type = _default_user_type_for_role(role)
+        company_type = "internal" if company == INTERNAL_COMPANY else "client"
+        plan = "Enterprise" if company == INTERNAL_COMPANY else "Starter"
+        ensure_company(company, plan=plan, company_type=company_type, created_by="system", conn=conn)
+        conn.execute(
+            """
+            UPDATE users
+            SET role = ?, company = ?, user_type = COALESCE(NULLIF(user_type, ''), ?),
+                created_at = COALESCE(created_at, ?), updated_at = COALESCE(updated_at, ?)
+            WHERE username = ?
+            """,
+            (role, company, user_type, now, now, username),
+        )
+
+
+def initialize_core_tables():
+    with _database_init_lock():
+        conn = None
+        try:
+            conn = get_db()
+            _ensure_companies_table(conn)
+            _ensure_company_subscriptions_table(conn)
+            _ensure_users_table(conn)
+            _ensure_subscriptions_table(conn)
+            _ensure_audit_log_table(conn)
+            _bootstrap_core_tenant_defaults(conn)
+            conn.commit()
+        finally:
+            if conn is not None:
+                conn.close()
 
 
 def _bootstrap_tenant_defaults(conn):
     _ensure_companies_table(conn)
+    _ensure_company_subscriptions_table(conn)
     _ensure_users_table(conn)
     _ensure_subscriptions_table(conn)
     _ensure_column(conn, "cloud_sync_runs", "company", "TEXT")
@@ -663,6 +1064,15 @@ def _bootstrap_tenant_defaults(conn):
 
     now = datetime.utcnow().isoformat(timespec="seconds")
     ensure_company(INTERNAL_COMPANY, plan="Enterprise", company_type="internal", created_by="system", conn=conn)
+    upsert_company_subscription(
+        INTERNAL_COMPANY,
+        plan_name="Enterprise",
+        billing_cycle="yearly",
+        subscription_status="active",
+        source="internal",
+        last_synced_at=now,
+        conn=conn,
+    )
 
     conn.execute(
         """
@@ -1683,4 +2093,3 @@ def get_connected_account_count(username=None):
     return count
 
 
-create_tables()

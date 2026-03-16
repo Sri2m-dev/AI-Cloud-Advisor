@@ -8,6 +8,7 @@ from database.db import (
     get_account_limit,
     get_connected_account_count,
     get_user_company,
+    get_user_type,
     is_global_admin_role,
     list_cloud_accounts,
     list_sync_runs,
@@ -278,7 +279,10 @@ def cloud_accounts_page():
     username = st.session_state.get("username", "guest")
     role = st.session_state.get("role", "user")
     current_company = st.session_state.get("company") or get_user_company(username)
-    is_internal_access = is_global_admin_role(role) or current_company == INTERNAL_COMPANY
+    current_user_type = get_user_type(username)
+    is_internal_access = is_global_admin_role(role) or (
+        current_company == INTERNAL_COMPANY and current_user_type == "internal"
+    )
     if not is_internal_access:
         st.session_state.pop("active_demo_environment", None)
     else:

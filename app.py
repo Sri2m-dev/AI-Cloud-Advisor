@@ -4,6 +4,11 @@ load_dotenv()
 import os
 # Disable Streamlit's default multipage navigation sidebar
 os.environ["STREAMLIT_PAGES"] = "0"
+try:
+    import extra_streamlit_components as stx
+except ImportError:
+    stx = None
+import jwt
 
 # Streamlit page config: set title and collapse sidebar by default
 import streamlit as st
@@ -24,20 +29,25 @@ hide_pages = """
 st.markdown(hide_pages, unsafe_allow_html=True)
 import datetime
 from database.db import (
+    INTERNAL_COMPANY,
     add_user,
     can_manage_recommendation,
     get_db,
     get_company,
+    get_company_subscription,
     get_pg_connection,
+    get_plan_billing_history_days,
     get_plan_definition,
     get_plan_names,
     get_plan_pages,
+    get_user,
     get_user_company,
     get_user_seat_limit,
     get_user_plan,
     get_user_type,
     is_company_admin_role,
     is_global_admin_role,
+    initialize_core_tables,
     list_cloud_accounts,
     list_companies,
     list_recommendations,
@@ -47,6 +57,14 @@ from database.db import (
     update_company_plan,
     update_user_plan,
     update_user_password,
+)
+from services.billing_service import (
+    billing_is_ready,
+    create_billing_portal_session,
+    create_checkout_session,
+    get_billing_configuration_status,
+    sync_checkout_session,
+    sync_company_subscription,
 )
 from services.demo_environment import get_demo_account_profiles
 import pandas as pd
@@ -58,6 +76,148 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from database.db import save_forecast_note, load_forecast_note, log_audit_event
 import plotly.express as px
 from sklearn.ensemble import IsolationForest
+
+AUTH_COOKIE_NAME = "cloud_advisor_auth"
+AUTH_COOKIE_DAYS = 7
+
+
+@st.cache_resource
+def _initialize_database():
+    initialize_core_tables()
+    return True
+
+
+_initialize_database()
+
+
+def _get_cookie_manager():
+    if stx is None:
+        return None
+    cookie_manager = st.session_state.get("_cookie_manager")
+    if cookie_manager is None:
+        cookie_manager = stx.CookieManager()
+        st.session_state["_cookie_manager"] = cookie_manager
+    return cookie_manager
+
+
+def _auth_cookie_expires_at():
+    return datetime.datetime.now() + datetime.timedelta(days=AUTH_COOKIE_DAYS)
+
+
+def _auth_secret():
+    return os.getenv("CLOUD_ADVISOR_CREDENTIAL_KEY") or "cloud-advisor-local-dev-secret"
+
+
+def _format_plan_history_label(plan_def):
+    history_days = plan_def.get("data_history_days")
+    if history_days in {None, float("inf")}:
+        return "Unlimited"
+    return f"Last {int(history_days)} days"
+
+
+def _query_param_value(name, default=None):
+    value = st.query_params.get(name, default)
+    if isinstance(value, list):
+        return value[0] if value else default
+    return value
+
+
+def _clear_query_params(*keys):
+    for key in keys:
+        try:
+            if key in st.query_params:
+                del st.query_params[key]
+        except Exception:
+            pass
+
+
+def _queue_billing_flash(level, message):
+    st.session_state["billing_flash"] = {"level": level, "message": message}
+
+
+def _render_billing_flash():
+    flash = st.session_state.pop("billing_flash", None)
+    if not flash:
+        return
+    getattr(st, flash.get("level", "info"), st.info)(flash.get("message", ""))
+
+
+def _apply_plan_billing_history_limit(billing_df, username):
+    session_username = st.session_state.get("username")
+    plan_name = st.session_state.get("plan") if username and username == session_username else get_user_plan(username)
+    plan_name = plan_name or "Starter"
+    plan_def = get_plan_definition(plan_name)
+    history_days = get_plan_billing_history_days(plan_name)
+    scope_meta = {
+        "plan_name": plan_name,
+        "history_days": history_days,
+        "history_label": _format_plan_history_label(plan_def),
+        "window_start": None,
+    }
+    if billing_df.empty or history_days in {None, float("inf")}:
+        return billing_df, scope_meta
+
+    latest_date = billing_df["date"].max().normalize()
+    window_start = latest_date - pd.Timedelta(days=int(history_days) - 1)
+    scope_meta["window_start"] = window_start.date().isoformat()
+    return billing_df[billing_df["date"] >= window_start].copy(), scope_meta
+
+
+def _apply_authenticated_session(user_row):
+    st.session_state["authenticated"] = True
+    st.session_state["username"] = user_row[0]
+    st.session_state["role"] = user_row[2]
+    st.session_state["company"] = user_row[3] if len(user_row) > 3 else None
+    st.session_state["user_type"] = user_row[4] if len(user_row) > 4 else None
+    st.session_state["plan"] = get_user_plan(user_row[0])
+
+
+def _issue_auth_token(username):
+    payload = {
+        "sub": username,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=AUTH_COOKIE_DAYS),
+    }
+    return jwt.encode(payload, _auth_secret(), algorithm="HS256")
+
+
+def _set_auth_cookie(username):
+    cookie_manager = _get_cookie_manager()
+    if cookie_manager is None:
+        return
+    cookie_manager.set(
+        AUTH_COOKIE_NAME,
+        _issue_auth_token(username),
+        expires_at=_auth_cookie_expires_at(),
+        key="set_auth_cookie",
+    )
+
+
+def _clear_auth_cookie():
+    cookie_manager = _get_cookie_manager()
+    if cookie_manager is None:
+        return
+    cookie_manager.delete(AUTH_COOKIE_NAME, key="delete_auth_cookie")
+
+
+def _restore_auth_session_from_cookie():
+    if st.session_state.get("authenticated"):
+        return
+    cookie_manager = _get_cookie_manager()
+    if cookie_manager is None:
+        return
+    token = cookie_manager.get(AUTH_COOKIE_NAME)
+    if not token:
+        return
+    try:
+        payload = jwt.decode(token, _auth_secret(), algorithms=["HS256"])
+        username = payload.get("sub")
+        user = get_user(username)
+        if not user:
+            _clear_auth_cookie()
+            return
+        _apply_authenticated_session(user)
+    except Exception:
+        _clear_auth_cookie()
 
 def predict_cost(cost_history):
     return predict_cost_months(cost_history, months_ahead=1)
@@ -421,6 +581,7 @@ inject_custom_css()
 # -------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+_restore_auth_session_from_cookie()
 
 # -------------------
 # LOGIN PAGE
@@ -437,15 +598,10 @@ def login_page():
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        from database.db import get_user, log_audit_event
         user = get_user(username)
         if user and password == user[1]:
-            st.session_state["authenticated"] = True
-            st.session_state["username"] = user[0]
-            st.session_state["role"] = user[2]
-            st.session_state["company"] = user[3] if len(user) > 3 else None
-            st.session_state["user_type"] = user[4] if len(user) > 4 else None
-            st.session_state["plan"] = get_user_plan(user[0])
+            _apply_authenticated_session(user)
+            _set_auth_cookie(user[0])
             log_audit_event(user[0], "login")
             st.success("Login successful")
             st.rerun()
@@ -455,8 +611,6 @@ def login_page():
     if user_role not in ["global_admin", "client_admin", "premium", "user", "internal_user", "presenter", "admin"]:
         st.warning("You do not have access to this feature.")
         st.stop()
-        from database.db import log_audit_event
-        log_audit_event(st.session_state.get("username", "guest"), "logout")
         st.session_state.update(authenticated=False)
 
 # -------------------
@@ -729,6 +883,15 @@ def _render_forecast_risk_summary(username):
 
 
 def _load_dashboard_billing_scope(username, active_demo=None):
+    session_username = st.session_state.get("username")
+    plan_name = st.session_state.get("plan") if username and username == session_username else get_user_plan(username)
+    plan_name = plan_name or "Starter"
+    plan_scope = {
+        "plan_name": plan_name,
+        "history_days": get_plan_billing_history_days(plan_name),
+        "history_label": _format_plan_history_label(get_plan_definition(plan_name)),
+        "window_start": None,
+    }
     conn, _ = _get_analytics_connection()
     billing_df = None
     try:
@@ -739,7 +902,7 @@ def _load_dashboard_billing_scope(username, active_demo=None):
         conn.close()
 
     if billing_df.empty:
-        return pd.DataFrame(), active_demo.get("account_names", []) if active_demo else []
+        return pd.DataFrame(), active_demo.get("account_names", []) if active_demo else [], plan_scope
 
     billing_df["date"] = pd.to_datetime(billing_df["date"], errors="coerce")
     billing_df["cost"] = pd.to_numeric(billing_df["cost"], errors="coerce").fillna(0.0)
@@ -756,11 +919,12 @@ def _load_dashboard_billing_scope(username, active_demo=None):
         if not scoped_df.empty:
             billing_df = scoped_df
 
-    return billing_df, account_scope
+    billing_df, plan_scope = _apply_plan_billing_history_limit(billing_df, username)
+    return billing_df, account_scope, plan_scope
 
 
 def _dashboard_summary_metrics(username, active_demo=None):
-    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+    billing_df, account_scope, _ = _load_dashboard_billing_scope(username, active_demo=active_demo)
 
     if billing_df.empty:
         return {
@@ -896,12 +1060,16 @@ def _render_scenario_impact_summary(username, active_demo, summary_metrics):
 
 
 def _render_dashboard_charts(username, active_demo=None):
-    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+    billing_df, account_scope, plan_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
     if billing_df.empty:
         return
 
     st.markdown("---")
     st.subheader("Scenario Spend View")
+    if plan_scope["history_days"] not in {None, float("inf")}:
+        st.caption(
+            f"{plan_scope['plan_name']} includes {plan_scope['history_label'].lower()} of billing history in this view."
+        )
     chart_col1, chart_col2 = st.columns([1.4, 1])
 
     daily_totals = (
@@ -1598,11 +1766,16 @@ def cost_explorer_page():
 
     username = st.session_state.get("username", "guest")
     active_demo = st.session_state.get("active_demo_environment")
-    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+    billing_df, account_scope, plan_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
 
     if billing_df.empty:
         st.info("No billing data is available yet. Connect a cloud account or load a demo scenario to explore costs.")
         return
+
+    if plan_scope["history_days"] not in {None, float("inf")}:
+        st.caption(
+            f"{plan_scope['plan_name']} plan access is limited to {plan_scope['history_label'].lower()} for Cost Explorer and CSV export."
+        )
 
     explorer_df = billing_df.copy()
     explorer_df["date"] = pd.to_datetime(explorer_df["date"], errors="coerce")
@@ -1833,8 +2006,13 @@ def reports_page():
     username = st.session_state.get("username", "guest")
     active_demo = st.session_state.get("active_demo_environment")
     summary_metrics = _dashboard_summary_metrics(username, active_demo=active_demo)
-    billing_df, account_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
+    billing_df, account_scope, plan_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
     operations_snapshot = _cloud_operations_snapshot(username)
+
+    if plan_scope["history_days"] not in {None, float("inf")}:
+        st.caption(
+            f"Generated report data is currently limited to {plan_scope['history_label'].lower()} on the {plan_scope['plan_name']} plan."
+        )
 
     service_cost = pd.DataFrame(columns=["Service", "Cost"])
     if not billing_df.empty:
@@ -2372,6 +2550,11 @@ effective_plan = get_user_plan(active_username)
 st.session_state["plan"] = effective_plan
 st.session_state["company"] = st.session_state.get("company") or get_user_company(active_username)
 st.session_state["user_type"] = st.session_state.get("user_type") or get_user_type(active_username)
+requested_page = _query_param_value("selected_page")
+if _query_param_value("billing_result") or requested_page == "Plans & Billing":
+    st.session_state["selected_page"] = "Plans & Billing"
+elif requested_page:
+    st.session_state["selected_page"] = requested_page
 
 
 
@@ -2424,7 +2607,12 @@ Select a model, choose how many months to forecast, and view the results. You ca
 **How do I save notes?**  
 Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
         """)
-    st.button("Logout", on_click=lambda: st.session_state.update(authenticated=False))
+    if st.button("Logout"):
+        log_audit_event(st.session_state.get("username", "guest"), "logout")
+        _clear_auth_cookie()
+        st.session_state.clear()
+        st.session_state["authenticated"] = False
+        st.rerun()
 
 # Main page routing logic
 selected_page = st.session_state.get("selected_page", "Dashboard")
@@ -2462,6 +2650,33 @@ elif selected_page == "Plans & Billing":
     st.title("Plans & Billing")
     current_plan = get_user_plan(st.session_state.get("username", "guest"))
     st.session_state["plan"] = current_plan
+    company_name = st.session_state.get("company") or get_user_company(st.session_state.get("username", "guest"))
+    current_company = get_company(company_name) if company_name else None
+    subscription = get_company_subscription(company_name) if company_name else None
+    billing_result = _query_param_value("billing_result")
+    checkout_session_id = _query_param_value("session_id")
+    user_can_manage_billing = is_company_admin_role(st.session_state.get("role", "user")) and company_name != INTERNAL_COMPANY
+
+    if billing_result == "success" and checkout_session_id and company_name:
+        processed_session = st.session_state.get("processed_billing_session_id")
+        if processed_session != checkout_session_id:
+            try:
+                subscription = sync_checkout_session(company_name, checkout_session_id)
+                st.session_state["processed_billing_session_id"] = checkout_session_id
+                st.session_state["plan"] = subscription.get("plan", current_plan)
+                log_audit_event(st.session_state.get("username", "guest"), "billing_checkout_completed", details=f"company={company_name};session={checkout_session_id}")
+                _queue_billing_flash("success", f"Subscription activated for {subscription.get('plan', current_plan)} on a {subscription.get('billing_cycle', 'monthly')} cycle.")
+                _clear_query_params("billing_result", "session_id", "selected_page")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Stripe checkout completed, but subscription sync failed: {exc}")
+    elif billing_result == "cancel":
+        _queue_billing_flash("warning", "Checkout was canceled. No subscription changes were applied.")
+        _clear_query_params("billing_result", "session_id", "selected_page")
+        st.rerun()
+
+    _render_billing_flash()
+
     plan_names = get_plan_names()
     plan_rows = []
     for plan_name in plan_names:
@@ -2471,37 +2686,46 @@ elif selected_page == "Plans & Billing":
         plan_rows.append(
             {
                 "Plan": plan_name,
-                "Price": plan_def["price"],
+                "Monthly Price": f"${plan_def['monthly_price']}/month",
+                "Yearly Price (20% Discount)": f"${plan_def['yearly_price']}/year",
+                "Free Trial": f"{plan_def['trial_days']} days",
                 "Cloud Accounts": "Unlimited" if account_limit == float("inf") else account_limit,
                 "User Licenses": "Unlimited" if seat_limit == float("inf") else seat_limit,
+                "Billing History": _format_plan_history_label(plan_def),
                 "Included": ", ".join(plan_def["features"]),
             }
         )
 
     st.markdown("### Choose the right plan for your business")
-    st.table(pd.DataFrame(plan_rows))
+    st.table(pd.DataFrame(plan_rows).set_index("Plan"))
     st.markdown("---")
     st.markdown("#### Feature Comparison")
     st.table(
-        {
+        pd.DataFrame(
+            {
             "Capability": [
                 "Cloud Accounts",
                 "User Licenses",
+                "Billing History",
+                "Free Trial",
                 "AI Recommendations",
                 "Cost Forecast",
                 "Reports",
                 "Operations",
                 "Board Packs",
             ],
-            "Starter": ["1", "2", "-", "-", "Basic finance only", "-", "-"],
-            "Growth": ["5", "5", "Yes", "Yes", "Finance + executive", "-", "-"],
-            "Enterprise": ["Unlimited", "Unlimited", "Yes", "Yes", "All reports", "Yes", "Yes"],
-        }
+            "Starter": ["1", "2", "30 days", "7 days", "-", "-", "Basic finance only", "-", "-"],
+            "Growth": ["5", "5", "180 days", "7 days", "Yes", "Yes", "Finance + executive", "-", "-"],
+            "Enterprise": ["Unlimited", "Unlimited", "Unlimited", "7 days", "Yes", "Yes", "All reports", "Yes", "Yes"],
+            }
+        ).set_index("Capability")
     )
+    st.info("All plans include a 7-day free trial. Annual billing applies a 20% discount across Starter, Growth, and Enterprise.")
+    st.info("Billing history is plan-limited by design so smaller packs cannot use unlimited historical cloud cost data on a low-tier subscription.")
     st.info("When you select a pack, the app assigns access automatically. You do not need to turn each feature on one by one unless you want a custom enterprise contract.")
-    st.info("For annual discounts or custom needs, reach out to sales@aicloudadvisor.com.")
+    st.info("For annual billing, invoicing, or custom needs, reach out to sales@aicloudadvisor.com.")
     current_plan_def = get_plan_definition(current_plan)
-    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     metric_col1.metric("Current Plan", current_plan)
     metric_col2.metric(
         "Cloud Accounts",
@@ -2511,7 +2735,76 @@ elif selected_page == "Plans & Billing":
         "User Licenses",
         "Unlimited" if current_plan_def["user_seats"] == float("inf") else current_plan_def["user_seats"],
     )
+    metric_col4.metric("Billing History", _format_plan_history_label(current_plan_def))
     st.success(f"Your current plan: {current_plan}")
+
+    st.markdown("---")
+    st.markdown("#### Subscription Status")
+    status_col1, status_col2, status_col3, status_col4 = st.columns(4)
+    status_col1.metric("Status", str((subscription or {}).get("subscription_status") or "inactive").replace("_", " ").title())
+    status_col2.metric("Billing Cycle", str((subscription or {}).get("billing_cycle") or "monthly").title())
+    status_col3.metric("Trial Ends", (subscription or {}).get("trial_ends_at") or "Not started")
+    status_col4.metric("Current Period End", (subscription or {}).get("current_period_end") or "N/A")
+    if subscription and subscription.get("cancel_at_period_end"):
+        st.warning("This subscription is marked to cancel at the end of the current billing period.")
+
+    if current_company and current_company.get("company_type") == "internal":
+        st.caption("Internal tenant billing is managed outside Stripe in this environment.")
+    elif user_can_manage_billing:
+        billing_config = get_billing_configuration_status()
+        if not billing_is_ready():
+            missing = []
+            if not billing_config["stripe_available"]:
+                missing.append("install the Stripe SDK")
+            if not billing_config["stripe_secret_configured"]:
+                missing.append("set STRIPE_SECRET_KEY")
+            if not billing_config["app_url_configured"]:
+                missing.append("set CLOUD_ADVISOR_APP_URL")
+            st.warning("Stripe billing is not fully configured yet. To enable live checkout, " + ", ".join(missing) + ".")
+
+        billing_col1, billing_col2 = st.columns([1.2, 1])
+        with billing_col1:
+            st.markdown("#### Start or Change Subscription")
+            checkout_plan = st.selectbox("Plan", plan_names, index=plan_names.index(current_plan) if current_plan in plan_names else 0, key="billing_checkout_plan")
+            billing_cycle = st.radio("Billing Cycle", ["monthly", "yearly"], horizontal=True, format_func=lambda value: "Monthly" if value == "monthly" else "Yearly (20% discount)", key="billing_checkout_cycle")
+            selected_plan_def = get_plan_definition(checkout_plan)
+            cycle_price = selected_plan_def["monthly_price"] if billing_cycle == "monthly" else selected_plan_def["yearly_price"]
+            cycle_label = "month" if billing_cycle == "monthly" else "year"
+            st.caption(f"Card is collected at checkout. The first {selected_plan_def['trial_days']} days are free, then ${cycle_price} per {cycle_label} unless canceled during the trial.")
+            if st.button("Start 7-Day Trial Checkout", use_container_width=True, key="billing_checkout_start"):
+                try:
+                    checkout_session = create_checkout_session(company_name, st.session_state.get("username", "guest"), checkout_plan, billing_cycle=billing_cycle)
+                    st.session_state["billing_checkout_url"] = checkout_session["url"]
+                    log_audit_event(st.session_state.get("username", "guest"), "billing_checkout_started", details=f"company={company_name};plan={checkout_plan};cycle={billing_cycle}")
+                except Exception as exc:
+                    st.error(f"Could not create Stripe checkout session: {exc}")
+            checkout_url = st.session_state.get("billing_checkout_url")
+            if checkout_url:
+                st.link_button("Open Stripe Checkout", checkout_url, use_container_width=True)
+
+        with billing_col2:
+            st.markdown("#### Manage Billing")
+            st.caption("Use the Stripe customer portal to update card details, cancel renewal, or review invoices.")
+            if st.button("Refresh Subscription Status", use_container_width=True, key="billing_refresh_status"):
+                try:
+                    subscription = sync_company_subscription(company_name)
+                    st.session_state["plan"] = get_user_plan(st.session_state.get("username", "guest"))
+                    _queue_billing_flash("success", "Subscription status refreshed from Stripe.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not refresh Stripe subscription state: {exc}")
+            if st.button("Open Billing Portal", use_container_width=True, key="billing_open_portal"):
+                try:
+                    portal_session = create_billing_portal_session(company_name)
+                    st.session_state["billing_portal_url"] = portal_session["url"]
+                except Exception as exc:
+                    st.error(f"Could not open Stripe billing portal: {exc}")
+            portal_url = st.session_state.get("billing_portal_url")
+            if portal_url:
+                st.link_button("Open Stripe Billing Portal", portal_url, use_container_width=True)
+    else:
+        st.caption("Billing is managed by your company administrator.")
+
     if is_company_admin_role(st.session_state.get("role", "user")):
         st.info("User and tenant administration has moved to Access Management below Plans & Billing.")
         if st.button("Open Access Management"):

@@ -17,6 +17,7 @@ The app currently relies on these values for production:
 
 - Database: `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT`
 - Encryption: `CLOUD_ADVISOR_CREDENTIAL_KEY`
+- Billing checkout: `CLOUD_ADVISOR_APP_URL`, `STRIPE_SECRET_KEY`
 - Optional email reports: `YAGMAIL_USER`, `YAGMAIL_PASSWORD`, `FEEDBACK_REPORT_EMAIL_TO`
 - Optional signup: `SUPABASE_URL`, `SUPABASE_KEY`
 - Optional AI features: `OPENAI_API_KEY`
@@ -30,15 +31,16 @@ The app currently relies on these values for production:
 4. Confirm the client account has the correct plan selected in Plans & Billing.
 5. Confirm restricted pages are hidden based on pack.
 6. Confirm reports generate in the deployed environment.
-7. Confirm billing and recommendation data come from the correct deployed database.
+7. Confirm billing checkout opens Stripe, returns to Plans & Billing, and activates the selected trial plan.
+8. Confirm billing and recommendation data come from the correct deployed database.
 
 ## Commercial Pack Validation
 
 Current plan behavior in code:
 
-1. `Starter`: 2 user licenses, 1 cloud account, dashboard and basic finance outputs.
-2. `Growth`: 5 user licenses, 5 cloud accounts, AI Recommendations, Cost Forecast, finance and executive reports.
-3. `Enterprise`: unlimited users, unlimited cloud accounts, Operations, board packs, full reporting.
+1. `Starter`: $150/month or $1440/year, 7-day trial, 2 user licenses, 1 cloud account, 30-day billing history.
+2. `Growth`: $250/month or $2400/year, 7-day trial, 5 user licenses, 5 cloud accounts, 180-day billing history.
+3. `Enterprise`: $500/month or $4800/year, 7-day trial, unlimited users, unlimited cloud accounts, unlimited billing history.
 
 ## Sharing With Clients
 
