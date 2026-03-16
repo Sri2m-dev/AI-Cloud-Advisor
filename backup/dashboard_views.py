@@ -101,4 +101,4 @@ def render_service_breakdown(df, symbol):
         uniformtext_mode="hide"
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")

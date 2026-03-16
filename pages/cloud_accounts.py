@@ -189,10 +189,10 @@ def _render_demo_environment_status():
     metric_col3.metric("Workflow Items", active_demo.get("recommendations", 0))
     st.caption(active_demo.get("description", ""))
     action_col1, action_col2 = st.columns([1.2, 1.4])
-    if action_col1.button("Open Dashboard", key="open_active_demo_dashboard", use_container_width=True):
+    if action_col1.button("Open Dashboard", key="open_active_demo_dashboard", width="stretch"):
         st.session_state["selected_page"] = "Dashboard"
         st.rerun()
-    if action_col2.button("Open Recommendations", key="open_active_demo_recommendations", use_container_width=True):
+    if action_col2.button("Open Recommendations", key="open_active_demo_recommendations", width="stretch"):
         st.session_state["selected_page"] = "Recommendations"
         st.rerun()
 
@@ -320,7 +320,7 @@ def cloud_accounts_page():
             st.caption(f"- {signal}")
 
         demo_col1, demo_col2, demo_col3 = st.columns([1.2, 1.2, 2.3])
-        if demo_col1.button("Load Demo Environment", use_container_width=True):
+        if demo_col1.button("Load Demo Environment", width="stretch"):
             max_demo_accounts = account_limit if account_limit != float('inf') else 3
             seed_summary = seed_demo_environment(
                 username,
@@ -344,7 +344,7 @@ def cloud_accounts_page():
                 f"{seed_summary['recommendations']} recommendations."
             )
             st.rerun()
-        if demo_col2.button("Reset Demo Environment", use_container_width=True):
+        if demo_col2.button("Reset Demo Environment", width="stretch"):
             reset_summary = reset_demo_environment(username)
             st.session_state.pop("active_demo_environment", None)
             st.success(
@@ -391,10 +391,10 @@ def cloud_accounts_page():
             _render_provider_help(selected_provider)
             st.info("You can change the provider later before connecting the account.")
             col1, col2 = st.columns([1, 1])
-            if col1.button("Continue", use_container_width=True):
+            if col1.button("Continue", width="stretch"):
                 st.session_state["cloud_account_wizard_step"] = 2
                 st.rerun()
-            if col2.button("Reset", use_container_width=True):
+            if col2.button("Reset", width="stretch"):
                 _reset_wizard()
                 st.rerun()
 
@@ -411,10 +411,10 @@ def cloud_accounts_page():
                 else:
                     st.warning(requirement_label)
             col1, col2 = st.columns([1, 1])
-            if col1.button("Back", use_container_width=True):
+            if col1.button("Back", width="stretch"):
                 st.session_state["cloud_account_wizard_step"] = 1
                 st.rerun()
-            if col2.button("Continue to credentials", use_container_width=True):
+            if col2.button("Continue to credentials", width="stretch"):
                 st.session_state["cloud_account_wizard_step"] = 3
                 st.rerun()
 
@@ -460,10 +460,10 @@ def cloud_accounts_page():
                     value=wizard_state["gcp_billing_account_id"],
                 )
             col1, col2 = st.columns([1, 1])
-            if col1.button("Back", use_container_width=True):
+            if col1.button("Back", width="stretch"):
                 st.session_state["cloud_account_wizard_step"] = 2
                 st.rerun()
-            if col2.button("Review connection", use_container_width=True):
+            if col2.button("Review connection", width="stretch"):
                 st.session_state["cloud_account_wizard_step"] = 4
                 st.rerun()
 
@@ -485,7 +485,7 @@ def cloud_accounts_page():
                             {"Field": "Credential fields", "Value": len(payload["credentials"])},
                         ]
                     )
-                    st.dataframe(review_frame, use_container_width=True, hide_index=True)
+                    st.dataframe(review_frame, width="stretch", hide_index=True)
                     st.success("Required fields are present. The platform will validate and start sync after connection.")
                 except json.JSONDecodeError:
                     st.error("The uploaded GCP JSON file could not be parsed. Upload a valid service account file.")
@@ -495,13 +495,13 @@ def cloud_accounts_page():
                 st.error("Some required fields are still missing. Go back and complete the credential step.")
 
             col1, col2, col3 = st.columns([1, 1, 1])
-            if col1.button("Back", use_container_width=True):
+            if col1.button("Back", width="stretch"):
                 st.session_state["cloud_account_wizard_step"] = 3
                 st.rerun()
-            if col2.button("Start over", use_container_width=True):
+            if col2.button("Start over", width="stretch"):
                 _reset_wizard()
                 st.rerun()
-            if col3.button("Save and Start Sync", use_container_width=True, disabled=payload is None):
+            if col3.button("Save and Start Sync", width="stretch", disabled=payload is None):
                 try:
                     result = create_cloud_account(
                         username=username,
@@ -515,7 +515,7 @@ def cloud_accounts_page():
                         st.write("Connection preview:")
                         preview = result["preview"]
                         if isinstance(preview[0], dict):
-                            st.dataframe(pd.DataFrame(preview), use_container_width=True)
+                            st.dataframe(pd.DataFrame(preview), width="stretch")
                         else:
                             st.write(preview)
                     _reset_wizard()
@@ -558,9 +558,9 @@ def cloud_accounts_page():
                 recent_runs = list_sync_runs(cloud_account_id=account["id"], limit=3)
                 if recent_runs:
                     with st.expander("Recent sync runs", expanded=False):
-                        st.dataframe(pd.DataFrame(recent_runs), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(recent_runs), width="stretch", hide_index=True)
             with col2:
-                if st.button("Sync now", key=f"sync_account_{account['id']}", use_container_width=True):
+                if st.button("Sync now", key=f"sync_account_{account['id']}", width="stretch"):
                     try:
                         sync_cloud_account(account["id"], trigger_type="manual")
                         st.success("Sync completed successfully.")
@@ -571,3 +571,4 @@ def cloud_accounts_page():
 
 if __name__ == "__main__":
     cloud_accounts_page()
+

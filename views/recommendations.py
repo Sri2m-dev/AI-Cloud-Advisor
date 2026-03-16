@@ -96,7 +96,7 @@ def render_recommendations_page():
     with header_col2:
         st.write("")
         st.write("")
-        generate_clicked = st.button("Generate AI Recommendations", key="recommendations_generate_ai", use_container_width=True)
+        generate_clicked = st.button("Generate AI Recommendations", key="recommendations_generate_ai", width="stretch")
     if generate_clicked:
         seeded_recommendations = seed_ai_advisor_recommendations(username)
         st.success(f"Added {len(seeded_recommendations)} AI-generated workflow item(s) to AI Recommendations.")
@@ -207,7 +207,7 @@ def render_recommendations_page():
                 disabled=not can_manage,
                 label_visibility="collapsed",
             )
-            if row_cols[10].button("Set", key=f"rec_save_{item['id']}", use_container_width=True, disabled=not can_edit_details):
+            if row_cols[10].button("Set", key=f"rec_save_{item['id']}", width="stretch", disabled=not can_edit_details):
                 updated = update_recommendation_details(
                     recommendation_id=item["id"],
                     username=username,
@@ -218,7 +218,7 @@ def render_recommendations_page():
                 if updated:
                     st.rerun()
                 st.error("You do not have permission to update this recommendation.")
-            if row_cols[11].button("View", key=f"rec_open_{item['id']}", use_container_width=True):
+            if row_cols[11].button("View", key=f"rec_open_{item['id']}", width="stretch"):
                 st.session_state["recommendation_selected_id"] = item["id"]
                 st.rerun()
 
@@ -266,7 +266,7 @@ def render_recommendations_page():
         )
 
         if can_edit_details:
-            if st.button("Save Details", key=f"rec_detail_save_{selected_item['id']}", use_container_width=True):
+            if st.button("Save Details", key=f"rec_detail_save_{selected_item['id']}", width="stretch"):
                 updated = update_recommendation_details(
                     recommendation_id=selected_item["id"],
                     username=username,
@@ -303,7 +303,7 @@ def render_recommendations_page():
                 st.write(f"{index}. {step}")
 
         action_col1, action_col2, action_col3, action_col4 = st.columns(4)
-        if action_col1.button("Accept", key=f"rec_accept_{selected_item['id']}", use_container_width=True, disabled=not can_accept):
+        if action_col1.button("Accept", key=f"rec_accept_{selected_item['id']}", width="stretch", disabled=not can_accept):
             updated = update_recommendation_status(
                 selected_item["id"],
                 "accepted",
@@ -314,12 +314,12 @@ def render_recommendations_page():
             if updated:
                 st.rerun()
             st.error("You do not have permission to accept this recommendation.")
-        if action_col2.button("Snooze", key=f"rec_snooze_{selected_item['id']}", use_container_width=True, disabled=not can_edit_details):
+        if action_col2.button("Snooze", key=f"rec_snooze_{selected_item['id']}", width="stretch", disabled=not can_edit_details):
             updated = update_recommendation_status(selected_item["id"], "snoozed", username=username, notes="Snoozed from recommendations inbox")
             if updated:
                 st.rerun()
             st.error("You do not have permission to snooze this recommendation.")
-        if action_col3.button("Complete", key=f"rec_complete_{selected_item['id']}", use_container_width=True, disabled=not can_edit_details):
+        if action_col3.button("Complete", key=f"rec_complete_{selected_item['id']}", width="stretch", disabled=not can_edit_details):
             updated = update_recommendation_status(selected_item["id"], "completed", username=username, notes="Completed from recommendations inbox")
             if updated:
                 st.rerun()
@@ -331,7 +331,7 @@ def render_recommendations_page():
             placeholder="Optional",
             disabled=not can_edit_details,
         )
-        if st.button("Dismiss", key=f"rec_dismiss_{selected_item['id']}", use_container_width=True, disabled=not can_edit_details):
+        if st.button("Dismiss", key=f"rec_dismiss_{selected_item['id']}", width="stretch", disabled=not can_edit_details):
             updated = update_recommendation_status(
                 selected_item["id"],
                 "dismissed",
@@ -357,4 +357,5 @@ def render_recommendations_page():
                         for event in event_rows
                     ]
                 )
-                st.dataframe(history_frame, use_container_width=True, hide_index=True)
+                st.dataframe(history_frame, width="stretch", hide_index=True)
+

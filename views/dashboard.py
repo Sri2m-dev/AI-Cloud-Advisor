@@ -39,7 +39,7 @@ data = pd.DataFrame({
 
 fig = px.line(data, x="Month", y="Cost", markers=True)
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # AWS Cost Trend
 df = get_aws_cost()
@@ -58,7 +58,7 @@ df = calculate_unit_cost(service_cost)
 st.dataframe(df)
 
 fig2 = px.pie(service_cost, names="Service", values="Cost")
-st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig2, width="stretch")
 
 # AI FinOps Recommendation
 if st.button("Generate AI Optimization Insights"):

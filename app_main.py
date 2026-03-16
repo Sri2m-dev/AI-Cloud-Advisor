@@ -148,11 +148,11 @@ def cost_forecast_page():
                 fig.add_trace(go.Scatter(x=forecast_prophet['ds'], y=forecast_prophet['yhat_lower'], mode='lines', name='Lower CI', line=dict(dash='dash', color='salmon')))
                 fig.update_layout(title='Prophet Forecast with Confidence Interval', xaxis_title='Date', yaxis_title='Cost')
                 with st.expander("Show/Hide Prophet Confidence Interval Chart", expanded=True):
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                 # Prophet components plot for explainability
                 with st.expander("Show/Hide Prophet Components (Explainability)", expanded=False):
                     from prophet.plot import plot_components_plotly
-                    st.plotly_chart(plot_components_plotly(m, forecast_prophet), use_container_width=True)
+                    st.plotly_chart(plot_components_plotly(m, forecast_prophet), width="stretch")
                 forecast_data = forecast_prophet[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(forecast_period)
             elif model_choice == "ARIMA":
                 try:
@@ -172,7 +172,7 @@ def cost_forecast_page():
                         fig_resid = go.Figure()
                         fig_resid.add_trace(go.Scatter(y=residuals, mode='lines', name='Residuals'))
                         fig_resid.update_layout(title='ARIMA Residuals', xaxis_title='Time', yaxis_title='Residual')
-                        st.plotly_chart(fig_resid, use_container_width=True)
+                        st.plotly_chart(fig_resid, width="stretch")
                 except Exception as e:
                     st.warning(f"ARIMA model error: {e}")
                     forecast_data = pd.DataFrame()
@@ -411,13 +411,13 @@ def _render_cloud_operations_summary(username):
     with left_col:
         st.markdown("#### Accounts Requiring Attention")
         if attention_accounts:
-            st.dataframe(pd.DataFrame(attention_accounts), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(attention_accounts), width="stretch", hide_index=True)
         else:
             st.success("All connected accounts are currently healthy.")
     with right_col:
         st.markdown("#### Recent Sync Activity")
         if recent_runs:
-            st.dataframe(pd.DataFrame(recent_runs), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(recent_runs), width="stretch", hide_index=True)
         else:
             st.caption("No sync runs recorded yet.")
 
@@ -475,7 +475,7 @@ def _render_my_open_recommendations(username):
             }
         )
 
-    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
 
 def dashboard_page():
     anomaly_feedback = []
@@ -505,7 +505,7 @@ def dashboard_page():
     col1, col2 = st.columns([1,4])
     with col1:
         email_to = st.text_input("Recipient Email", "your@email.com", key="email_input_compact")
-        send_btn = st.button("Send Email", key="send_email_compact", use_container_width=True)
+        send_btn = st.button("Send Email", key="send_email_compact", width="stretch")
     if send_btn:
         yag = yagmail.SMTP(user=os.getenv("YAGMAIL_USER"), password=os.getenv("YAGMAIL_PASSWORD"))
         attachments = []
@@ -773,19 +773,19 @@ def dashboard_page():
     st.markdown("### Cost Breakdown by Tag")
     by_tag = filtered.groupby('tag')['cost'].sum().reset_index()
     fig_tag = px.bar(by_tag, x='tag', y='cost', text='cost', title='Cost by Tag')
-    st.plotly_chart(fig_tag, use_container_width=True)
+    st.plotly_chart(fig_tag, width="stretch")
     st.dataframe(by_tag.rename(columns={'cost': 'Total Cost'}))
 
     st.markdown("### Cost Breakdown by User")
     by_user = filtered.groupby('user')['cost'].sum().reset_index()
     fig_user = px.bar(by_user, x='user', y='cost', text='cost', title='Cost by User')
-    st.plotly_chart(fig_user, use_container_width=True)
+    st.plotly_chart(fig_user, width="stretch")
     st.dataframe(by_user.rename(columns={'cost': 'Total Cost'}))
 
     st.markdown("### Cost Breakdown by Project")
     by_project = filtered.groupby('project')['cost'].sum().reset_index()
     fig_proj = px.bar(by_project, x='project', y='cost', text='cost', title='Cost by Project')
-    st.plotly_chart(fig_proj, use_container_width=True)
+    st.plotly_chart(fig_proj, width="stretch")
     st.dataframe(by_project.rename(columns={'cost': 'Total Cost'}))
 
     # --- Advanced savings opportunity analysis ---
@@ -824,7 +824,7 @@ def dashboard_page():
     monthly['month'] = monthly['month'].astype(str)
     monthly['pct_change'] = monthly['cost'].pct_change() * 100
     fig_mo = px.bar(monthly, x='month', y='cost', text='cost', title='Monthly Cost')
-    st.plotly_chart(fig_mo, use_container_width=True)
+    st.plotly_chart(fig_mo, width="stretch")
     st.dataframe(monthly[['month', 'cost', 'pct_change']].rename(columns={'cost': 'Total Cost', 'pct_change': '% Change'}))
 
     # --- AI/ML: Anomaly Detection (Multivariate, Explainable) ---
@@ -841,7 +841,7 @@ def dashboard_page():
         anomalies = trend[trend['anomaly'] == -1]
         fig_anom = px.line(trend, x='date', y='cost', title='Cost Trend with Anomalies')
         fig_anom.add_scatter(x=anomalies['date'], y=anomalies['cost'], mode='markers', marker=dict(color='red', size=10), name='Anomaly')
-        st.plotly_chart(fig_anom, use_container_width=True)
+        st.plotly_chart(fig_anom, width="stretch")
         if not anomalies.empty:
             st.error(f"Anomalies detected on: {', '.join(anomalies['date'].dt.strftime('%Y-%m-%d'))}")
             st.dataframe(anomalies[['date', 'cost', 'utilization', 'cost_var', 'anomaly_score']].rename(columns={'date': 'Date', 'cost': 'Total Cost', 'utilization': 'Utilization', 'cost_var': 'Cost Variance', 'anomaly_score': 'Anomaly Score'}))
@@ -933,7 +933,7 @@ def dashboard_page():
     st.markdown("### Cost Trend Over Time")
     trend = filtered.groupby('date')['cost'].sum().reset_index()
     fig = px.line(trend, x='date', y='cost', title='Total Cost Over Time')
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Cost breakdowns
     st.markdown("### Cost Breakdown")
@@ -941,11 +941,11 @@ def dashboard_page():
     with col1:
         by_account = filtered.groupby('account')['cost'].sum().reset_index()
         fig1 = px.pie(by_account, names='account', values='cost', title='Cost by Account')
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width="stretch")
     with col2:
         by_service = filtered.groupby('service')['cost'].sum().reset_index()
         fig2 = px.pie(by_service, names='service', values='cost', title='Cost by Service')
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
     # Top N
     st.markdown("### Top 10 Days by Cost")
@@ -1343,3 +1343,4 @@ elif selected_page == "Plans & Billing":
                 st.success(f"Plan updated to: {new_plan}")
     else:
         st.warning("Only admin users can change the plan.")
+

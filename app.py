@@ -2,6 +2,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 import os
+import html
 # Disable Streamlit's default multipage navigation sidebar
 os.environ["STREAMLIT_PAGES"] = "0"
 try:
@@ -38,6 +39,64 @@ hide_pages = """
 }
 .stDeployButton {
     display: none;
+}
+
+.block-container {
+    padding-top: 1.15rem;
+    padding-bottom: 1rem;
+    max-width: 1440px;
+}
+
+[data-testid="stSidebar"] .block-container {
+    padding-top: 1rem;
+}
+
+[data-testid="stMetric"] {
+    background: #e9f3fa;
+    border: 1px solid #dce8f2;
+    border-radius: 12px;
+    padding: 0.8rem 0.9rem;
+}
+
+div.stButton > button,
+div.stDownloadButton > button,
+button[kind="primary"] {
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div {
+    border-radius: 10px;
+}
+
+.saas-workspace-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.75rem 0;
+    margin-bottom: 1rem;
+}
+
+.saas-workspace-title {
+    font-size: 1.1rem;
+    color: #111827;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.saas-workspace-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.81rem;
+    color: #6b7280;
+    font-weight: 500;
+    background: #f3f4f6;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
 }
 </style>
 """
@@ -155,6 +214,20 @@ def _render_billing_flash():
     if not flash:
         return
     getattr(st, flash.get("level", "info"), st.info)(flash.get("message", ""))
+
+
+def _render_workspace_header(selected_page, plan_name):
+    page_name = html.escape(str(selected_page or "Dashboard"))
+    plan_label = html.escape(str(plan_name or "Starter"))
+    st.markdown(
+        f"""
+        <div class="saas-workspace-header">
+            <div class="saas-workspace-title">{page_name}</div>
+            <div class="saas-workspace-meta">Plan: {plan_label}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _apply_plan_billing_history_limit(billing_df, username):
@@ -486,11 +559,11 @@ def cost_forecast_page():
                 fig.add_trace(go.Scatter(x=forecast_prophet['ds'], y=forecast_prophet['yhat_lower'], mode='lines', name='Lower CI', line=dict(dash='dash', color='salmon')))
                 fig.update_layout(title='Prophet Forecast with Confidence Interval', xaxis_title='Date', yaxis_title='Cost')
                 with st.expander("Show/Hide Prophet Confidence Interval Chart", expanded=True):
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                 # Prophet components plot for explainability
                 with st.expander("Show/Hide Prophet Components (Explainability)", expanded=False):
                     from prophet.plot import plot_components_plotly
-                    st.plotly_chart(plot_components_plotly(m, forecast_prophet), use_container_width=True)
+                    st.plotly_chart(plot_components_plotly(m, forecast_prophet), width="stretch")
                 forecast_data = forecast_prophet[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(forecast_period)
             elif model_choice == "ARIMA":
                 try:
@@ -510,7 +583,7 @@ def cost_forecast_page():
                         fig_resid = go.Figure()
                         fig_resid.add_trace(go.Scatter(y=residuals, mode='lines', name='Residuals'))
                         fig_resid.update_layout(title='ARIMA Residuals', xaxis_title='Time', yaxis_title='Residual')
-                        st.plotly_chart(fig_resid, use_container_width=True)
+                        st.plotly_chart(fig_resid, width="stretch")
                 except Exception as e:
                     st.warning(f"ARIMA model error: {e}")
                     forecast_data = pd.DataFrame()
@@ -578,7 +651,7 @@ def cost_forecast_page():
             insight_col1, insight_col2, insight_col3 = st.columns([1.1, 1.1, 1.6])
             insight_col1.metric("Recent Average", f"${forecast_recommendation['recent_average']:,.0f}")
             insight_col2.metric("Projected Increase", f"{forecast_recommendation['projected_change_ratio']:.0%}")
-            if insight_col3.button("Create Forecast Recommendation", key=f"forecast_recommendation_{model_choice}_{forecast_period}", use_container_width=True):
+            if insight_col3.button("Create Forecast Recommendation", key=f"forecast_recommendation_{model_choice}_{forecast_period}", width="stretch"):
                 recommendation_id = save_recommendation(
                     username=st.session_state.get("username", "guest"),
                     category="forecast",
@@ -601,7 +674,7 @@ def cost_forecast_page():
                     f"recommendation_id={recommendation_id}, model={model_choice}, period={forecast_period}",
                 )
                 st.success("Forecast recommendation saved to the workflow inbox.")
-            if insight_col3.button("Open AI Recommendations", key=f"forecast_open_recommendations_{model_choice}_{forecast_period}", use_container_width=True):
+            if insight_col3.button("Open AI Recommendations", key=f"forecast_open_recommendations_{model_choice}_{forecast_period}", width="stretch"):
                 st.session_state["selected_page"] = "AI Recommendations"
                 st.rerun()
         else:
@@ -818,15 +891,15 @@ def _render_cloud_operations_summary(username, active_demo=None):
             st.markdown("#### Accounts Requiring Attention")
 
         if active_demo and active_demo.get("key") != "healthy" and delta_rows:
-            st.dataframe(pd.DataFrame(delta_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(delta_rows), width="stretch", hide_index=True)
         elif attention_accounts:
-            st.dataframe(pd.DataFrame(attention_accounts), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(attention_accounts), width="stretch", hide_index=True)
         else:
             st.success("All connected accounts are currently healthy.")
     with right_col:
         st.markdown("#### Recent Sync Activity")
         if recent_runs:
-            st.dataframe(pd.DataFrame(recent_runs), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(recent_runs), width="stretch", hide_index=True)
         else:
             st.caption("No sync runs recorded yet.")
 
@@ -856,7 +929,7 @@ def _render_my_open_recommendations(username):
     action_col.button(
         "Open AI Recommendations",
         key="dashboard_open_recommendations_inbox",
-        use_container_width=True,
+        width="stretch",
         on_click=lambda: st.session_state.update(selected_page="AI Recommendations"),
     )
     st.caption("Dashboard keeps this lightweight. Use AI Recommendations for full workflow management.")
@@ -893,7 +966,7 @@ def _render_my_open_recommendations(username):
             }
         )
 
-    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
 
 
 def _render_forecast_risk_summary(username):
@@ -909,7 +982,7 @@ def _render_forecast_risk_summary(username):
     action_col.button(
         "Open Forecast",
         key="dashboard_open_cost_forecast",
-        use_container_width=True,
+        width="stretch",
         on_click=lambda: st.session_state.update(selected_page="Cost Forecast (Premium)"),
     )
 
@@ -947,8 +1020,8 @@ def _render_forecast_risk_summary(username):
         }
         for item in top_items
     ]
-    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
-    if st.button("Open Forecast Recommendations", key="dashboard_open_forecast_recommendations", use_container_width=True):
+    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
+    if st.button("Open Forecast Recommendations", key="dashboard_open_forecast_recommendations", width="stretch"):
         st.session_state["selected_page"] = "AI Recommendations"
         st.rerun()
 
@@ -1159,7 +1232,7 @@ def _render_dashboard_charts(username, active_demo=None):
             title="Daily spend trend",
         )
         trend_fig.update_layout(margin=dict(l=10, r=10, t=50, b=10), height=320)
-        st.plotly_chart(trend_fig, use_container_width=True)
+        st.plotly_chart(trend_fig, width="stretch")
 
     with chart_col2:
         mix_fig = px.bar(
@@ -1170,7 +1243,7 @@ def _render_dashboard_charts(username, active_demo=None):
             title="Top cost drivers",
         )
         mix_fig.update_layout(margin=dict(l=10, r=10, t=50, b=10), height=320, yaxis=dict(categoryorder="total ascending"))
-        st.plotly_chart(mix_fig, use_container_width=True)
+        st.plotly_chart(mix_fig, width="stretch")
 
     scope_text = ", ".join(account_scope) if account_scope else "all connected accounts"
     st.caption(f"Charts are scoped to: {scope_text}")
@@ -1294,7 +1367,7 @@ def dashboard_page():
         st.caption("Dashboard metrics are currently scoped to: " + ", ".join(summary_metrics["account_names"]))
 
     action_col1, action_col2 = st.columns([1.2, 3])
-    if action_col1.button("Generate Recommendations", key="dashboard_generate_recommendations", use_container_width=True):
+    if action_col1.button("Generate Recommendations", key="dashboard_generate_recommendations", width="stretch"):
         dashboard_count = _seed_dashboard_recommendations(username)
         ai_count = len(_seed_ai_advisor_recommendations(username))
         st.success(f"AI Recommendations refreshed with {dashboard_count + ai_count} workflow items.")
@@ -1327,7 +1400,7 @@ def dashboard_page():
     col1, col2 = st.columns([1,4])
     with col1:
         email_to = st.text_input("Recipient Email", "your@email.com", key="email_input_compact")
-        send_btn = st.button("Send Email", key="send_email_compact", use_container_width=True)
+        send_btn = st.button("Send Email", key="send_email_compact", width="stretch")
     if send_btn:
         yag = yagmail.SMTP(user=os.getenv("YAGMAIL_USER"), password=os.getenv("YAGMAIL_PASSWORD"))
         attachments = []
@@ -1595,19 +1668,19 @@ def dashboard_page():
     st.markdown("### Cost Breakdown by Tag")
     by_tag = filtered.groupby('tag')['cost'].sum().reset_index()
     fig_tag = px.bar(by_tag, x='tag', y='cost', text='cost', title='Cost by Tag')
-    st.plotly_chart(fig_tag, use_container_width=True)
+    st.plotly_chart(fig_tag, width="stretch")
     st.dataframe(by_tag.rename(columns={'cost': 'Total Cost'}))
 
     st.markdown("### Cost Breakdown by User")
     by_user = filtered.groupby('user')['cost'].sum().reset_index()
     fig_user = px.bar(by_user, x='user', y='cost', text='cost', title='Cost by User')
-    st.plotly_chart(fig_user, use_container_width=True)
+    st.plotly_chart(fig_user, width="stretch")
     st.dataframe(by_user.rename(columns={'cost': 'Total Cost'}))
 
     st.markdown("### Cost Breakdown by Project")
     by_project = filtered.groupby('project')['cost'].sum().reset_index()
     fig_proj = px.bar(by_project, x='project', y='cost', text='cost', title='Cost by Project')
-    st.plotly_chart(fig_proj, use_container_width=True)
+    st.plotly_chart(fig_proj, width="stretch")
     st.dataframe(by_project.rename(columns={'cost': 'Total Cost'}))
 
     # --- Advanced savings opportunity analysis ---
@@ -1646,7 +1719,7 @@ def dashboard_page():
     monthly['month'] = monthly['month'].astype(str)
     monthly['pct_change'] = monthly['cost'].pct_change() * 100
     fig_mo = px.bar(monthly, x='month', y='cost', text='cost', title='Monthly Cost')
-    st.plotly_chart(fig_mo, use_container_width=True)
+    st.plotly_chart(fig_mo, width="stretch")
     st.dataframe(monthly[['month', 'cost', 'pct_change']].rename(columns={'cost': 'Total Cost', 'pct_change': '% Change'}))
 
     # --- AI/ML: Anomaly Detection (Multivariate, Explainable) ---
@@ -1663,7 +1736,7 @@ def dashboard_page():
         anomalies = trend[trend['anomaly'] == -1]
         fig_anom = px.line(trend, x='date', y='cost', title='Cost Trend with Anomalies')
         fig_anom.add_scatter(x=anomalies['date'], y=anomalies['cost'], mode='markers', marker=dict(color='red', size=10), name='Anomaly')
-        st.plotly_chart(fig_anom, use_container_width=True)
+        st.plotly_chart(fig_anom, width="stretch")
         if not anomalies.empty:
             st.error(f"Anomalies detected on: {', '.join(anomalies['date'].dt.strftime('%Y-%m-%d'))}")
             st.dataframe(anomalies[['date', 'cost', 'utilization', 'cost_var', 'anomaly_score']].rename(columns={'date': 'Date', 'cost': 'Total Cost', 'utilization': 'Utilization', 'cost_var': 'Cost Variance', 'anomaly_score': 'Anomaly Score'}))
@@ -1755,7 +1828,7 @@ def dashboard_page():
     st.markdown("### Cost Trend Over Time")
     trend = filtered.groupby('date')['cost'].sum().reset_index()
     fig = px.line(trend, x='date', y='cost', title='Total Cost Over Time')
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Cost breakdowns
     st.markdown("### Cost Breakdown")
@@ -1763,11 +1836,11 @@ def dashboard_page():
     with col1:
         by_account = filtered.groupby('account')['cost'].sum().reset_index()
         fig1 = px.pie(by_account, names='account', values='cost', title='Cost by Account')
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width="stretch")
     with col2:
         by_service = filtered.groupby('service')['cost'].sum().reset_index()
         fig2 = px.pie(by_service, names='service', values='cost', title='Cost by Service')
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
     # Top N
     st.markdown("### Top 10 Days by Cost")
@@ -1799,7 +1872,7 @@ def ai_advisor_page():
             {"Recommendation": "Archive stale snapshots and cold backups", "Potential Savings": "$430/month", "Priority": "Medium"},
         ]
     )
-    st.dataframe(recommendation_preview, use_container_width=True, hide_index=True)
+    st.dataframe(recommendation_preview, width="stretch", hide_index=True)
     st.markdown("""
     **AI Advisor role**
 
@@ -1807,7 +1880,7 @@ def ai_advisor_page():
     - Previews likely savings themes before workflow tracking begins
     - Leaves generation and status management to Recommendations
     """)
-    if st.button("Open AI Recommendations", key="ai_advisor_open_recommendations", use_container_width=True):
+    if st.button("Open AI Recommendations", key="ai_advisor_open_recommendations", width="stretch"):
         st.session_state["selected_page"] = "AI Recommendations"
         st.rerun()
 
@@ -1956,30 +2029,30 @@ def cost_explorer_page():
         with trend_col:
             trend_fig = px.line(daily_trend, x="Date", y="Cost", markers=True, title="Daily spend trend")
             trend_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=340)
-            st.plotly_chart(trend_fig, use_container_width=True)
+            st.plotly_chart(trend_fig, width="stretch")
         with breakdown_col:
             service_fig = px.bar(service_breakdown, x="Service", y="Cost", title="Top services")
             service_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=340)
-            st.plotly_chart(service_fig, use_container_width=True)
+            st.plotly_chart(service_fig, width="stretch")
 
         summary_col1, summary_col2 = st.columns([1.1, 1.1])
         with summary_col1:
             st.markdown("#### Service Summary")
-            st.dataframe(service_breakdown, use_container_width=True, hide_index=True)
+            st.dataframe(service_breakdown, width="stretch", hide_index=True)
         with summary_col2:
             st.markdown("#### Account Summary")
-            st.dataframe(account_breakdown.head(10), use_container_width=True, hide_index=True)
+            st.dataframe(account_breakdown.head(10), width="stretch", hide_index=True)
 
     with breakdown_tab:
         lower_col1, lower_col2 = st.columns([1.1, 1.1])
         with lower_col1:
             account_fig = px.bar(account_breakdown.head(10), x="Cost", y="Account", orientation="h", title="Top accounts")
             account_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=320, yaxis=dict(categoryorder="total ascending"))
-            st.plotly_chart(account_fig, use_container_width=True)
+            st.plotly_chart(account_fig, width="stretch")
         with lower_col2:
             provider_fig = px.pie(provider_breakdown, names="Provider", values="Cost", title="Provider mix")
             provider_fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=320)
-            st.plotly_chart(provider_fig, use_container_width=True)
+            st.plotly_chart(provider_fig, width="stretch")
 
     with data_tab:
         st.subheader("Filtered Cost Details")
@@ -1992,9 +2065,9 @@ def cost_explorer_page():
             data=csv_bytes,
             file_name="cost_explorer_filtered.csv",
             mime="text/csv",
-            use_container_width=False,
+            width="content",
         )
-        st.dataframe(detail_scope, use_container_width=True, hide_index=True)
+        st.dataframe(detail_scope, width="stretch", hide_index=True)
 
 def finops_insights_page(embedded=False):
     if embedded:
@@ -2139,7 +2212,7 @@ def reports_page():
                     os.path.basename(report_path),
                     mime,
                     key=f"download_{state_key}",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     def _prepare_report(state_key, generator, success_message):
@@ -2158,7 +2231,7 @@ def reports_page():
         with finance_col1:
             st.markdown("#### Finance Summary PDF")
             st.caption("Compact PDF with current spend, forecast, savings, service concentration, and account health.")
-            if st.button("Prepare Finance PDF", key="prepare_finance_pdf", use_container_width=True):
+            if st.button("Prepare Finance PDF", key="prepare_finance_pdf", width="stretch"):
                 _prepare_report(
                     "report_finance_pdf",
                     lambda: create_pdf_report(summary_df, "Finance Summary Report"),
@@ -2169,7 +2242,7 @@ def reports_page():
         with finance_col2:
             st.markdown("#### Cost Workbook")
             st.caption("Excel workbook with executive summary, service-cost breakdown, and detailed spend tabs.")
-            if st.button("Prepare Excel Workbook", key="prepare_finance_excel", use_container_width=True):
+            if st.button("Prepare Excel Workbook", key="prepare_finance_excel", width="stretch"):
                 from cloud_report_generator import generate_excel_report
 
                 _prepare_report(
@@ -2196,7 +2269,7 @@ def reports_page():
         with leadership_col1:
             st.markdown("#### Executive Presentation")
             st.caption("Management-ready PowerPoint with KPIs, cost distribution, and recommended next steps.")
-            if st.button("Prepare Executive Deck", key="prepare_executive_deck", use_container_width=True):
+            if st.button("Prepare Executive Deck", key="prepare_executive_deck", width="stretch"):
                 from ppt_report_generator import generate_executive_ppt
 
                 _prepare_report(
@@ -2220,7 +2293,7 @@ def reports_page():
         with leadership_col2:
             st.markdown("#### CEO Strategy Pack")
             st.caption("Narrative-heavy strategy pack focused on business value, risk of inaction, and reinvestment story.")
-            if st.button("Prepare CEO Strategy Pack", key="prepare_ceo_pack", use_container_width=True):
+            if st.button("Prepare CEO Strategy Pack", key="prepare_ceo_pack", width="stretch"):
                 from ceo_strategy_pack_generator import generate_ceo_strategy_pack
 
                 _prepare_report(
@@ -2249,7 +2322,7 @@ def reports_page():
             with board_col1:
                 st.markdown("#### Partner Board Pack")
                 st.caption("Board-style presentation covering spend concentration, risks, ROI, and transformation roadmap.")
-                if st.button("Prepare Board Pack", key="prepare_board_pack", use_container_width=True):
+                if st.button("Prepare Board Pack", key="prepare_board_pack", width="stretch"):
                     from ppt_report_generator import generate_partner_board_pack
 
                     _prepare_report(
@@ -2274,7 +2347,7 @@ def reports_page():
             with board_col2:
                 st.markdown("#### McKinsey-Style Deck")
                 st.caption("Consulting-style transformation summary for senior stakeholders and steering-committee reviews.")
-                if st.button("Prepare McKinsey-Style Deck", key="prepare_mckinsey_deck", use_container_width=True):
+                if st.button("Prepare McKinsey-Style Deck", key="prepare_mckinsey_deck", width="stretch"):
                     from mckinsey_deck_generator import generate_mckinsey_deck
 
                     _prepare_report(
@@ -2422,7 +2495,7 @@ def access_management_page():
                     st.rerun()
 
             if internal_users:
-                st.dataframe(pd.DataFrame(internal_users), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(internal_users), width="stretch", hide_index=True)
                 reset_internal_user = st.selectbox(
                     "Reset Internal User Password",
                     [item["username"] for item in internal_users],
@@ -2473,7 +2546,7 @@ def access_management_page():
 
             client_companies = [company for company in list_companies(viewer_username=username) if company.get("company_name") != current_company]
             if client_companies:
-                st.dataframe(pd.DataFrame(client_companies), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(client_companies), width="stretch", hide_index=True)
                 selected_company_name = st.selectbox(
                     "Manage Client Organization",
                     [company["company_name"] for company in client_companies],
@@ -2493,7 +2566,7 @@ def access_management_page():
 
                 client_users = list_users(company=selected_company_name)
                 if client_users:
-                    st.dataframe(pd.DataFrame(client_users), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(client_users), width="stretch", hide_index=True)
                     reset_client_user = st.selectbox(
                         "Reset Client User Password",
                         [item["username"] for item in client_users],
@@ -2545,7 +2618,7 @@ def access_management_page():
                 st.rerun()
 
         if company_users:
-            st.dataframe(pd.DataFrame(company_users), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(company_users), width="stretch", hide_index=True)
             reset_company_user = st.selectbox(
                 "Reset Company User Password",
                 [item["username"] for item in company_users],
@@ -2682,6 +2755,8 @@ if selected_page not in set(get_plan_pages(current_plan)).union(admin_pages):
     st.warning(f"{selected_page} is not included in the {current_plan} plan.")
     st.session_state["selected_page"] = "Plans & Billing"
     st.rerun()
+
+_render_workspace_header(selected_page, current_plan)
 
 if selected_page == "Dashboard":
     dashboard_page()
@@ -2825,7 +2900,7 @@ elif selected_page == "Plans & Billing":
             cycle_price = selected_plan_def["monthly_price"] if billing_cycle == "monthly" else selected_plan_def["yearly_price"]
             cycle_label = "month" if billing_cycle == "monthly" else "year"
             st.caption(f"Card is collected at checkout. The first {selected_plan_def['trial_days']} days are free, then ${cycle_price} per {cycle_label} unless canceled during the trial.")
-            if st.button("Start 7-Day Trial Checkout", use_container_width=True, key="billing_checkout_start"):
+            if st.button("Start 7-Day Trial Checkout", width="stretch", key="billing_checkout_start"):
                 try:
                     checkout_session = create_checkout_session(company_name, st.session_state.get("username", "guest"), checkout_plan, billing_cycle=billing_cycle)
                     st.session_state["billing_checkout_url"] = checkout_session["url"]
@@ -2834,12 +2909,12 @@ elif selected_page == "Plans & Billing":
                     st.error(f"Could not create Stripe checkout session: {exc}")
             checkout_url = st.session_state.get("billing_checkout_url")
             if checkout_url:
-                st.link_button("Open Stripe Checkout", checkout_url, use_container_width=True)
+                st.link_button("Open Stripe Checkout", checkout_url, width="stretch")
 
         with billing_col2:
             st.markdown("#### Manage Billing")
             st.caption("Use the Stripe customer portal to update card details, cancel renewal, or review invoices.")
-            if st.button("Refresh Subscription Status", use_container_width=True, key="billing_refresh_status"):
+            if st.button("Refresh Subscription Status", width="stretch", key="billing_refresh_status"):
                 try:
                     subscription = sync_company_subscription(company_name)
                     st.session_state["plan"] = get_user_plan(st.session_state.get("username", "guest"))
@@ -2847,7 +2922,7 @@ elif selected_page == "Plans & Billing":
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Could not refresh Stripe subscription state: {exc}")
-            if st.button("Open Billing Portal", use_container_width=True, key="billing_open_portal"):
+            if st.button("Open Billing Portal", width="stretch", key="billing_open_portal"):
                 try:
                     portal_session = create_billing_portal_session(company_name)
                     st.session_state["billing_portal_url"] = portal_session["url"]
@@ -2855,7 +2930,7 @@ elif selected_page == "Plans & Billing":
                     st.error(f"Could not open Stripe billing portal: {exc}")
             portal_url = st.session_state.get("billing_portal_url")
             if portal_url:
-                st.link_button("Open Stripe Billing Portal", portal_url, use_container_width=True)
+                st.link_button("Open Stripe Billing Portal", portal_url, width="stretch")
     else:
         st.caption("Billing is managed by your company administrator.")
 

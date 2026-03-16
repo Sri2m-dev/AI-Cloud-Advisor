@@ -280,7 +280,7 @@ def render_cost_by_service(service_cost, symbol):
     fig.update_traces(
         hovertemplate=f"%{{y}}<br>{symbol}%{{x:,.0f}}"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 import streamlit as st
 import pandas as pd
@@ -376,7 +376,7 @@ def render_service_breakdown(df, symbol):
         yaxis=dict(autorange="reversed")
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 def render_optimization_recommendations(df, symbol):
     with st.expander("Detailed Optimization Recommendations", expanded=False):
@@ -523,7 +523,7 @@ def render_monthly_trend(df, symbol):
         xaxis_title=""
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 def render_cost_spike_detector(df, symbol):
     st.markdown("## ⚠ Cost Spike Detector")
@@ -636,7 +636,7 @@ def render_cost_distribution(df, symbol, total_spend):
 
     with col1:
         st.markdown("<div style='margin-top:-40px'>", unsafe_allow_html=True)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
@@ -689,3 +689,4 @@ def render_cloud_waste_detection(df, symbol):
         else:
             for item in waste_items:
                 st.markdown(item)
+
