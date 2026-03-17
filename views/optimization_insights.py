@@ -11,7 +11,9 @@ from database.db import (
     update_recommendation_status,
 )
 from services.optimization_engine import recommend_ri_purchase_timing
-from views.ui_helpers import render_empty_state, show_toast
+from services.azure_optimization_engine import get_azure_optimization_recommendations
+from services.gcp_optimization_engine import get_gcp_optimization_recommendations
+from views.ui_helpers import render_empty_state, show_toast, render_table_html
 from views.ui_messages import (
     TOAST_OPT_ACCEPTED,
     TOAST_OPT_COMPLETED,
@@ -19,6 +21,17 @@ from views.ui_messages import (
     TOAST_OPT_SNOOZED,
     TOAST_OPT_WORKFLOW_SAVED,
 )
+
+
+def _provider_from_resource(resource: str | None) -> str:
+    normalized = str(resource or "").lower()
+    if normalized.startswith("aws"):
+        return "AWS"
+    if normalized.startswith("azure"):
+        return "Azure"
+    if normalized.startswith("gcp"):
+        return "GCP"
+    return "Other"
 
 
 def _seed_optimization_recommendations(username):
@@ -214,6 +227,9 @@ def _seed_optimization_recommendations(username):
             ],
         },
     ]
+    recommendations.extend(get_azure_optimization_recommendations())
+    recommendations.extend(get_gcp_optimization_recommendations())
+
     for item in recommendations:
         save_recommendation(
             username=username,
@@ -239,7 +255,7 @@ def render_optimization_insights_page():
     username = st.session_state.get("username", "guest")
     role = st.session_state.get("role", "user")
     st.title("Optimization Insights")
-    st.write("Review cost-saving opportunities and manage them as workflow items.")
+    st.write("Review multi-cloud cost-saving opportunities and manage them as workflow items.")
 
     # Commitment Utilization Dashboard
     st.subheader("Commitment Utilization Status")
@@ -262,7 +278,7 @@ def render_optimization_insights_page():
     opportunities = pd.DataFrame(
         {
             "Resource": ["EC2 Instances", "Spot Instances", "Savings Plans/RI", "RI Purchase Timing", "Scheduled EC2", "Network/Egress", "RDS Instances", "Tagging/Attribution", "EBS Volumes", "S3 Storage"],
-            "Est. Savings/Year ($)": [4200, 6800, 3400, 4320, 2800, 1800, 2100, 2600, 800, 1200],
+            "Est. Savings/Year ($)": ["$4,200", "$6,800", "$3,400", "$4,320", "$2,800", "$1,800", "$2,100", "$2,600", "$800", "$1,200"],
             "Priority": ["High", "High", "High", "High", "High", "High", "High", "High", "Medium", "Medium"],
             "Effort": ["Medium", "High", "Low", "Low", "Medium", "Medium", "Medium", "Low", "Low", "Low"],
         }
@@ -398,12 +414,12 @@ def render_optimization_insights_page():
     with st.expander("Tagging Gap Breakdown by Service"):
         tagging_detail = pd.DataFrame({
             "Service": ["EC2", "RDS", "Lambda", "EBS", "S3", "ELB", "CloudWatch"],
-            "Monthly Spend ($)": [10510, 5107, 2100, 1800, 2053, 980, 640],
+            "Monthly Spend ($)": ["$10,510", "$5,107", "$2,100", "$1,800", "$2,053", "$980", "$640"],
             "Tagged (%)": [72, 85, 45, 30, 60, 20, 10],
             "Missing Tags": ["CostCenter, Owner", "Environment", "Team, CostCenter, Owner", "Owner, Project", "CostCenter", "All required tags", "All required tags"],
             "Risk": ["Medium", "Low", "High", "High", "Medium", "Critical", "Critical"],
         })
-        st.dataframe(tagging_detail, width="stretch", hide_index=True)
+        render_table_html(tagging_detail, hide_index=True)
 
     with st.expander("Recommended Tag Policy"):
         st.markdown("""
@@ -441,11 +457,11 @@ def render_optimization_insights_page():
         # Service-level spike detection
         service_spikes = pd.DataFrame({
             "Service": ["EC2", "RDS", "Lambda", "S3"],
-            "This Month ($)": [3840, 1250, 580, 420],
-            "Last Month Avg ($)": [3200, 1100, 650, 400],
+            "This Month ($)": ["$3,840", "$1,250", "$580", "$420"],
+            "Last Month Avg ($)": ["$3,200", "$1,100", "$650", "$400"],
             "Change (%)": ["+20%", "+13.6%", "-10.8%", "+5%"],
         })
-        st.dataframe(service_spikes, width="stretch", hide_index=True)
+        render_table_html(service_spikes, hide_index=True)
     
     # Budget configuration
     monthly_budget = 12000
@@ -480,20 +496,36 @@ def render_optimization_insights_page():
             st.rerun()
         return
 
+    provider_options = sorted({_provider_from_resource(item.get("resource")) for item in workflow_items})
+    selected_providers = st.multiselect(
+        "Filter by provider",
+        options=provider_options,
+        default=provider_options,
+        key="optimization_provider_filter",
+    )
+    filtered_workflow_items = [
+        item for item in workflow_items if _provider_from_resource(item.get("resource")) in selected_providers
+    ]
+    if not filtered_workflow_items:
+        st.info("No workflow items match the selected provider filter.")
+        return
+
     summary_col1, summary_col2, summary_col3 = st.columns(3)
-    summary_col1.metric("Open", sum(1 for item in workflow_items if item.get("status") in {"new", "accepted"}))
-    summary_col2.metric("Completed", sum(1 for item in workflow_items if item.get("status") == "completed"))
+    summary_col1.metric("Open", sum(1 for item in filtered_workflow_items if item.get("status") in {"new", "accepted"}))
+    summary_col2.metric("Completed", sum(1 for item in filtered_workflow_items if item.get("status") == "completed"))
     summary_col3.metric(
         "Potential Savings",
-        f"${sum(float(item.get('estimated_savings') or 0) for item in workflow_items):,.0f}",
+        f"${sum(float(item.get('estimated_savings') or 0) for item in filtered_workflow_items):,.0f}",
     )
 
-    for item in workflow_items:
+    for item in filtered_workflow_items:
         with st.container(border=True):
             can_edit_details = can_manage_recommendation(item, username, action="details")
             can_accept = can_manage_recommendation(item, username, action="accept")
             header_col, status_col = st.columns([3, 1])
+            provider = _provider_from_resource(item.get("resource"))
             header_col.markdown(f"**{item['title']}**")
+            header_col.caption(f"Provider: {provider}")
             header_col.caption(item.get("description") or "")
             status_col.metric("Status", item.get("status", "new").title())
 

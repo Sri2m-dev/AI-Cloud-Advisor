@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from database.db import (
     create_sync_run,
@@ -68,22 +69,37 @@ def _next_sync_at(sync_frequency_hours):
 
 
 def _aws_cost_dataframe(credentials):
-    temp_creds = assume_role(credentials["role_arn"], credentials["external_id"])
+    try:
+        temp_creds = assume_role(credentials["role_arn"], credentials["external_id"])
+    except NoCredentialsError as exc:
+        raise CloudAccountSyncError(
+            "AWS base credentials are missing on this runtime. Configure AWS credentials (profile/SSO/env) so the platform can call STS AssumeRole."
+        ) from exc
+    except ClientError as exc:
+        raise CloudAccountSyncError(f"AWS role assumption failed: {exc}") from exc
+
     if not temp_creds:
         raise CloudAccountSyncError("Failed to assume the AWS role with the supplied Role ARN and External ID.")
 
-    client = get_cost_explorer_client(temp_creds)
-    end_date = datetime.now(timezone.utc).date()
-    start_date = end_date - timedelta(days=30)
-    response = client.get_cost_and_usage(
-        TimePeriod={
-            "Start": start_date.isoformat(),
-            "End": end_date.isoformat(),
-        },
-        Granularity="MONTHLY",
-        Metrics=["UnblendedCost"],
-        GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
-    )
+    try:
+        client = get_cost_explorer_client(temp_creds)
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=30)
+        response = client.get_cost_and_usage(
+            TimePeriod={
+                "Start": start_date.isoformat(),
+                "End": end_date.isoformat(),
+            },
+            Granularity="MONTHLY",
+            Metrics=["UnblendedCost"],
+            GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+        )
+    except NoCredentialsError as exc:
+        raise CloudAccountSyncError(
+            "Temporary AWS session credentials could not be established. Verify your AWS setup and role trust policy."
+        ) from exc
+    except ClientError as exc:
+        raise CloudAccountSyncError(f"AWS Cost Explorer validation failed: {exc}") from exc
 
     rows = []
     for period in response.get("ResultsByTime", []):

@@ -1,5 +1,5 @@
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError
 
 def assume_role(role_arn: str, external_id: str, session_name: str = "CloudAdvisorSession"):
     """
@@ -19,6 +19,9 @@ def assume_role(role_arn: str, external_id: str, session_name: str = "CloudAdvis
             "aws_session_token": credentials["SessionToken"],
             "expiration": credentials["Expiration"]
         }
+    except NoCredentialsError as e:
+        print(f"AWS base credentials not found: {e}")
+        return None
     except ClientError as e:
         print(f"Error assuming role: {e}")
         return None

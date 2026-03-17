@@ -70,21 +70,60 @@ div[data-baseweb="input"] > div {
     border-radius: 10px;
 }
 
-.saas-workspace-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #e5e7eb;
-    padding: 0.75rem 0;
-    margin-bottom: 1rem;
+[data-testid="stDataFrame"] div[role="columnheader"],
+[data-testid="stDataFrame"] div[role="gridcell"],
+[data-testid="stDataFrame"] [role="presentation"] div,
+[data-testid="stDataFrame"] .ag-cell,
+[data-testid="stDataFrame"] .ag-header-cell-text {
+    justify-content: flex-start !important;
+    text-align: left !important;
 }
 
-.saas-workspace-title {
-    font-size: 1.1rem;
-    color: #111827;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    margin: 0;
+[data-testid="stDataFrame"] *:not(button) {
+    text-align: left !important;
+}
+
+.stTable table th,
+.stTable table td,
+.stTable * {
+    text-align: left !important;
+}
+
+/* Force left alignment on all ag-grid elements (aggressive) */
+[role="grid"] [role="row"] [role="gridcell"],
+[role="grid"] [role="row"] [role="columnheader"],
+.ag-cell,
+.ag-header-cell,
+.ag-header-cell-text,
+.ag-cell-wrapper,
+[data-testid="stDataFrame"] [class*="ag-"] {
+    text-align: left !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+/* Override inline styles on ag-grid cells */
+[data-testid="stDataFrame"] div {
+    text-align: left !important;
+}
+
+[data-testid="stDataFrame"] [role="gridcell"]:after {
+    text-align: left !important;
+}
+
+.saas-workspace-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0;
+    margin-bottom: -2.6rem;
+    position: relative;
+    z-index: 5;
+}
+
+.saas-workspace-header--tight {
+    margin-bottom: -2.25rem;
 }
 
 .saas-workspace-meta {
@@ -97,6 +136,11 @@ div[data-baseweb="input"] > div {
     background: #f3f4f6;
     padding: 0.35rem 0.65rem;
     border-radius: 6px;
+    margin-top: 3rem;
+}
+
+.saas-workspace-header--tight .saas-workspace-meta {
+    margin-top: 0.2rem;
 }
 </style>
 """
@@ -153,6 +197,47 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from database.db import save_forecast_note, load_forecast_note, log_audit_event
 import plotly.express as px
 from sklearn.ensemble import IsolationForest
+
+
+_original_st_dataframe = st.dataframe
+
+
+def _left_aligned_dataframe(data=None, *args, **kwargs):
+    """Wrap st.dataframe to format numeric columns and enforce left alignment via column_config.
+
+    - Currency-like columns render as $X,XXX
+    - Other float columns render as X,XXX.XX
+    - Count-like integer columns render with separators (X,XXX)
+    - All columns set to left alignment via column_config
+    """
+    if isinstance(data, pd.DataFrame):
+        currency_keywords = ("cost", "savings", "spend", "exposure", "amount", "price", "budget")
+        count_keywords = ("records", "count")
+        data = data.copy()
+        for col in data.columns:
+            if not pd.api.types.is_numeric_dtype(data[col]):
+                continue
+            col_name = str(col).lower()
+            if any(keyword in col_name for keyword in currency_keywords):
+                data[col] = data[col].apply(lambda v: f"${v:,.0f}" if pd.notna(v) else "")
+                continue
+            if any(keyword in col_name for keyword in count_keywords) and pd.api.types.is_integer_dtype(data[col]):
+                data[col] = data[col].apply(lambda v: f"{int(v):,}" if pd.notna(v) else "")
+                continue
+            if pd.api.types.is_float_dtype(data[col]):
+                data[col] = data[col].apply(lambda v: f"{v:,.2f}" if pd.notna(v) else "")
+        
+        # Build column_config to force left alignment on all columns
+        column_config_dict = {}
+        for col in data.columns:
+            column_config_dict[col] = st.column_config.Column(width="medium")
+        
+        kwargs["column_config"] = column_config_dict
+    
+    return _original_st_dataframe(data, *args, **kwargs)
+
+
+st.dataframe = _left_aligned_dataframe
 
 AUTH_COOKIE_NAME = "cloud_advisor_auth"
 AUTH_COOKIE_DAYS = 7
@@ -219,13 +304,20 @@ def _render_billing_flash():
     getattr(st, flash.get("level", "info"), st.info)(flash.get("message", ""))
 
 
+_TIGHT_PLAN_CHIP_PAGE = "AI Recommendations"
+
+
 def _render_workspace_header(selected_page, plan_name):
-    page_name = html.escape(str(selected_page or "Dashboard"))
     plan_label = html.escape(str(plan_name or "Starter"))
+    selected_page_name = str(selected_page or "")
+    header_class = (
+        "saas-workspace-header saas-workspace-header--tight"
+        if selected_page_name == _TIGHT_PLAN_CHIP_PAGE
+        else "saas-workspace-header"
+    )
     st.markdown(
         f"""
-        <div class="saas-workspace-header">
-            <div class="saas-workspace-title">{page_name}</div>
+        <div class="{header_class}">
             <div class="saas-workspace-meta">Plan: {plan_label}</div>
         </div>
         """,
@@ -879,7 +971,7 @@ def _render_cloud_operations_summary(username, active_demo=None):
             "Trigger": run.get("trigger_type", ""),
             "Status": run.get("status", ""),
             "Started": run.get("started_at", ""),
-            "Records": run.get("record_count") if run.get("record_count") is not None else 0,
+            "Records": f"{run.get('record_count') or 0:,}",
             "Error": run.get("error_message") or "",
         }
         for run in snapshot["sync_runs"][:5]
@@ -965,7 +1057,7 @@ def _render_my_open_recommendations(username):
                 "Priority": str(item.get("priority") or "medium").title(),
                 "Owner": item.get("owner") or "Unassigned",
                 "Due": item.get("due_date") or "Not set",
-                "Potential Savings": float(item.get("estimated_savings") or 0),
+                "Potential Savings": f"${float(item.get('estimated_savings') or 0):,.0f}",
             }
         )
 
@@ -1019,7 +1111,7 @@ def _render_forecast_risk_summary(username):
             "Priority": str(item.get("priority") or "medium").title(),
             "Owner": item.get("owner") or "Unassigned",
             "Due": item.get("due_date") or "Not set",
-            "Potential Exposure": float(item.get("estimated_savings") or 0),
+            "Potential Exposure": f"${float(item.get('estimated_savings') or 0):,.0f}",
         }
         for item in top_items
     ]
@@ -2037,6 +2129,10 @@ def cost_explorer_page():
         .sort_values("cost", ascending=False)
         .rename(columns={"account": "Account", "cost": "Cost"})
     )
+    service_breakdown_display = service_breakdown.copy()
+    service_breakdown_display["Cost"] = service_breakdown_display["Cost"].map(lambda value: f"${value:,.0f}")
+    account_breakdown_display = account_breakdown.copy()
+    account_breakdown_display["Cost"] = account_breakdown_display["Cost"].map(lambda value: f"${value:,.0f}")
     provider_breakdown = (
         filtered_df.groupby("provider", as_index=False)["cost"]
         .sum()
@@ -2059,10 +2155,10 @@ def cost_explorer_page():
         summary_col1, summary_col2 = st.columns([1.1, 1.1])
         with summary_col1:
             st.markdown("#### Service Summary")
-            st.dataframe(service_breakdown, width="stretch", hide_index=True)
+            st.dataframe(service_breakdown_display, width="stretch", hide_index=True)
         with summary_col2:
             st.markdown("#### Account Summary")
-            st.dataframe(account_breakdown.head(10), width="stretch", hide_index=True)
+            st.dataframe(account_breakdown_display.head(10), width="stretch", hide_index=True)
 
     with breakdown_tab:
         lower_col1, lower_col2 = st.columns([1.1, 1.1])

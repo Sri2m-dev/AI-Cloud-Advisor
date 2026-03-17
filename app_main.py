@@ -19,6 +19,17 @@ hide_pages = """
 [data-testid="stSidebarNav"] {
     display: none;
 }
+
+[data-testid="stDataFrame"] div[role="columnheader"],
+[data-testid="stDataFrame"] div[role="gridcell"] {
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+
+.stTable table th,
+.stTable table td {
+    text-align: left !important;
+}
 </style>
 """
 st.markdown(hide_pages, unsafe_allow_html=True)
@@ -39,6 +50,86 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from database.db import save_forecast_note, load_forecast_note, log_audit_event
 import plotly.express as px
 from sklearn.ensemble import IsolationForest
+
+
+_original_st_dataframe = st.dataframe
+
+
+def _left_aligned_dataframe(data=None, *args, **kwargs):
+    """Wrap st.dataframe to format numeric columns and enforce left alignment via column_config."""
+    if isinstance(data, pd.DataFrame):
+        currency_keywords = ("cost", "savings", "spend", "exposure", "amount", "price", "budget")
+        count_keywords = ("records", "count")
+        data = data.copy()
+        for col in data.columns:
+            if not pd.api.types.is_numeric_dtype(data[col]):
+                continue
+            col_name = str(col).lower()
+            if any(keyword in col_name for keyword in currency_keywords):
+                data[col] = data[col].apply(lambda v: f"${v:,.0f}" if pd.notna(v) else "")
+                continue
+            if any(keyword in col_name for keyword in count_keywords) and pd.api.types.is_integer_dtype(data[col]):
+                data[col] = data[col].apply(lambda v: f"{int(v):,}" if pd.notna(v) else "")
+                continue
+            if pd.api.types.is_float_dtype(data[col]):
+                data[col] = data[col].apply(lambda v: f"{v:,.2f}" if pd.notna(v) else "")
+        
+        # Build column_config to enforce column rendering
+        column_config_dict = {}
+        for col in data.columns:
+            column_config_dict[col] = st.column_config.Column(width="medium")
+        
+        kwargs["column_config"] = column_config_dict
+    
+    return _original_st_dataframe(data, *args, **kwargs)
+
+
+st.dataframe = _left_aligned_dataframe
+
+# Inject global CSS for table left-alignment
+st.markdown("""
+<style>
+[data-testid="stDataFrame"] div[role="columnheader"],
+[data-testid="stDataFrame"] div[role="gridcell"],
+[data-testid="stDataFrame"] [role="presentation"] div,
+[data-testid="stDataFrame"] .ag-cell,
+[data-testid="stDataFrame"] .ag-header-cell-text {
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+
+[data-testid="stDataFrame"] *:not(button) {
+    text-align: left !important;
+}
+
+.stTable table th,
+.stTable table td,
+.stTable * {
+    text-align: left !important;
+}
+
+[role="grid"] [role="row"] [role="gridcell"],
+[role="grid"] [role="row"] [role="columnheader"],
+.ag-cell,
+.ag-header-cell,
+.ag-header-cell-text,
+.ag-cell-wrapper,
+[data-testid="stDataFrame"] [class*="ag-"] {
+    text-align: left !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+[data-testid="stDataFrame"] div {
+    text-align: left !important;
+}
+
+[data-testid="stDataFrame"] [role="gridcell"]:after {
+    text-align: left !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 def predict_cost(cost_history):
     return predict_cost_months(cost_history, months_ahead=1)

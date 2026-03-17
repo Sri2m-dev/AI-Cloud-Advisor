@@ -130,3 +130,80 @@ def show_toast(message: str, icon: str = "✅") -> None:
         icon:    Emoji to display alongside the message.
     """
     st.toast(message, icon=icon)
+
+
+# ---------------------------------------------------------------------------
+# Left-aligned table rendering (bypasses ag-grid)
+# ---------------------------------------------------------------------------
+
+def render_table_html(df, hide_index: bool = True) -> None:
+    """
+    Render a DataFrame as an HTML table with guaranteed left-alignment via inline styles.
+    
+    This bypasses Streamlit's ag-grid renderer and uses inline `style` attributes
+    on every cell to ensure left-alignment cannot be overridden.
+    
+    Args:
+        df: pandas DataFrame to render
+        hide_index: If True, don't show the index column
+    """
+    import pandas as pd
+    import re
+    
+    # Convert all numeric columns to formatted strings for display
+    display_df = df.copy()
+    for col in display_df.columns:
+        if pd.api.types.is_numeric_dtype(display_df[col]):
+            col_name = str(col).lower()
+            # Currency columns
+            if any(kw in col_name for kw in ("cost", "savings", "spend", "exposure", "amount", "price", "budget")):
+                display_df[col] = display_df[col].apply(
+                    lambda v: f"${v:,.0f}" if pd.notna(v) else ""
+                )
+            # Count columns
+            elif any(kw in col_name for kw in ("records", "count")) and pd.api.types.is_integer_dtype(display_df[col]):
+                display_df[col] = display_df[col].apply(
+                    lambda v: f"{int(v):,}" if pd.notna(v) else ""
+                )
+            # Float columns
+            elif pd.api.types.is_float_dtype(display_df[col]):
+                display_df[col] = display_df[col].apply(
+                    lambda v: f"{v:,.2f}" if pd.notna(v) else ""
+                )
+    
+    # Generate base HTML table
+    html_str = display_df.to_html(
+        index=not hide_index,
+        escape=False,
+        border=0,
+        float_format=lambda x: x
+    )
+    
+    # Inject inline styles into every <th> and <td> for left-alignment
+    # This is done via regex to inject style attributes
+    html_str = re.sub(
+        r'<th[^>]*>',
+        lambda m: m.group(0).replace('>', ' style="text-align: left !important; padding: 10px; background: #f0f4f8; font-weight: 600; border: 1px solid #e5e7eb;">'),
+        html_str
+    )
+    html_str = re.sub(
+        r'<td[^>]*>',
+        lambda m: m.group(0).replace('>', ' style="text-align: left !important; padding: 8px 10px; border: 1px solid #e5e7eb;">'),
+        html_str
+    )
+    html_str = re.sub(
+        r'<tr[^>]*>',
+        lambda m: m.group(0) if 'even' in m.group(0) else m.group(0) + '<!-- alternating -->',
+        html_str
+    )
+    
+    # Add table-level styling
+    html_table = f"""
+    <style>
+        .left-align-table {{ width: 100%; border-collapse: collapse; }}
+        .left-align-table tr:nth-child(even) td {{ background: #f9fafb !important; }}
+    </style>
+    {html_str.replace('<table border="0"', '<table class="left-align-table" border="0"')}
+    """
+    
+    st.markdown(html_table, unsafe_allow_html=True)

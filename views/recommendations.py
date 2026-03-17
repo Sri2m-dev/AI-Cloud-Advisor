@@ -28,6 +28,17 @@ STATUS_OPTIONS = ["new", "accepted", "snoozed", "dismissed", "completed"]
 PRIORITY_OPTIONS = ["high", "medium", "low"]
 
 
+def _provider_from_resource(resource: str | None) -> str:
+    normalized = str(resource or "").lower()
+    if normalized.startswith("aws"):
+        return "AWS"
+    if normalized.startswith("azure"):
+        return "Azure"
+    if normalized.startswith("gcp"):
+        return "GCP"
+    return "Other"
+
+
 def _format_confidence(value):
     if value is None or value == "":
         return "Not scored"
@@ -101,7 +112,6 @@ def render_recommendations_page():
     header_col1, header_col2 = st.columns([4.2, 1.2])
     with header_col1:
         st.title("AI Recommendations")
-        st.caption("Generate, review, assign, and manage AI-driven optimization recommendations in one place.")
     with header_col2:
         st.write("")
         st.write("")
@@ -140,18 +150,27 @@ def render_recommendations_page():
     metric_col3.metric("Assigned to Me", sum(1 for item in workflow_items if item.get("owner") == username))
     metric_col4.metric("Tracked Savings", f"${tracked_savings:,.0f}")
 
-    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns([1, 1, 1.2, 1.4])
+    provider_options = sorted({_provider_from_resource(item.get("resource")) for item in workflow_items})
+
+    filter_col1, filter_col2, filter_col3, filter_col4, filter_col5 = st.columns([1, 1, 1.1, 1.2, 1.3])
     with filter_col1:
         selected_status = st.selectbox("Status", ["all", *STATUS_OPTIONS], key="recommendation_inbox_status")
     with filter_col2:
         selected_priority = st.selectbox("Priority", ["all", *PRIORITY_OPTIONS], key="recommendation_inbox_priority")
     with filter_col3:
+        selected_providers = st.multiselect(
+            "Provider",
+            options=provider_options,
+            default=provider_options,
+            key="recommendation_inbox_provider",
+        )
+    with filter_col4:
         assigned_scope = st.selectbox(
             "Assignment",
             ["all", "assigned to me", "unassigned"],
             key="recommendation_inbox_assignment",
         )
-    with filter_col4:
+    with filter_col5:
         search_term = st.text_input(
             "Search",
             value="",
@@ -169,6 +188,10 @@ def render_recommendations_page():
         filtered_items = [item for item in filtered_items if item.get("status") == selected_status]
     if selected_priority != "all":
         filtered_items = [item for item in filtered_items if str(item.get("priority") or "medium").lower() == selected_priority]
+    if selected_providers:
+        filtered_items = [
+            item for item in filtered_items if _provider_from_resource(item.get("resource")) in selected_providers
+        ]
     if assigned_scope == "assigned to me":
         filtered_items = [item for item in filtered_items if item.get("owner") == username]
     elif assigned_scope == "unassigned":
@@ -204,8 +227,8 @@ def render_recommendations_page():
         st.session_state["recommendation_selected_id"] = selected_id
 
     with st.container(border=True):
-        header_cols = st.columns([0.45, 2.25, 0.95, 0.85, 0.8, 0.95, 0.9, 0.85, 0.9, 1.25, 0.65, 0.65])
-        header_labels = ["ID", "Title", "Category", "State", "Prio", "Savings", "Conf", "Due", "Source", "Owner", "Set", "View"]
+        header_cols = st.columns([0.45, 2.15, 0.9, 0.8, 0.75, 0.9, 0.8, 0.8, 0.8, 0.9, 1.15, 0.65, 0.65])
+        header_labels = ["ID", "Title", "Category", "State", "Prio", "Savings", "Conf", "Due", "Cloud", "Source", "Owner", "Set", "View"]
         for column, label in zip(header_cols, header_labels):
             column.markdown(f"**{label}**")
 
@@ -214,7 +237,7 @@ def render_recommendations_page():
             current_owner = item.get("owner") or "Unassigned"
             if current_owner not in assignee_options:
                 assignee_options = [*assignee_options, current_owner]
-            row_cols = st.columns([0.45, 2.25, 0.95, 0.85, 0.8, 0.95, 0.9, 0.85, 0.9, 1.25, 0.65, 0.65])
+            row_cols = st.columns([0.45, 2.15, 0.9, 0.8, 0.75, 0.9, 0.8, 0.8, 0.8, 0.9, 1.15, 0.65, 0.65])
             row_cols[0].write(item["id"])
             row_cols[1].write(item.get("title") or f"Recommendation {item['id']}")
             row_cols[2].write(item.get("category") or "general")
@@ -223,8 +246,9 @@ def render_recommendations_page():
             row_cols[5].write(f"${float(item.get('estimated_savings') or 0):,.0f}")
             row_cols[6].write(_format_confidence(item.get("confidence_score")))
             row_cols[7].write(_format_due_date(item.get("due_date")))
-            row_cols[8].write(item.get("source") or "unknown")
-            owner_value = row_cols[9].selectbox(
+            row_cols[8].write(_provider_from_resource(item.get("resource")))
+            row_cols[9].write(item.get("source") or "unknown")
+            owner_value = row_cols[10].selectbox(
                 "Assignee",
                 assignee_options,
                 index=assignee_options.index(current_owner) if current_owner in assignee_options else 0,
@@ -232,7 +256,7 @@ def render_recommendations_page():
                 disabled=not can_manage,
                 label_visibility="collapsed",
             )
-            if row_cols[10].button("Set", key=f"rec_save_{item['id']}", width="stretch", disabled=not can_edit_details):
+            if row_cols[11].button("Set", key=f"rec_save_{item['id']}", width="stretch", disabled=not can_edit_details):
                 updated = update_recommendation_details(
                     recommendation_id=item["id"],
                     username=username,
@@ -243,7 +267,7 @@ def render_recommendations_page():
                 if updated:
                     st.rerun()
                 st.error("You do not have permission to update this recommendation.")
-            if row_cols[11].button("View", key=f"rec_open_{item['id']}", width="stretch"):
+            if row_cols[12].button("View", key=f"rec_open_{item['id']}", width="stretch"):
                 st.session_state["recommendation_selected_id"] = item["id"]
                 st.rerun()
 
@@ -310,6 +334,7 @@ def render_recommendations_page():
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
         info_col1.write(f"Category: {selected_item.get('category') or 'general'}")
         info_col1.write(f"Source: {selected_item.get('source') or 'unknown'}")
+        info_col1.write(f"Provider: {_provider_from_resource(selected_item.get('resource'))}")
         info_col2.write(f"Potential Savings: ${float(selected_item.get('estimated_savings') or 0):,.2f}")
         info_col2.write(f"Owner: {selected_item.get('owner') or 'Unassigned'}")
         info_col3.write(f"Due: {_format_due_date(selected_item.get('due_date'))}")
