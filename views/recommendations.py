@@ -150,7 +150,7 @@ def render_recommendations_page():
     metric_col3.metric("Assigned to Me", sum(1 for item in workflow_items if item.get("owner") == username))
     metric_col4.metric("Tracked Savings", f"${tracked_savings:,.0f}")
 
-    provider_options = sorted({_provider_from_resource(item.get("resource")) for item in workflow_items})
+    provider_options = ["all", "AWS", "Azure", "GCP"]
 
     filter_col1, filter_col2, filter_col3, filter_col4, filter_col5 = st.columns([1, 1, 1.1, 1.2, 1.3])
     with filter_col1:
@@ -158,10 +158,10 @@ def render_recommendations_page():
     with filter_col2:
         selected_priority = st.selectbox("Priority", ["all", *PRIORITY_OPTIONS], key="recommendation_inbox_priority")
     with filter_col3:
-        selected_providers = st.multiselect(
+        selected_provider = st.selectbox(
             "Provider",
-            options=provider_options,
-            default=provider_options,
+            provider_options,
+            index=0,
             key="recommendation_inbox_provider",
         )
     with filter_col4:
@@ -188,9 +188,9 @@ def render_recommendations_page():
         filtered_items = [item for item in filtered_items if item.get("status") == selected_status]
     if selected_priority != "all":
         filtered_items = [item for item in filtered_items if str(item.get("priority") or "medium").lower() == selected_priority]
-    if selected_providers:
+    if selected_provider and selected_provider != "all":
         filtered_items = [
-            item for item in filtered_items if _provider_from_resource(item.get("resource")) in selected_providers
+            item for item in filtered_items if _provider_from_resource(item.get("resource")) == selected_provider
         ]
     if assigned_scope == "assigned to me":
         filtered_items = [item for item in filtered_items if item.get("owner") == username]

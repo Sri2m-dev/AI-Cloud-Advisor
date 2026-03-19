@@ -1,30 +1,27 @@
-# Load environment variables from .env automatically
-from dotenv import load_dotenv
-load_dotenv()
+def plan_and_billing_page():
+    current_plan = get_user_plan(st.session_state.get("username", "guest"))
+    st.markdown(f"""
+        <style>
+        .plan-billing-header-row {{display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;}}
+        .plan-billing-header-title {{font-size: 2.8rem; font-weight: 700; margin-bottom: 0.2em;}}
+        .plan-billing-header-plan {{font-size: 1.1rem; color: #444; margin-left: auto;}}
+        </style>
+        <div class='plan-billing-header-row'>
+            <div class='plan-billing-header-title'>Plans & Billing</div>
+            <div class='plan-billing-header-plan'>Plan: {current_plan}</div>
+        </div>
+    """, unsafe_allow_html=True)
 import os
 import html
-# Disable Streamlit's default multipage navigation sidebar
-os.environ["STREAMLIT_PAGES"] = "0"
-try:
-    from streamlit_cookies_controller import CookieController as _CookieController
-except ImportError:
-    _CookieController = None
-import jwt
-
-# Streamlit page config: set title and collapse sidebar by default
+import html
+# Import required modules
+import os
 import streamlit as st
-st.set_page_config(
-    page_title="Cloud Advisory Platform",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
 # Hide Streamlit chrome that should not be visible to end users
+
 hide_pages = """
 <style>
-[data-testid="stSidebarNav"] {
-    display: none;
-}
+/* Removed any sidebar hiding CSS */
 [data-testid="stHeader"] {
     display: none;
 }
@@ -47,8 +44,11 @@ hide_pages = """
     max-width: 1440px;
 }
 
-[data-testid="stSidebar"] .block-container {
-    padding-top: 1rem;
+/* Ensure sidebar is not hidden */
+[data-testid="stSidebar"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 [data-testid="stMetric"] {
@@ -57,94 +57,26 @@ hide_pages = """
     border-radius: 12px;
     padding: 0.8rem 0.9rem;
 }
-
-div.stButton > button,
-div.stDownloadButton > button,
-button[kind="primary"] {
-    border-radius: 10px;
-    font-weight: 600;
-}
-
-div[data-baseweb="select"] > div,
-div[data-baseweb="input"] > div {
-    border-radius: 10px;
-}
-
-[data-testid="stDataFrame"] div[role="columnheader"],
-[data-testid="stDataFrame"] div[role="gridcell"],
-[data-testid="stDataFrame"] [role="presentation"] div,
-[data-testid="stDataFrame"] .ag-cell,
-[data-testid="stDataFrame"] .ag-header-cell-text {
-    justify-content: flex-start !important;
-    text-align: left !important;
-}
-
-[data-testid="stDataFrame"] *:not(button) {
-    text-align: left !important;
-}
-
-.stTable table th,
-.stTable table td,
-.stTable * {
-    text-align: left !important;
-}
-
-/* Force left alignment on all ag-grid elements (aggressive) */
-[role="grid"] [role="row"] [role="gridcell"],
-[role="grid"] [role="row"] [role="columnheader"],
-.ag-cell,
-.ag-header-cell,
-.ag-header-cell-text,
-.ag-cell-wrapper,
-[data-testid="stDataFrame"] [class*="ag-"] {
-    text-align: left !important;
-    display: flex !important;
-    justify-content: flex-start !important;
-    align-items: center !important;
-}
-
-/* Override inline styles on ag-grid cells */
-[data-testid="stDataFrame"] div {
-    text-align: left !important;
-}
-
-[data-testid="stDataFrame"] [role="gridcell"]:after {
-    text-align: left !important;
-}
-
-.saas-workspace-header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 0;
-    margin-bottom: -2.6rem;
-    position: relative;
-    z-index: 5;
-}
-
-.saas-workspace-header--tight {
-    margin-bottom: -2.25rem;
-}
-
-.saas-workspace-meta {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.81rem;
-    color: #6b7280;
-    font-weight: 500;
-    background: #f3f4f6;
-    padding: 0.35rem 0.65rem;
-    border-radius: 6px;
-    margin-top: 3rem;
-}
-
-.saas-workspace-header--tight .saas-workspace-meta {
-    margin-top: 0.2rem;
-}
 </style>
 """
 st.markdown(hide_pages, unsafe_allow_html=True)
+
+try:
+    from streamlit_cookies_controller import CookieController as _CookieController
+except ImportError:
+    _CookieController = None
+import jwt
+
+# Streamlit page config: set title and collapse sidebar by default
+
+import streamlit as st
+st.set_page_config(
+    page_title="Cloud Advisory Platform",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+
 import datetime
 from database.db import (
     INTERNAL_COMPANY,
@@ -167,10 +99,10 @@ from database.db import (
     is_global_admin_role,
     initialize_core_tables,
     list_cloud_accounts,
-    list_companies,
-    list_recommendations,
     list_sync_runs,
     list_users,
+        list_companies,
+    list_recommendations,
     save_recommendation,
     update_company_plan,
     update_user_plan,
@@ -308,21 +240,25 @@ _TIGHT_PLAN_CHIP_PAGE = "AI Recommendations"
 
 
 def _render_workspace_header(selected_page, plan_name):
-    plan_label = html.escape(str(plan_name or "Starter"))
+    plan_label = str(plan_name or "Starter")
     selected_page_name = str(selected_page or "")
     header_class = (
         "saas-workspace-header saas-workspace-header--tight"
         if selected_page_name == _TIGHT_PLAN_CHIP_PAGE
         else "saas-workspace-header"
     )
-    st.markdown(
-        f"""
-        <div class="{header_class}">
-            <div class="saas-workspace-meta">Plan: {plan_label}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    html_content = (
+        "<style>"
+        ".saas-workspace-header {display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;}"
+        ".saas-workspace-title {font-size: 2.8rem; font-weight: 700; margin-bottom: 0.5rem;}"
+        ".saas-workspace-meta {font-size: 1.1rem; color: #444; margin-left: auto;}"
+        "</style>"
+        f"<div class='{header_class}'>"
+        + ("<div class='saas-workspace-title'>Cloud Cost Dashboard</div>" if selected_page_name == 'Dashboard' else "")
+        + (f"<div class='saas-workspace-meta'>Plan: {plan_label}</div>" if selected_page_name == 'Dashboard' else "")
+        + "</div>"
     )
+    st.markdown(html_content, unsafe_allow_html=True)
 
 
 def _apply_plan_billing_history_limit(billing_df, username):
@@ -517,8 +453,8 @@ def _load_billing_data_frame():
     return billing_df
 
 def cost_forecast_page():
-    import optuna
     st.title("Cost Forecast (Premium)")
+    import optuna
     conn, backend_name = _get_analytics_connection()
     df = None
     try:
@@ -529,7 +465,10 @@ def cost_forecast_page():
         conn.close()
 
     if backend_name == "SQLite":
-        st.caption("Using local SQLite data because PostgreSQL is not configured for this screen.")
+        # Only show this message to admin users
+        user_role = st.session_state.get("role", "user")
+        if user_role in ("admin", "global_admin"):  # adjust as needed for your admin roles
+            st.caption("Using local SQLite data because PostgreSQL is not configured for this screen.")
 
     automl_best_params = st.session_state.get("forecast_automl_best_params", {})
     automl_best_score = st.session_state.get("forecast_automl_best_score")
@@ -777,7 +716,15 @@ def cost_forecast_page():
 
         # Downloadable forecast report
         if not forecast_data.empty:
-            csv = forecast_data.to_csv(index=False).encode('utf-8')
+            # Add header comment for user clarity
+            header_comment = (
+                '"# Column descriptions:\n'
+                '# ds: Forecast date\n'
+                '# yhat: Predicted (forecasted) value for the date\n'
+                '# yhat_lower: Lower bound of the prediction interval\n'
+                '# yhat_upper: Upper bound of the prediction interval\n\n"'
+            )
+            csv = (header_comment + forecast_data.to_csv(index=False)).encode('utf-8')
             download = st.download_button(
                 label="Download Forecast CSV",
                 data=csv,
@@ -827,12 +774,11 @@ _restore_auth_session_from_cookie()
 def login_page():
     st.markdown("""
     <style>
-    div[data-baseweb="input"] {
+    div[data-baseweb='input'] {
         max-width: 400px;
     }
     </style>
     """, unsafe_allow_html=True)
-    st.title("Cloud Advisory Platform")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -859,24 +805,36 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 def create_pdf_report(df, title):
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    c = canvas.Canvas(tmp.name, pagesize=letter)
-    width, height = letter
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(30, height-40, title)
-    c.setFont("Helvetica", 10)
-    y = height-70
-    for col in df.columns:
-        c.drawString(30, y, f"{col}")
-        y -= 15
-    y -= 10
+    doc = SimpleDocTemplate(tmp.name, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=60, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    elements = []
+    # Title
+    elements.append(Paragraph(f"<b>{title}</b>", styles['Title']))
+    elements.append(Spacer(1, 18))
+    # Table data
+    table_data = [["Metric", "Value"]]
     for idx, row in df.iterrows():
-        y -= 15
-        if y < 40:
-            c.showPage()
-            y = height-40
-        c.drawString(30, y, ", ".join(str(x) for x in row.values))
-    c.save()
+        table_data.append([str(row[0]), str(row[1])])
+    # Table style
+    table = Table(table_data, colWidths=[180, 250])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f2f2f2')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#222222')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9f9f9')]),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+    ]))
+    elements.append(table)
+    doc.build(elements)
     return tmp.name
 
 
@@ -1424,7 +1382,6 @@ def _seed_ai_advisor_recommendations(username):
 def dashboard_page():
     anomaly_feedback = []
     rec_feedback = []
-    st.title("Cloud Cost Dashboard")
     username = st.session_state.get("username", "guest")
     active_demo = st.session_state.get("active_demo_environment")
     if active_demo:
@@ -1486,7 +1443,7 @@ def dashboard_page():
     st.caption("Set SMTP env: YAGMAIL_USER, YAGMAIL_PASSWORD")
     st.markdown("""
     <style>
-    div[data-baseweb="input"] {
+    div[data-baseweb='input'] {
         max-width: 400px;
     }
     </style>
@@ -1548,7 +1505,7 @@ def dashboard_page():
             st.metric("Avg Time to Correction (days)", f"{time_to_correction:.1f}")
         # User breakdown
         st.write("Feedback by User (Anomalies):")
-        st.write(df_anom_fb.groupby(['user', 'flag']).size().unstack(fill_value=0))
+        st.write
     # Recommendation feedback: not useful rate, by type and user
     if rec_feedback:
         df_rec_fb['user'] = username  # For demo; in real use, store username in feedback
@@ -1649,8 +1606,6 @@ def dashboard_page():
         retrain_df = filtered.copy()
         if not retrain_df.empty:
             retrain_df = retrain_df[~retrain_df['date'].astype(str).isin(exclude_anomaly_dates)]
-            retrain_df = retrain_df[~retrain_df.apply(lambda x: f"{x['account']}:{x['service']}" in exclude_recs, axis=1)]
-        # Here, retraining would re-run Optuna/fit models using retrain_df
         with open(last_train_file, 'w') as f:
             f.write(latest_data_time)
         st.success(f"Models retrained on data up to {latest_data_time}! Feedback exclusions applied: {len(exclude_anomaly_dates)} anomaly dates, {len(exclude_recs)} recommendations.")
@@ -1697,7 +1652,6 @@ def dashboard_page():
             st.success(f"Best n_clusters: {study.best_params['n_clusters']} (inertia={study.best_value:.2f})")
     import pandas as pd
     import plotly.express as px
-    st.title("Dashboard")
     st.write("Unified Cloud Cost Analytics Dashboard")
 
     # Load data
@@ -1957,7 +1911,6 @@ def dashboard_page():
     st.download_button("Download Filtered Data (CSV)", filtered.to_csv(index=False).encode('utf-8'), file_name="filtered_cost_data.csv", mime="text/csv")
 
 def ai_advisor_page():
-    st.title("AI FinOps Advisor")
     st.write("Preview the types of AI-generated optimization opportunities that will be managed in Recommendations.")
 
     recommendation_preview = pd.DataFrame(
@@ -1968,18 +1921,19 @@ def ai_advisor_page():
         ]
     )
     st.dataframe(recommendation_preview, width="stretch", hide_index=True)
-    st.markdown("""
-    **AI Advisor role**
+    st.markdown('''
+**AI Advisor role**
 
-    - Explains the kinds of optimization opportunities the system can identify
-    - Previews likely savings themes before workflow tracking begins
-    - Leaves generation and status management to Recommendations
-    """)
+- Explains the kinds of optimization opportunities the system can identify
+- Previews likely savings themes before workflow tracking begins
+- Leaves generation and status management to Recommendations
+''')
     if st.button("Open AI Recommendations", key="ai_advisor_open_recommendations", width="stretch"):
         st.session_state["selected_page"] = "AI Recommendations"
         st.rerun()
 
 def cost_explorer_page():
+
     st.title("Cost Explorer")
 
     def _compact_metric_value(value):
@@ -2190,36 +2144,26 @@ def finops_insights_page(embedded=False):
     if embedded:
         st.subheader("FinOps Insights")
     else:
-        st.title("FinOps Insights")
-
-    st.subheader("Cost Allocation by Team")
-
-    import pandas as pd
-
-    data = {
-        "Team":["Platform","Data","DevOps","AI"],
-        "Cost":[4000,3500,2800,2150]
-    }
-
-    df = pd.DataFrame(data)
-
-    st.bar_chart(df.set_index("Team"))
+        st.subheader("Cost Allocation by Team")
+        import pandas as pd
+        data = {
+            "Team":["Platform","Data","DevOps","AI"],
+            "Cost":[4000,3500,2800,2150]
+        }
+        df = pd.DataFrame(data)
+        st.bar_chart(df.set_index("Team"))
 
 def optimization_page(embedded=False):
     if embedded:
         st.subheader("Optimization Opportunities")
     else:
-        st.title("Optimization Opportunities")
-
-    st.warning("Idle resources detected")
-
-    st.write("""
-    - 5 unattached EBS volumes  
-    - 2 idle load balancers  
-    - 3 underutilized EC2 instances
-    """)
-
-    st.metric("Potential Savings", "$1,750 / month")
+        st.warning("Idle resources detected")
+        st.markdown('''
+- 5 unattached EBS volumes  
+- 2 idle load balancers  
+- 3 underutilized EC2 instances
+''')
+        st.metric("Potential Savings", "$1,750 / month")
 
 def optimization_insights_page():
     from views.optimization_insights import render_optimization_insights_page
@@ -2227,7 +2171,6 @@ def optimization_insights_page():
 
 
 def insights_page():
-    st.title("Insights")
     st.caption("Explore analytical views and optimization signals. Use Reports for downloadable artifacts.")
     insight_tab1, insight_tab2 = st.tabs(["FinOps Insights", "Optimization Insights"])
     with insight_tab1:
@@ -2246,6 +2189,7 @@ def operations_page():
         audit_log_page(embedded=True)
 
 def reports_page():
+    st.title("Reports")
     current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
     current_plan_def = get_plan_definition(current_plan)
     if "reports" not in current_plan_def.get("feature_flags", set()):
@@ -2253,7 +2197,6 @@ def reports_page():
         st.info("Upgrade to Growth or Enterprise to unlock exportable reports.")
         return
 
-    st.title("Reports")
     st.write("Download and generate report artifacts for finance and governance review.")
     st.caption("Choose the output format based on audience: finance, executive leadership, or board review.")
 
@@ -2387,17 +2330,28 @@ def reports_page():
             st.markdown("#### Executive Presentation")
             st.caption("Management-ready PowerPoint with KPIs, cost distribution, and recommended next steps.")
             if st.button("Prepare Executive Deck", key="prepare_executive_deck", width="stretch"):
-                from ppt_report_generator import generate_executive_ppt
+                from cloud_report_generator import generate_powerpoint_report
 
+                # Prepare trend data for slide 5
+                trend_data = pd.DataFrame()
+                if not billing_df.empty:
+                    trend_data = (
+                        billing_df.groupby(billing_df["date"].dt.to_period("M"))
+                        ["cost"].sum().reset_index()
+                    )
+                    trend_data["Date"] = trend_data["date"].astype(str)
+                    trend_data = trend_data.rename(columns={"cost": "Cost"})
                 _prepare_report(
                     "report_executive_deck",
-                    lambda: generate_executive_ppt(
+                    lambda: generate_powerpoint_report(
                         client_name,
                         monthly_spend=summary_metrics["total_monthly_cost"],
                         savings_monthly=summary_metrics["potential_savings"],
+                        top_service_name=top_service,
                         maturity_score=maturity_score,
                         readiness_score=readiness_score,
                         service_cost=service_cost,
+                        trend_data=trend_data,
                     ),
                     "Executive deck is ready.",
                 )
@@ -2491,82 +2445,95 @@ def cost_sync_history_page(embedded=False):
     if embedded:
         st.subheader("Cost Sync History")
     else:
-        st.title("Cost Sync History")
-    conn, _ = _get_analytics_connection()
-    df = None
-    try:
-        df = pd.read_sql_query("SELECT account, service, cost FROM billing_data ORDER BY rowid DESC LIMIT 100", conn)
-    except Exception as e:
-        st.error(f"Error loading cost history: {e}")
-    finally:
-        conn.close()
-    if df is not None and not df.empty:
-        st.dataframe(df)
-    else:
-        st.info("No cost sync history available.")
+        conn, _ = _get_analytics_connection()
+        df = None
+        try:
+            df = pd.read_sql_query("SELECT account, service, cost FROM billing_data ORDER BY rowid DESC LIMIT 100", conn)
+        except Exception as e:
+            st.error(f"Error loading cost history: {e}")
+        finally:
+            conn.close()
+        if df is not None and not df.empty:
+            st.dataframe(df)
+        else:
+            st.info("No cost sync history available.")
 
 def audit_log_page(embedded=False):
     if embedded:
         st.subheader("Audit Log")
     else:
-        st.title("Audit Log")
-    if not is_global_admin_role(st.session_state.get("role", "user")):
-        st.warning("Only admins can view the audit log.")
-        return
-    conn, _ = _get_analytics_connection()
-    try:
-        df = pd.read_sql_query("SELECT username, action, details, timestamp FROM audit_log ORDER BY timestamp DESC LIMIT 500", conn)
-        if df.empty:
-            st.info("No audit log entries found.")
-        else:
-            # Filter controls
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                user_filter = st.text_input("Filter by Username", "")
-            with col2:
-                action_filter = st.text_input("Filter by Action", "")
-            with col3:
-                date_range = st.date_input("Date Range (UTC)", [])
-            filtered_df = df
-            if user_filter:
-                filtered_df = filtered_df[filtered_df['username'].str.contains(user_filter, case=False, na=False)]
-            if action_filter:
-                filtered_df = filtered_df[filtered_df['action'].str.contains(action_filter, case=False, na=False)]
-            if date_range:
-                if isinstance(date_range, list) and len(date_range) == 2:
-                    start_date, end_date = date_range
-                else:
-                    start_date = end_date = date_range[0] if isinstance(date_range, list) and date_range else date_range
-                filtered_df = filtered_df[filtered_df['timestamp'].str[:10].between(str(start_date), str(end_date))]
-            st.dataframe(filtered_df)
-            # Simple analytics
-            st.markdown("---")
-            st.subheader("Audit Log Analytics")
-            st.write(f"Total Events: {len(filtered_df)}")
-            st.write("**Top Actions:**")
-            st.dataframe(filtered_df['action'].value_counts().head(10).rename_axis('action').reset_index(name='count'))
-            st.write("**Top Users:**")
-            st.dataframe(filtered_df['username'].value_counts().head(10).rename_axis('username').reset_index(name='count'))
-            # Time series chart
-            st.write("**Events Over Time:**")
-            time_series = filtered_df.copy()
-            time_series['date'] = time_series['timestamp'].str[:10]
-            ts_counts = time_series.groupby('date').size().reset_index(name='events')
-            st.line_chart(ts_counts.set_index('date'))
-            csv = filtered_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Download Filtered Audit Log CSV",
-                data=csv,
-                file_name="audit_log.csv",
-                mime="text/csv"
-            )
-    except Exception as e:
-        st.error(f"Error loading audit log: {e}")
-    finally:
-        conn.close()
+        if not is_global_admin_role(st.session_state.get("role", "user")):
+            st.warning("Only admins can view the audit log.")
+            return
+        conn, _ = _get_analytics_connection()
+        try:
+            df = pd.read_sql_query("SELECT username, action, details, timestamp FROM audit_log ORDER BY timestamp DESC LIMIT 500", conn)
+        except Exception as e:
+            st.error(f"Error loading audit log: {e}")
+            df = None
+        finally:
+            conn.close()
+        if df is not None:
+            if df.empty:
+                st.info("No audit log entries found.")
+            else:
+                # Filter controls
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    user_filter = st.text_input("Filter by Username", "")
+                with col2:
+                    action_filter = st.text_input("Filter by Action", "")
+                with col3:
+                    date_range = st.date_input("Date Range (UTC)", [])
+                filtered_df = df
+                if user_filter:
+                    filtered_df = filtered_df[filtered_df['username'].str.contains(user_filter, case=False, na=False)]
+                if action_filter:
+                    filtered_df = filtered_df[filtered_df['action'].str.contains(action_filter, case=False, na=False)]
+                if date_range:
+                    if isinstance(date_range, list) and len(date_range) == 2:
+                        start_date, end_date = date_range
+                    else:
+                        start_date = end_date = date_range[0] if isinstance(date_range, list) and date_range else date_range
+                    filtered_df = filtered_df[filtered_df['timestamp'].str[:10].between(str(start_date), str(end_date))]
+                st.dataframe(filtered_df)
+                # Simple analytics
+                st.markdown("---")
+                st.subheader("Audit Log Analytics")
+                st.write(f"Total Events: {len(filtered_df)}")
+                st.write("**Top Actions:**")
+                st.dataframe(filtered_df['action'].value_counts().head(10).rename_axis('action').reset_index(name='count'))
+                st.write("**Top Users:**")
+                st.dataframe(filtered_df['username'].value_counts().head(10).rename_axis('username').reset_index(name='count'))
+                # Time series chart
+                st.write("**Events Over Time:**")
+                time_series = filtered_df.copy()
+                time_series['date'] = time_series['timestamp'].str[:10]
+                ts_counts = time_series.groupby('date').size().reset_index(name='events')
+                st.line_chart(ts_counts.set_index('date'))
+                csv = filtered_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download Filtered Audit Log CSV",
+                    data=csv,
+                    file_name="audit_log.csv",
+                    mime="text/csv"
+                )
 
 
 def access_management_page():
+    current_plan = get_user_plan(st.session_state.get("username", "guest"))
+    st.markdown(f"""
+        <style>
+        .access-header-row {{display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;}}
+        .access-header-title {{font-size: 2.8rem; font-weight: 700; margin-bottom: 0.2em;}}
+        .access-header-plan {{font-size: 1.1rem; color: #444; margin-left: auto;}}
+        </style>
+        <div class='access-header-row'>
+            <div class='access-header-title'>Access Management</div>
+            <div class='access-header-plan'>Plan: {current_plan}</div>
+        </div>
+    """, unsafe_allow_html=True)
+    # Plan label is only shown in the custom header row above. Remove any other Plan label rendering here.
     username = st.session_state.get("username", "guest")
     current_role = st.session_state.get("role", "user")
     current_company = st.session_state.get("company") or get_user_company(username)
@@ -2579,7 +2546,6 @@ def access_management_page():
         st.warning("You do not have access to user or tenant administration.")
         return
 
-    st.title("Access Management")
     st.caption("Manage internal users, client organizations, company users, and password resets separately from commercial plans.")
 
     if is_global_admin:
@@ -2771,7 +2737,6 @@ if supabase_ and SUPABASE_URL and SUPABASE_KEY:
     supabase = supabase_.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def supabase_signup_page():
-    st.title("Sign Up (Supabase)")
     if supabase_ is None:
         st.warning("Supabase support is unavailable because the supabase package is not installed in this Python environment.")
         return
@@ -2823,11 +2788,14 @@ elif requested_page:
 
 
 # Sidebar enhancements: theme toggle, navigation, avatar, help, and logout
+
 with st.sidebar:
-    st.markdown("# Cloud Advisor")
+    st.markdown("# Cloud Advisory")
     current_plan = get_user_plan(st.session_state.get("username", "guest"))
     st.session_state["plan"] = current_plan
     allowed_pages = set(get_plan_pages(current_plan))
+    # Always include 'Dashboard' in allowed_pages to ensure sidebar renders
+    allowed_pages.add("Dashboard")
     current_role = st.session_state.get("role", "user")
     # User avatar (placeholder)
     avatar_url = "https://ui-avatars.com/api/?name=" + st.session_state.get("username", "Guest") + "&background=0D8ABC&color=fff&size=128"
@@ -2836,23 +2804,22 @@ with st.sidebar:
     st.caption(f"Company: {st.session_state.get('company') or get_user_company(st.session_state.get('username', 'guest')) or 'Unassigned'}")
     if is_global_admin_role(st.session_state.get("role", "user")):
         st.caption("Access: Global Admin")
-    st.caption(f"Plan: {current_plan}")
+    # Removed duplicate Plan label
     st.markdown("---")
     st.markdown("## Quick Navigation")
     nav_pages = [
-        ("Dashboard", "ðŸ "),
+        ("Dashboard", "🏠"),
         ("AI Recommendations", "RI"),
-        ("Cost Explorer", "ðŸ’¸"),
-        ("Reports", "ðŸ“‘"),
-        ("Operations", "ðŸ› "),
+        ("Cost Explorer", "💸"),
+        ("Reports", "📑"),
+        ("Operations", "🛠️"),
         ("Optimization Insights", "chart_with_upward_trend"),
-        ("Cost Forecast (Premium)", "ðŸ”®"),
-        ("Cloud Accounts", "â˜ï¸"),
-        ("Plans & Billing", "ðŸ’³")
+        ("Cost Forecast (Premium)", "🔮"),
+        ("Cloud Accounts", "☁️"),
+        ("Plans & Billing", "💳")
     ]
-    nav_pages = [item for item in nav_pages if item[0] in allowed_pages]
     if is_company_admin_role(current_role):
-        nav_pages.append(("Access Management", "ðŸ”"))
+        nav_pages.append(("Access Management", "🔐"))
     nav_labels = [page for page, _ in nav_pages]
     current_page = st.session_state.get("selected_page", "Dashboard")
     default_index = nav_labels.index(current_page) if current_page in nav_labels else 0
@@ -2860,7 +2827,7 @@ with st.sidebar:
     st.session_state["selected_page"] = nav_pages[nav_labels.index(selected)][0]
     st.markdown("---")
     with st.expander("Help & FAQ", expanded=False):
-        st.markdown("""
+        st.markdown('''
 **How do I use the Cost Forecast?**  
 Select a model, choose how many months to forecast, and view the results. You can download the forecast and add notes.
 
@@ -2871,12 +2838,12 @@ Select a model, choose how many months to forecast, and view the results. You ca
 
 **How do I save notes?**  
 Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
-        """)
+        ''')
     st.button("Logout", on_click=_perform_logout)
+
 
 # Main page routing logic
 selected_page = st.session_state.get("selected_page", "Dashboard")
-current_plan = get_user_plan(st.session_state.get("username", "guest"))
 st.session_state["plan"] = current_plan
 admin_pages = {"Access Management"} if is_company_admin_role(st.session_state.get("role", "user")) else set()
 if selected_page not in set(get_plan_pages(current_plan)).union(admin_pages):
@@ -2884,6 +2851,7 @@ if selected_page not in set(get_plan_pages(current_plan)).union(admin_pages):
     st.session_state["selected_page"] = "Plans & Billing"
     st.rerun()
 
+# Always render the workspace header at the top of the main content area
 _render_workspace_header(selected_page, current_plan)
 
 if selected_page == "Dashboard":
@@ -2911,9 +2879,19 @@ elif selected_page == "Cloud Accounts":
     from pages.cloud_accounts import cloud_accounts_page
     cloud_accounts_page()
 elif selected_page == "Plans & Billing":
-    st.title("Plans & Billing")
     current_plan = get_user_plan(st.session_state.get("username", "guest"))
     st.session_state["plan"] = current_plan
+    st.markdown(f"""
+        <style>
+        .plan-billing-header-row {{display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;}}
+        .plan-billing-header-title {{font-size: 2.8rem; font-weight: 700; margin-bottom: 0.2em;}}
+        .plan-billing-header-plan {{font-size: 1.1rem; color: #444; margin-left: auto;}}
+        </style>
+        <div class='plan-billing-header-row'>
+            <div class='plan-billing-header-title'>Plans & Billing</div>
+            <div class='plan-billing-header-plan'>Plan: {current_plan}</div>
+        </div>
+    """, unsafe_allow_html=True)
     company_name = st.session_state.get("company") or get_user_company(st.session_state.get("username", "guest"))
     current_company = get_company(company_name) if company_name else None
     subscription = get_company_subscription(company_name) if company_name else None
@@ -2974,15 +2952,20 @@ elif selected_page == "Plans & Billing":
 
     current_plan_def = get_plan_definition(current_plan)
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    sub_status = st.session_state.get("subscription_status", "active")
     with metric_col1:
-        st.markdown(f"""
-            <div style='background:{plan_color};padding:1.2em 0.5em 1em 0.5em;border-radius:0.5em;text-align:center;min-height:4.5em;display:flex;flex-direction:column;justify-content:center;height:100%;'>
-                <div style='font-size:1.1em;font-weight:600;line-height:1.1;color:#38404a;'>Current Plan</div>
-                <div style='font-size:2em;font-weight:700;line-height:1.1;margin:0.1em 0 0.05em 0;color:#38404a;'>{plan_display}</div>
-                <div style='font-size:0.9em;color:#888;margin-bottom:0.1em;'>{plan_caption}</div>
-                {('<span style="color:#b00;font-size:0.95em;font-weight:600;">Subscription Inactive</span>' if sub_status not in ("active", "trialing") else '')}
-            </div>
-        """, unsafe_allow_html=True)
+        inactive_html = ''
+        if sub_status not in ("active", "trialing"):
+            inactive_html = '<span style="color:#b00;font-size:0.95em;font-weight:600;">Subscription Inactive</span>'
+        plan_html = (
+            f"<div style='background:{plan_color};padding:1.2em 0.5em 1em 0.5em;border-radius:0.5em;text-align:center;min-height:4.5em;display:flex;flex-direction:column;justify-content:center;height:100%;'>"
+            f"<div style='font-size:1.1em;font-weight:600;line-height:1.1;color:#38404a;'>Current Plan</div>"
+            f"<div style='font-size:2em;font-weight:700;line-height:1.1;margin:0.1em 0 0.05em 0;color:#38404a;'>{plan_display}</div>"
+            f"<div style='font-size:0.9em;color:#888;margin-bottom:0.1em;'>{plan_caption}</div>"
+            f"{inactive_html}"
+            "</div>"
+        )
+        st.markdown(plan_html, unsafe_allow_html=True)
     metric_col2.metric(
         "Cloud Accounts",
         "Unlimited" if current_plan_def["cloud_accounts"] == float("inf") else current_plan_def["cloud_accounts"],

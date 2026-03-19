@@ -13,7 +13,6 @@ if not st.session_state.get("authenticated"):
     st.warning("Please login from the main page")
     st.stop()
 
-st.title("📊 Cloud Cost Dashboard")
 
 # KPI Row
 col1, col2, col3, col4 = st.columns(4)
