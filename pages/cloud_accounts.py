@@ -272,8 +272,7 @@ def _required_fields_present(
 
 def cloud_accounts_page():
     _ensure_wizard_state()
-    st.title("☁️ Cloud Accounts")
-    st.subheader("Connect a cloud account once and let the platform sync cost data automatically.")
+    # Removed duplicate subheader to avoid double header
     st.caption("Saved accounts are encrypted at rest and scheduled for automatic background cost sync.")
 
     username = st.session_state.get("username", "guest")
