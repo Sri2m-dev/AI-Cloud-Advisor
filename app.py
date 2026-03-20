@@ -2756,7 +2756,7 @@ with st.sidebar:
     # Removed duplicate Plan label
     st.markdown("---")
     st.markdown("## Quick Navigation")
-    nav_pages = [
+    all_nav_pages = [
         ("Dashboard", "🏠"),
         ("AI Recommendations", "RI"),
         ("Cost Explorer", "💸"),
@@ -2769,12 +2769,15 @@ with st.sidebar:
     ]
     # Only show Access Management to company/global admins
     if is_company_admin_role(current_role) or is_global_admin_role(current_role):
-        nav_pages.append(("Access Management", "🔐"))
-    nav_labels = [page for page, _ in nav_pages]
+        all_nav_pages.append(("Access Management", "🔐"))
+    # Filter nav pages: only show pages in allowed_pages or admin pages
+    admin_pages = {"Access Management"}
+    visible_nav_pages = [p for p in all_nav_pages if p[0] in allowed_pages or (p[0] in admin_pages and (is_company_admin_role(current_role) or is_global_admin_role(current_role)))]
+    nav_labels = [page for page, _ in visible_nav_pages]
     current_page = st.session_state.get("selected_page", "Dashboard")
     default_index = nav_labels.index(current_page) if current_page in nav_labels else 0
     selected = st.radio("Go to:", nav_labels, index=default_index)
-    st.session_state["selected_page"] = nav_pages[nav_labels.index(selected)][0]
+    st.session_state["selected_page"] = visible_nav_pages[nav_labels.index(selected)][0]
     st.markdown("---")
     with st.expander("Help & FAQ", expanded=False):
         st.markdown('''
