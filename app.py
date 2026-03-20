@@ -2189,27 +2189,12 @@ def operations_page():
         audit_log_page(embedded=True)
 
 def reports_page():
-    st.title("Reports")
-    current_plan = st.session_state.get("plan") or get_user_plan(st.session_state.get("username", "guest"))
-    current_plan_def = get_plan_definition(current_plan)
-    if "reports" not in current_plan_def.get("feature_flags", set()):
-        st.warning(f"Reports are not included in the {current_plan} plan.")
-        st.info("Upgrade to Growth or Enterprise to unlock exportable reports.")
-        return
-
-    st.write("Download and generate report artifacts for finance and governance review.")
-    st.caption("Choose the output format based on audience: finance, executive leadership, or board review.")
-
+    # --- Variable assignments (must come first) ---
     username = st.session_state.get("username", "guest")
     active_demo = st.session_state.get("active_demo_environment")
     summary_metrics = _dashboard_summary_metrics(username, active_demo=active_demo)
     billing_df, account_scope, plan_scope = _load_dashboard_billing_scope(username, active_demo=active_demo)
     operations_snapshot = _cloud_operations_snapshot(username)
-
-    if plan_scope["history_days"] not in {None, float("inf")}:
-        st.caption(
-            f"Generated report data is currently limited to {plan_scope['history_label'].lower()} on the {plan_scope['plan_name']} plan."
-        )
 
     service_cost = pd.DataFrame(columns=["Service", "Cost"])
     if not billing_df.empty:
@@ -2233,6 +2218,48 @@ def reports_page():
     readiness_adjustment = 8 if operations_snapshot.get("accounts_in_error", 0) == 0 else -5
     readiness_score = max(40, min(100, maturity_score + readiness_adjustment))
 
+    # --- Executive Summary Cards (KPI style) ---
+    st.markdown("## Executive Summary")
+    st.caption(f"Client: {client_name} | Date: {datetime.datetime.now().strftime('%Y-%m-%d')}")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(
+            """
+            <div style='background-color:#0066cc; color:white; border-radius:16px; padding:18px; box-shadow:2px 2px 6px #ccc; text-align:center;'>
+            <b>Monthly Cloud Spend</b><br>
+            <span style='font-size:2rem; font-weight:700;'>${:,.0f}</span>
+            </div>
+            """.format(summary_metrics['total_monthly_cost']), unsafe_allow_html=True)
+    with col2:
+        percent_savings = (summary_metrics['potential_savings']/summary_metrics['total_monthly_cost']*100) if summary_metrics['total_monthly_cost'] else 0
+        st.markdown(
+            """
+            <div style='background-color:#00994c; color:white; border-radius:16px; padding:18px; box-shadow:2px 2px 6px #ccc; text-align:center;'>
+            <b>Estimated Savings</b><br>
+            <span style='font-size:2rem; font-weight:700;'>${:,.0f} ({:.1f}%)</span>
+            </div>
+            """.format(summary_metrics['potential_savings'], percent_savings), unsafe_allow_html=True)
+    with col3:
+        st.markdown(
+            """
+            <div style='background-color:#ff9900; color:white; border-radius:16px; padding:18px; box-shadow:2px 2px 6px #ccc; text-align:center;'>
+            <b>Cloud Maturity</b><br>
+            <span style='font-size:2rem; font-weight:700;'>{}/100</span>
+            </div>
+            """.format(maturity_score), unsafe_allow_html=True)
+    with col4:
+        st.markdown(
+            """
+            <div style='background-color:#6600cc; color:white; border-radius:16px; padding:18px; box-shadow:2px 2px 6px #ccc; text-align:center;'>
+            <b>Focus</b><br>
+            <span style='font-size:1.5rem; font-weight:700;'>Cost optimization and modernization</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ...existing code (single, non-duplicated blocks only)...
+
+
+    # Now define summary_df after all variables are set and before any code that uses it
     summary_df = pd.DataFrame(
         {
             "Metric": [
@@ -2300,11 +2327,10 @@ def reports_page():
             _render_download("report_finance_pdf", "Download Finance PDF", "application/pdf")
 
         with finance_col2:
-            st.markdown("#### Cost Workbook")
+            st.markdown("#### Cost Workbook (Excel)")
             st.caption("Excel workbook with executive summary, service-cost breakdown, and detailed spend tabs.")
             if st.button("Prepare Excel Workbook", key="prepare_finance_excel", width="stretch"):
                 from cloud_report_generator import generate_excel_report
-
                 _prepare_report(
                     "report_finance_excel",
                     lambda: generate_excel_report(
@@ -2325,119 +2351,42 @@ def reports_page():
             )
 
     with leadership_tab:
-        leadership_col1, leadership_col2 = st.columns(2)
-        with leadership_col1:
-            st.markdown("#### Executive Presentation")
-            st.caption("Management-ready PowerPoint with KPIs, cost distribution, and recommended next steps.")
-            if st.button("Prepare Executive Deck", key="prepare_executive_deck", width="stretch"):
-                from cloud_report_generator import generate_powerpoint_report
-
-                # Prepare trend data for slide 5
-                trend_data = pd.DataFrame()
-                if not billing_df.empty:
-                    trend_data = (
-                        billing_df.groupby(billing_df["date"].dt.to_period("M"))
-                        ["cost"].sum().reset_index()
-                    )
-                    trend_data["Date"] = trend_data["date"].astype(str)
-                    trend_data = trend_data.rename(columns={"cost": "Cost"})
-                _prepare_report(
-                    "report_executive_deck",
-                    lambda: generate_powerpoint_report(
-                        client_name,
-                        monthly_spend=summary_metrics["total_monthly_cost"],
-                        savings_monthly=summary_metrics["potential_savings"],
-                        top_service_name=top_service,
-                        maturity_score=maturity_score,
-                        readiness_score=readiness_score,
-                        service_cost=service_cost,
-                        trend_data=trend_data,
-                    ),
-                    "Executive deck is ready.",
-                )
-            _render_download(
-                "report_executive_deck",
-                "Download Executive Deck",
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        st.markdown("#### Executive PDF Presentation")
+        st.caption("Management-ready PDF with KPIs, cost distribution, and recommended next steps.")
+        if st.button("Prepare Executive PDF", key="prepare_executive_pdf", width="stretch"):
+            from cloud_report_generator import generate_boardroom_pdf
+            _prepare_report(
+                "report_executive_pdf",
+                lambda: generate_boardroom_pdf(
+                    client_name,
+                    monthly_spend=summary_metrics["total_monthly_cost"],
+                    savings_monthly=summary_metrics["potential_savings"],
+                    top_service_name=top_service,
+                    maturity_score=maturity_score,
+                    readiness_score=readiness_score,
+                ),
+                "Executive PDF is ready.",
             )
-
-        with leadership_col2:
-            st.markdown("#### CEO Strategy Pack")
-            st.caption("Narrative-heavy strategy pack focused on business value, risk of inaction, and reinvestment story.")
-            if st.button("Prepare CEO Strategy Pack", key="prepare_ceo_pack", width="stretch"):
-                from ceo_strategy_pack_generator import generate_ceo_strategy_pack
-
-                _prepare_report(
-                    "report_ceo_pack",
-                    lambda: generate_ceo_strategy_pack(
-                        client_name,
-                        monthly_spend=summary_metrics["total_monthly_cost"],
-                        savings_monthly=summary_metrics["potential_savings"],
-                        maturity_score=maturity_score,
-                        readiness_score=readiness_score,
-                        top_service=top_service,
-                    ),
-                    "CEO strategy pack is ready.",
-                )
-            _render_download(
-                "report_ceo_pack",
-                "Download CEO Strategy Pack",
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            )
+        _render_download("report_executive_pdf", "Download Executive PDF", "application/pdf")
 
     with board_tab:
-        if "board_packs" not in current_plan_def.get("feature_flags", set()):
-            st.info("Board and strategy packs are available on the Enterprise plan.")
-        else:
-            board_col1, board_col2 = st.columns(2)
-            with board_col1:
-                st.markdown("#### Partner Board Pack")
-                st.caption("Board-style presentation covering spend concentration, risks, ROI, and transformation roadmap.")
-                if st.button("Prepare Board Pack", key="prepare_board_pack", width="stretch"):
-                    from ppt_report_generator import generate_partner_board_pack
-
-                    _prepare_report(
-                        "report_board_pack",
-                        lambda: generate_partner_board_pack(
-                            client_name,
-                            monthly_spend=summary_metrics["total_monthly_cost"],
-                            savings_monthly=summary_metrics["potential_savings"],
-                            maturity_score=maturity_score,
-                            readiness_score=readiness_score,
-                            top_service=top_service,
-                            service_cost=service_cost if not service_cost.empty else pd.DataFrame({"Service": ["N/A"], "Cost": [0]}),
-                        ),
-                        "Board pack is ready.",
-                    )
-                _render_download(
-                    "report_board_pack",
-                    "Download Board Pack",
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                )
-
-            with board_col2:
-                st.markdown("#### McKinsey-Style Deck")
-                st.caption("Consulting-style transformation summary for senior stakeholders and steering-committee reviews.")
-                if st.button("Prepare McKinsey-Style Deck", key="prepare_mckinsey_deck", width="stretch"):
-                    from mckinsey_deck_generator import generate_mckinsey_deck
-
-                    _prepare_report(
-                        "report_mckinsey_deck",
-                        lambda: generate_mckinsey_deck(
-                            client_name,
-                            monthly_spend=summary_metrics["total_monthly_cost"],
-                            savings_monthly=summary_metrics["potential_savings"],
-                            maturity_score=maturity_score,
-                            readiness_score=readiness_score,
-                            top_service=top_service,
-                        ),
-                        "McKinsey-style deck is ready.",
-                    )
-                _render_download(
-                    "report_mckinsey_deck",
-                    "Download McKinsey-Style Deck",
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                )
+        st.markdown("#### Board Pack PDF")
+        st.caption("Board-style PDF covering spend concentration, risks, ROI, and transformation roadmap.")
+        if st.button("Prepare Board Pack PDF", key="prepare_board_pack_pdf", width="stretch"):
+            from cloud_report_generator import generate_boardroom_pdf
+            _prepare_report(
+                "report_board_pack_pdf",
+                lambda: generate_boardroom_pdf(
+                    client_name,
+                    monthly_spend=summary_metrics["total_monthly_cost"],
+                    savings_monthly=summary_metrics["potential_savings"],
+                    top_service_name=top_service,
+                    maturity_score=maturity_score,
+                    readiness_score=readiness_score,
+                ),
+                "Board Pack PDF is ready.",
+            )
+        _render_download("report_board_pack_pdf", "Download Board Pack PDF", "application/pdf")
 
     st.caption("Use Cost Explorer and Audit Log for interactive analysis. Reports is reserved for exportable outputs.")
 
@@ -2818,7 +2767,8 @@ with st.sidebar:
         ("Cloud Accounts", "☁️"),
         ("Plans & Billing", "💳")
     ]
-    if is_company_admin_role(current_role):
+    # Only show Access Management to company/global admins
+    if is_company_admin_role(current_role) or is_global_admin_role(current_role):
         nav_pages.append(("Access Management", "🔐"))
     nav_labels = [page for page, _ in nav_pages]
     current_page = st.session_state.get("selected_page", "Dashboard")
@@ -2845,8 +2795,14 @@ Type your notes and click 'Save Notes'. Notes are saved per user and forecast.
 # Main page routing logic
 selected_page = st.session_state.get("selected_page", "Dashboard")
 st.session_state["plan"] = current_plan
-admin_pages = {"Access Management"} if is_company_admin_role(st.session_state.get("role", "user")) else set()
-if selected_page not in set(get_plan_pages(current_plan)).union(admin_pages):
+current_role = st.session_state.get("role", "user")
+admin_pages = {"Access Management"} if is_company_admin_role(current_role) or is_global_admin_role(current_role) else set()
+# Restrict access to admin pages for non-admins
+if selected_page in admin_pages and not (is_company_admin_role(current_role) or is_global_admin_role(current_role)):
+    st.warning("You do not have access to this page.")
+    st.session_state["selected_page"] = "Dashboard"
+# Restrict access to plan pages
+elif selected_page not in set(get_plan_pages(current_plan)).union(admin_pages):
     st.warning(f"{selected_page} is not included in the {current_plan} plan.")
     st.session_state["selected_page"] = "Plans & Billing"
     st.rerun()

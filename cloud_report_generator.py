@@ -19,7 +19,7 @@ from io import BytesIO
 print("Report generator loaded")
 
 
-def generate_boardroom_pdf(client):
+def generate_boardroom_pdf(client, monthly_spend=None, savings_monthly=None, top_service_name=None, maturity_score=None, readiness_score=None):
     """
     Generate a professional boardroom-style PDF with just client parameter.
     
@@ -30,10 +30,11 @@ def generate_boardroom_pdf(client):
         str: Path to the generated PDF file
     """
     # Default values for demo purposes
-    monthly_spend = 150000
-    savings_monthly = 25000
-    top_service_name = "EC2 Instances"
-    maturity_score = 78
+    monthly_spend = 150000 if monthly_spend is None else monthly_spend
+    savings_monthly = 25000 if savings_monthly is None else savings_monthly
+    top_service_name = "EC2 Instances" if top_service_name is None else top_service_name
+    maturity_score = 78 if maturity_score is None else maturity_score
+    readiness_score = 85 if readiness_score is None else readiness_score
     
     file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     doc = SimpleDocTemplate(file.name, pagesize=letter)
@@ -66,39 +67,53 @@ def generate_boardroom_pdf(client):
     content.append(Paragraph(f"Date: {datetime.now(timezone.utc).date()}", styles["Normal"]))
     content.append(Paragraph("Confidential — For Executive Review", styles["Italic"]))
 
-    content.append(PageBreak())
-
-    # ===== EXECUTIVE SNAPSHOT =====
-    content.append(Paragraph("Executive Snapshot", ParagraphStyle(
-        "Header",
-        fontSize=18,
-        textColor=colors.darkblue,
-        spaceAfter=12
-    )))
-
-    snapshot_data = [
-        ["Metric", "Value"],
-        ["Monthly Spend", f"₹{monthly_spend:,.0f}"],
-        ["Annual Run Rate", f"₹{monthly_spend*12:,.0f}"],
-        ["Savings Opportunity", f"₹{savings_monthly:,.0f}"],
-        ["Top Cost Driver", top_service_name],
-        ["Cloud Maturity", f"{maturity_score}/100"]
+    # --- Executive KPI Cards (KPI style) ---
+    from reportlab.platypus import Flowable
+    class CardRow(Flowable):
+        def __init__(self, metrics, width=500, height=70, gap=18):
+            Flowable.__init__(self)
+            self.metrics = metrics
+            self.width = width
+            self.height = height
+            self.gap = gap
+            self.card_colors = [
+                colors.HexColor("#0066cc"),
+                colors.HexColor("#00994c"),
+                colors.HexColor("#ff9900"),
+                colors.HexColor("#6600cc")
+            ]
+        def draw(self):
+            c = self.canv
+            n = len(self.metrics)
+            card_w = (self.width - (n-1)*self.gap) / n
+            x = 0
+            for i, (title, value, subtitle) in enumerate(self.metrics):
+                c.saveState()
+                c.setFillColor(self.card_colors[i % len(self.card_colors)])
+                c.roundRect(x, 0, card_w, self.height, 14, fill=1, stroke=0)
+                c.setFillColor(colors.white)
+                c.setFont("Helvetica-Bold", 13)
+                c.drawCentredString(x + card_w/2, self.height-22, title)
+                c.setFont("Helvetica-Bold", 20)
+                c.drawCentredString(x + card_w/2, self.height-44, value)
+                if subtitle:
+                    c.setFont("Helvetica", 11)
+                    c.drawCentredString(x + card_w/2, 12, subtitle)
+                c.restoreState()
+                x += card_w + self.gap
+        def wrap(self, availWidth, availHeight):
+            return (self.width, self.height)
+    percent_savings = (savings_monthly/monthly_spend*100) if monthly_spend else 0
+    metrics = [
+        ("Monthly Cloud Spend", f"₹{monthly_spend:,.0f}", ""),
+        ("Estimated Savings", f"₹{savings_monthly:,.0f} ({percent_savings:.1f}%)", ""),
+        ("Cloud Maturity", f"{maturity_score}/100", ""),
+        ("Transformation Readiness", f"{readiness_score}/100", ""),
+        ("Focus", "Cost optimization and modernization", "")
     ]
-
-    snapshot_table = Table(snapshot_data, colWidths=[220, 180])
-
-    snapshot_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 11),
-        ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-            [colors.whitesmoke, colors.lightgrey]),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey)
-    ]))
-
-    content.append(snapshot_table)
+    content.append(Spacer(1, 30))
+    content.append(CardRow(metrics, width=500, height=70, gap=18))
+    content.append(Spacer(1, 24))
     content.append(PageBreak())
 
     # ===== PRIORITY ACTIONS =====
@@ -225,7 +240,8 @@ def generate_executive_pdf(client):
         ["Annual Run Rate", f"₹{monthly_spend*12:,.0f}"],
         ["Savings Opportunity", f"₹{savings_monthly:,.0f}"],
         ["Top Cost Driver", top_service_name],
-        ["Cloud Maturity", f"{maturity_score}/100"]
+        ["Cloud Maturity", f"{maturity_score}/100"],
+        ["Transformation Readiness", f"{readiness_score}/100"]
     ]
 
     snapshot_table = Table(snapshot_data, colWidths=[220, 180])
@@ -305,7 +321,7 @@ def generate_executive_pdf(client):
     return file.name
 
 
-def generate_boardroom_pdf(client, monthly_spend=None, savings_monthly=None, top_service_name=None, maturity_score=None):
+def generate_boardroom_pdf(client, monthly_spend=None, savings_monthly=None, top_service_name=None, maturity_score=None, readiness_score=None):
     """
     Generate a professional boardroom-style PDF cloud executive report.
     
@@ -328,6 +344,8 @@ def generate_boardroom_pdf(client, monthly_spend=None, savings_monthly=None, top
         top_service_name = "EC2 Instances"
     if maturity_score is None:
         maturity_score = 78
+    if readiness_score is None:
+        readiness_score = 85
     
     file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     doc = SimpleDocTemplate(file.name, pagesize=letter)
@@ -545,9 +563,7 @@ def generate_powerpoint_report(
     savings_monthly=None,
     top_service_name=None,
     maturity_score=None,
-    readiness_score=None,
-    service_cost=None,
-    trend_data=None
+    readiness_score=85
 ):
     """
     Generate a modern executive PowerPoint deck with charts and KPIs.
@@ -574,8 +590,7 @@ def generate_powerpoint_report(
         top_service_name = "EC2 Instances"
     if maturity_score is None:
         maturity_score = 78
-    if readiness_score is None:
-        readiness_score = 85
+    readiness_score = 85 if readiness_score is None else readiness_score
 
     prs = Presentation()
     blank_slide_layout = prs.slide_layouts[6]  # Blank
