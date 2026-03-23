@@ -1604,6 +1604,7 @@ def dashboard_page():
     # Recommendation feedback analytics
     rec_feedback_file = "recommendation_feedback.csv"
     rec_feedback = []
+    st.write("NEW VERSION DEPLOYED")
     if os.path.exists(rec_feedback_file):
         with open(rec_feedback_file, 'r') as f:
             for line in f:
