@@ -2,7 +2,7 @@
 from dotenv import load_dotenv
 import os
 load_dotenv()
-print("DB Host:", os.getenv("PGHOST"))
+feedback_file = os.getenv("FEEDBACK_FILE")
 
 PRIVACY_POLICY_TEXT = """
 ### --- Cookie Consent Banner (GDPR) ---
