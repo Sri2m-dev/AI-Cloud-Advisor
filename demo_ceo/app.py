@@ -1,9 +1,17 @@
+st.write("Connected to:", PGHOST)
+import streamlit as st
+import os
+
+try:
+    PGHOST = st.secrets["PGHOST"]
+except Exception:
+    PGHOST = os.getenv("PGHOST")  # local fallback
 try:
     from prophet import Prophet
 except ImportError:
     Prophet = None
-
 import streamlit as st
+
 # Inject global CSS for professional KPI cards (ONLY ONCE at top)
 st.markdown("""
 <style>
