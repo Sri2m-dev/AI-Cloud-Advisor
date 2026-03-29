@@ -1,10 +1,13 @@
+# Provide a get_cost_data function for compatibility
+def get_cost_data(*args, **kwargs):
+    return get_aws_cost()
 # Add get_aws_cost function
 def get_aws_cost():
-    # Example placeholder implementation with 'date' column
+    # Example placeholder implementation with lowercase columns
     return pd.DataFrame({
         "date": ["2026-03-01", "2026-03-02"],
-        "Service": ["EC2", "S3"],
-        "Cost": [5000, 2000]
+        "service": ["EC2", "S3"],
+        "cost": [5000, 2000]
     })
 # Utility for loading cost data
 import boto3

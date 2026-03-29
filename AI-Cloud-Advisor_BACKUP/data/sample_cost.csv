@@ -1,0 +1,5 @@
+product_product_name,line_item_unblended_cost
+EC2,20000
+S3,9000
+RDS,8000
+Lambda,3000
