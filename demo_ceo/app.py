@@ -1,8 +1,10 @@
 import streamlit as st
 st.write("ENV MODE:", ENV)
 import os
+import streamlit as st
 
 ENV = os.getenv("APP_ENV", "dev")
+st.write("ENV MODE:", ENV)  # Keep for debug, remove if not needed
 
 def load_demo_ceo_data():
     import pandas as pd
@@ -12,18 +14,22 @@ def load_demo_ceo_data():
         'percentage': [40, 35, 25]
     })
 
-def load_real_data():
-    # TODO: Replace with real data loading logic
+def connect_db():
+    # Place your DB connection logic here
+    try:
+        PGHOST = st.secrets["PGHOST"]
+    except Exception:
+        PGHOST = os.getenv("PGHOST")  # local fallback
+    # ...add other DB vars and connection code as needed...
+    st.write("Connected to:", PGHOST)
+    # Return a DataFrame or connection as needed
     import pandas as pd
-    return pd.DataFrame()  # Placeholder
+    return pd.DataFrame()  # Placeholder for real DB data
 
-def get_data():
-    if ENV == "demo":
-        return load_demo_ceo_data()
-    else:
-        return load_real_data()
-
-df = get_data()
+if ENV == "demo":
+    df = load_demo_ceo_data()
+else:
+    df = connect_db()
 st.write("Connected to:", PGHOST)
 import streamlit as st
 import os
