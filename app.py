@@ -184,7 +184,7 @@ from views.ui_messages import TOAST_LOGIN_WELCOME
 import pandas as pd
 import numpy as np
 from prophet import Prophet
-from statsmodels.tsa.arima.model import ARIMA
+
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from database.db import save_forecast_note, load_forecast_note, log_audit_event
@@ -563,10 +563,15 @@ def cost_forecast_page():
                 d = trial.suggest_int("d", 0, 2)
                 q = trial.suggest_int("q", 0, 3)
                 try:
-                    model = ARIMA(y, order=(p,d,q))
-                    fit = model.fit()
-                    preds = fit.fittedvalues
-                    return mean_absolute_error(y[max(d,1):], preds)
+                    if ENV == "demo":
+                        # Lightweight fallback for demo mode
+                        return simple_forecast(y)
+                    else:
+                        from statsmodels.tsa.arima.model import ARIMA
+                        model = ARIMA(y, order=(p,d,q))
+                        fit = model.fit()
+                        preds = fit.fittedvalues
+                        return mean_absolute_error(y[max(d,1):], preds)
                 except Exception:
                     return float('inf')
         study = optuna.create_study(direction="minimize")
@@ -637,27 +642,34 @@ def cost_forecast_page():
                     "Month Ahead": [forecast_period],
                     "Forecast": [forecast]
                 })
-            elif model_choice == "Prophet":
-                prophet_df = df.rename(columns={"date": "ds", "total_cost": "y"})
-                m = Prophet(seasonality_mode=prophet_seasonality)
-                m.fit(prophet_df)
-                future = m.make_future_dataframe(periods=forecast_period, freq='M')
-                forecast_prophet = m.predict(future)
-                next_month_prophet = forecast_prophet.iloc[-1]["yhat"]
-                forecast_value = next_month_prophet
-                st.metric(label=f"Prophet Forecast ({forecast_period} month(s) ahead)", value=f"${next_month_prophet:,.0f}", help="Handles seasonality and holidays.")
-                # Prophet confidence interval visualization
-                import plotly.graph_objs as go
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=forecast_prophet['ds'], y=forecast_prophet['yhat'], mode='lines', name='Forecast', line=dict(color='royalblue')))
-                fig.add_trace(go.Scatter(x=forecast_prophet['ds'], y=forecast_prophet['yhat_upper'], mode='lines', name='Upper CI', line=dict(dash='dash', color='lightgreen')))
-                fig.add_trace(go.Scatter(x=forecast_prophet['ds'], y=forecast_prophet['yhat_lower'], mode='lines', name='Lower CI', line=dict(dash='dash', color='salmon')))
-                fig.update_layout(title='Prophet Forecast with Confidence Interval', xaxis_title='Date', yaxis_title='Cost')
-                with st.expander("Show/Hide Prophet Confidence Interval Chart", expanded=True):
-                    st.plotly_chart(fig, width="stretch")
-                # Prophet components plot for explainability
-                with st.expander("Show/Hide Prophet Components (Explainability)", expanded=False):
-                    from prophet.plot import plot_components_plotly
+            elif model_choice == "ARIMA":
+                try:
+                    if ENV == "demo":
+                        # Lightweight fallback for demo mode
+                        forecast_data = simple_forecast(df["total_cost"])
+                        forecast_value = forecast_data.iloc[-1] if hasattr(forecast_data, 'iloc') else forecast_data[-1]
+                        st.metric(label=f"ARIMA Forecast ({forecast_period} month(s) ahead)", value=f"${forecast_value:,.0f}", help="Demo mode: simple forecast.")
+                    else:
+                        from statsmodels.tsa.arima.model import ARIMA
+                        arima_model = ARIMA(df["total_cost"], order=(arima_p, arima_d, arima_q))
+                        arima_fit = arima_model.fit()
+                        arima_forecast = arima_fit.forecast(steps=forecast_period)
+                        forecast_value = arima_forecast.iloc[-1]
+                        st.metric(label=f"ARIMA Forecast ({forecast_period} month(s) ahead)", value=f"${forecast_value:,.0f}", help="Best for stationary time series.")
+                        forecast_data = pd.DataFrame({
+                            "Month Ahead": list(range(1, forecast_period+1)),
+                            "Forecast": arima_forecast
+                        })
+                        # ARIMA residuals plot for diagnostics
+                        with st.expander("Show/Hide ARIMA Residuals (Diagnostics)", expanded=False):
+                            import plotly.graph_objs as go
+                            residuals = arima_fit.resid
+                            fig_resid = go.Figure()
+                            fig_resid.add_trace(go.Scatter(y=residuals, mode='lines', name='Residuals'))
+                            fig_resid.update_layout(title='ARIMA Residuals', xaxis_title='Time', yaxis_title='Residual')
+                            st.plotly_chart(fig_resid, width="stretch")
+                except Exception as e:
+                    st.warning(f"ARIMA forecast error: {e}")
                     st.plotly_chart(plot_components_plotly(m, forecast_prophet), width="stretch")
                 forecast_data = forecast_prophet[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(forecast_period)
             elif model_choice == "ARIMA":
@@ -723,10 +735,15 @@ def cost_forecast_page():
         # ARIMA CV
         try:
             def arima_func(train, horizon):
-                model = ARIMA(train, order=(arima_p, arima_d, arima_q))
-                fit = model.fit()
-                forecast = fit.forecast(steps=horizon)
-                return forecast.values
+                if ENV == "demo":
+                    # Lightweight fallback for demo mode
+                    return simple_forecast(train)
+                else:
+                    from statsmodels.tsa.arima.model import ARIMA
+                    model = ARIMA(train, order=(arima_p, arima_d, arima_q))
+                    fit = model.fit()
+                    forecast = fit.forecast(steps=horizon)
+                    return forecast.values
             mae_arima_cv = rolling_cv(arima_func, y_true)
             metrics_text += f"ARIMA MAE (CV): {mae_arima_cv:.2f}"
         except Exception:
