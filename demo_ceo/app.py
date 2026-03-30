@@ -1,3 +1,29 @@
+import streamlit as st
+st.write("ENV MODE:", ENV)
+import os
+
+ENV = os.getenv("APP_ENV", "dev")
+
+def load_demo_ceo_data():
+    import pandas as pd
+    return pd.DataFrame({
+        'business_unit': ['A', 'B', 'C'],
+        'monthly_spend': [10000, 15000, 12000],
+        'percentage': [40, 35, 25]
+    })
+
+def load_real_data():
+    # TODO: Replace with real data loading logic
+    import pandas as pd
+    return pd.DataFrame()  # Placeholder
+
+def get_data():
+    if ENV == "demo":
+        return load_demo_ceo_data()
+    else:
+        return load_real_data()
+
+df = get_data()
 st.write("Connected to:", PGHOST)
 import streamlit as st
 import os
