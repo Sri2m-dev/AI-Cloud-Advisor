@@ -222,22 +222,19 @@ st.set_page_config(page_title="CEO Dashboard", layout="wide")
 
 
 
+SUPABASE_URL = "https://uuebwablmphflqccgtrr.supabase.co"
+SUPABASE_KEY = "sb_publishable_GsrUjTNd6Zctu3ps8IrMjQ_gGFIUeKu"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
+
 def load_table(schema, table_name):
+    if ENV != "demo" and supabase:
+        return pd.DataFrame(
+            supabase.schema(schema).table(table_name).select("*").execute().data
+        )
+    else:
+        return pd.DataFrame()
 
 if ENV != "demo":
-    SUPABASE_URL = "https://uuebwablmphflqccgtrr.supabase.co"
-    SUPABASE_KEY = "sb_publishable_GsrUjTNd6Zctu3ps8IrMjQ_gGFIUeKu"
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
-
-    def load_table(schema, table_name):
-        if supabase:
-            return pd.DataFrame(
-                supabase.schema(schema).table(table_name).select("*").execute().data
-            )
-        else:
-            return pd.DataFrame()
-
     summary_df = load_table("public", "executive_summary")
     drivers_df = load_table("public", "cost_drivers")
     savings_df = load_table("public", "savings_opportunities")
@@ -246,6 +243,11 @@ if ENV != "demo":
     pipeline_df = load_table("public", "savings_pipeline")
 else:
     summary_df = pd.DataFrame()
+    drivers_df = pd.DataFrame()
+    savings_df = pd.DataFrame()
+    units_df = pd.DataFrame()
+    ownership_df = pd.DataFrame()
+    pipeline_df = pd.DataFrame()
     drivers_df = pd.DataFrame()
     savings_df = pd.DataFrame()
     units_df = pd.DataFrame()
@@ -336,9 +338,17 @@ with col4:
 # COST DRIVERS
 # -----------------------
 
+st.markdown("## 🚀 Top Cost Drivers (Where money is going)")
 st.markdown("## 💰 Spend by Business Unit")
 st.markdown("## 🚀 Top Cost Drivers (Where money is going)")
-import plotly.express as px
+try:
+    # Fallback for empty data
+    try:
+        import plotly.express as px
+    except ImportError:
+        st.warning("plotly.express is not installed. Please add it to requirements.txt and install dependencies.")
+except ImportError:
+    st.warning("plotly.express is not installed. Please add it to requirements.txt and install dependencies.")
 # Fallback for empty data
 if drivers_df.empty:
     st.info("No cost driver data available")
