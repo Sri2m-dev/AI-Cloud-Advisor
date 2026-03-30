@@ -1,6 +1,9 @@
 
-from dotenv import load_dotenv
+
 import os
+import streamlit as st
+st.write("ENV VALUE:", os.getenv("APP_ENV"))
+from dotenv import load_dotenv
 load_dotenv()
 feedback_file = os.getenv("FEEDBACK_FILE")
 

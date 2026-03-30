@@ -1,10 +1,8 @@
-import streamlit as st
-st.write("ENV MODE:", ENV)
 import os
 import streamlit as st
 
-ENV = os.getenv("APP_ENV", "dev")
-st.write("ENV MODE:", ENV)  # Keep for debug, remove if not needed
+ENV = os.getenv("APP_ENV", "demo")  # default = demo
+st.write("ENV MODE:", ENV)  # TEMP debug, remove if not needed
 
 def load_demo_ceo_data():
     import pandas as pd
@@ -15,34 +13,25 @@ def load_demo_ceo_data():
     })
 
 def connect_db():
-    # Place your DB connection logic here
     try:
         PGHOST = st.secrets["PGHOST"]
     except Exception:
         PGHOST = os.getenv("PGHOST")  # local fallback
-    # ...add other DB vars and connection code as needed...
     st.write("Connected to:", PGHOST)
-    # Return a DataFrame or connection as needed
+    # Return a DB connection object (placeholder: None)
+    return None
+
+def load_real_data(conn):
     import pandas as pd
+    # Use conn to load real data (placeholder)
     return pd.DataFrame()  # Placeholder for real DB data
 
 if ENV == "demo":
     df = load_demo_ceo_data()
 else:
-    df = connect_db()
-st.write("Connected to:", PGHOST)
-import streamlit as st
-import os
-
-try:
-    PGHOST = st.secrets["PGHOST"]
-except Exception:
-    PGHOST = os.getenv("PGHOST")  # local fallback
-try:
-    from prophet import Prophet
-except ImportError:
-    Prophet = None
-import streamlit as st
+    conn = connect_db()
+    df = load_real_data(conn)
+    st.write("API Demo: Cost Data from Backend")
 
 # Inject global CSS for professional KPI cards (ONLY ONCE at top)
 st.markdown("""
@@ -210,8 +199,12 @@ def kpi_card(title, value, delta, icon, color):
                 </div>
             """, unsafe_allow_html=True)
 # Clean helper function for loading tables
+
 def load_table(table_name):
-    return pd.DataFrame(supabase.table(table_name).select("*").execute().data) if supabase else pd.DataFrame()
+    if ENV != "demo":
+        return pd.DataFrame(supabase.table(table_name).select("*").execute().data) if supabase else pd.DataFrame()
+    else:
+        return pd.DataFrame()
 
 import streamlit as st
 import pandas as pd
@@ -229,30 +222,35 @@ st.set_page_config(page_title="CEO Dashboard", layout="wide")
 
 
 
-SUPABASE_URL = "https://uuebwablmphflqccgtrr.supabase.co"
-SUPABASE_KEY = "sb_publishable_GsrUjTNd6Zctu3ps8IrMjQ_gGFIUeKu"
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
-
-# -----------------------
-# LOAD DATA
-# -----------------------
-
 def load_table(schema, table_name):
-    if supabase:
-        return pd.DataFrame(
-            supabase.schema(schema).table(table_name).select("*").execute().data
-        )
-    else:
-        return pd.DataFrame()
 
+if ENV != "demo":
+    SUPABASE_URL = "https://uuebwablmphflqccgtrr.supabase.co"
+    SUPABASE_KEY = "sb_publishable_GsrUjTNd6Zctu3ps8IrMjQ_gGFIUeKu"
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
 
-summary_df = load_table("public", "executive_summary")
-drivers_df = load_table("public", "cost_drivers")
-savings_df = load_table("public", "savings_opportunities")
-units_df = load_table("public", "business_units")
-ownership_df = units_df.copy()
-pipeline_df = load_table("public", "savings_pipeline")
+    def load_table(schema, table_name):
+        if supabase:
+            return pd.DataFrame(
+                supabase.schema(schema).table(table_name).select("*").execute().data
+            )
+        else:
+            return pd.DataFrame()
+
+    summary_df = load_table("public", "executive_summary")
+    drivers_df = load_table("public", "cost_drivers")
+    savings_df = load_table("public", "savings_opportunities")
+    units_df = load_table("public", "business_units")
+    ownership_df = units_df.copy()
+    pipeline_df = load_table("public", "savings_pipeline")
+else:
+    summary_df = pd.DataFrame()
+    drivers_df = pd.DataFrame()
+    savings_df = pd.DataFrame()
+    units_df = pd.DataFrame()
+    ownership_df = pd.DataFrame()
+    pipeline_df = pd.DataFrame()
 
 # st.write("executive_summary columns:", summary_df.columns.tolist())
 # st.write("executive_summary sample:", summary_df.head())
