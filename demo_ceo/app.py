@@ -1,5 +1,4 @@
-st.write("🚀 Before dashboard call")
-st.write("✅ After dashboard call")
+
 import streamlit as st
 import os
 
@@ -18,10 +17,7 @@ def load_demo_ceo_data():
     })
 
 def load_real_data():
-    import reportlab
-    import sklearn
     import pandas as pd
-    # Placeholder for real DB data
     return pd.DataFrame()
 
 if ENV == "demo":
@@ -33,8 +29,8 @@ else:
 # UI
 # -----------------------
 def show_dashboard(df):
-    import streamlit as st
     st.title("🔥 FUNCTION HIT")
+    st.dataframe(df)
 
 st.write("🚀 Before dashboard call")
 show_dashboard(df)
