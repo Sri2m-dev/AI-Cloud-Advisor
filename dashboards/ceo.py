@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from services.aws_cost import get_cost_data
 
-def ceo_dashboard():
+def show_demo_dashboard():
 
     # 1. HEADER
     st.markdown("""
