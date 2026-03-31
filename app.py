@@ -1,43 +1,21 @@
 
-
-import os
 import streamlit as st
-st.write("ENV VALUE:", os.getenv("APP_ENV"))
-from dotenv import load_dotenv
-load_dotenv()
-feedback_file = os.getenv("FEEDBACK_FILE")
+import os
 
-PRIVACY_POLICY_TEXT = """
-### --- Cookie Consent Banner (GDPR) ---
-if "cookie_choice" not in st.session_state:
-    st.session_state.cookie_choice = None
+ENV = os.getenv("APP_ENV", "demo")
 
-if st.session_state.cookie_choice is None:
-    st.warning("We use cookies to improve your experience.")
-    col1, col2 = st.columns(2)
-    if col1.button("Accept All"):
-        st.session_state.cookie_choice = "accepted"
-        st.rerun()
-    if col2.button("Reject Non-Essential"):
-        st.session_state.cookie_choice = "rejected"
-        st.rerun()
-# Privacy Policy
+st.write("ENV VALUE:", ENV)
 
-**Data Controller:** Cloud Advisor Ltd
+if ENV == "demo":
+    from demo_ceo.app import main as demo_main
+    demo_main()
 
-**Legal Basis:** Legitimate interest / contract
+elif ENV == "dev":
+    from dashboards.ceo import show_dashboard
+    show_dashboard()
 
-**Data Retention:** 30–90 days (configurable)
-
-**User Rights:**
-- Access
-- Rectification
-- Erasure
-- Portability
-- Objection
-
-**Third-party Processors:**
-- OpenAI (AI/ML processing)
+else:
+    st.error("Invalid ENV")
 - AWS/Azure/GCP (cloud infrastructure)
 - Stripe (payments)
 
