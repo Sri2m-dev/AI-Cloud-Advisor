@@ -4,202 +4,26 @@ import os
 
 ENV = os.getenv("APP_ENV", "demo")
 
-st.write("ENV VALUE:", ENV)
+
+
+import streamlit as st
+import os
+
+ENV = os.getenv("APP_ENV", "demo")
+
+import streamlit as st
+import os
+
+ENV = os.getenv("APP_ENV", "demo")
+
+
 
 if ENV == "demo":
     from demo_ceo.app import main
     main()
-
-elif ENV == "dev":
+else:
     from dashboards.ceo import show_dashboard
     show_dashboard()
-
-else:
-    st.error("Invalid ENV")
-import os
-import requests
-from frontend_api import get_cost_data
-def plan_and_billing_page():
-    current_plan = get_user_plan(st.session_state.get("username", "guest"))
-    st.markdown(f"""
-        <style>
-        .plan-billing-header-row {{display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;}}
-        .plan-billing-header-title {font-size: 2.8rem; font-weight: 700; margin-bottom: 0.2em;}
-        .plan-billing-header-plan {{font-size: 1.1rem; color: #444; margin-left: auto;}}
-        </style>
-        <div class='plan-billing-header-row'>
-            <div class='plan-billing-header-title'>Plans & Billing</div>
-            <div class='plan-billing-header-plan'>Plan: {current_plan}</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-import streamlit as st
-# Hide Streamlit chrome that should not be visible to end users
-
-hide_pages = """
-<style>
-/* Removed any sidebar hiding CSS */
-[data-testid="stHeader"] {
-    display: none;
-}
-[data-testid="stToolbar"] {
-    display: none;
-}
-[data-testid="stDecoration"] {
-    display: none;
-}
-[data-testid="stStatusWidget"] {
-    display: none;
-}
-.stDeployButton {
-    display: none;
-}
-
-.block-container {
-    padding-top: 1.15rem;
-    padding-bottom: 1rem;
-    max-width: 1440px;
-}
-
-/* Ensure sidebar is not hidden */
-[data-testid="stSidebar"] {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-[data-testid="stMetric"] {
-    background: #e9f3fa;
-    border: 1px solid #dce8f2;
-    border-radius: 12px;
-    padding: 0.8rem 0.9rem;
-}
-</style>
-"""
-st.markdown(hide_pages, unsafe_allow_html=True)
-
-try:
-    from streamlit_cookies_controller import CookieController as _CookieController
-except ImportError:
-    _CookieController = None
-import jwt
-
-# Streamlit page config: set title and collapse sidebar by default
-
-import streamlit as st
-st.set_page_config(
-    page_title="Cloud Advisory Platform",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-
-import datetime
-from database.db import (
-    INTERNAL_COMPANY,
-    add_user,
-    can_manage_recommendation,
-    get_db,
-    get_company,
-    get_company_subscription,
-    get_pg_connection,
-    get_plan_billing_history_days,
-    get_plan_definition,
-    get_plan_names,
-    get_plan_pages,
-    get_user,
-    get_user_company,
-    get_user_seat_limit,
-    get_user_plan,
-    get_user_type,
-    is_company_admin_role,
-    is_global_admin_role,
-    initialize_core_tables,
-    list_cloud_accounts,
-    list_sync_runs,
-    list_users,
-        list_companies,
-    list_recommendations,
-    save_recommendation,
-    update_company_plan,
-    update_user_plan,
-    update_user_password,
-    is_onboarding_complete,
-)
-from services.billing_service import (
-    billing_is_ready,
-    create_billing_portal_session,
-    create_checkout_session,
-    get_billing_configuration_status,
-    sync_checkout_session,
-    sync_company_subscription,
-)
-from services.demo_environment import get_demo_account_profiles
-from views.ui_helpers import render_empty_state, show_toast
-from views.ui_messages import TOAST_LOGIN_WELCOME
-import pandas as pd
-import numpy as np
-from prophet import Prophet
-
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-from database.db import save_forecast_note, load_forecast_note, log_audit_event
-import plotly.express as px
-from sklearn.ensemble import IsolationForest
-
-
-_original_st_dataframe = st.dataframe
-
-
-def _left_aligned_dataframe(data=None, *args, **kwargs):
-    """Wrap st.dataframe to format numeric columns and enforce left alignment via column_config.
-
-    - Currency-like columns render as $X,XXX
-    - Other float columns render as X,XXX.XX
-    - Count-like integer columns render with separators (X,XXX)
-    - All columns set to left alignment via column_config
-    """
-    if isinstance(data, pd.DataFrame):
-        currency_keywords = ("cost", "savings", "spend", "exposure", "amount", "price", "budget")
-        count_keywords = ("records", "count")
-        data = data.copy()
-        for col in data.columns:
-            if not pd.api.types.is_numeric_dtype(data[col]):
-                continue
-            col_name = str(col).lower()
-            if any(keyword in col_name for keyword in currency_keywords):
-                data[col] = data[col].apply(lambda v: f"${v:,.0f}" if pd.notna(v) else "")
-                continue
-            if any(keyword in col_name for keyword in count_keywords) and pd.api.types.is_integer_dtype(data[col]):
-                data[col] = data[col].apply(lambda v: f"{int(v):,}" if pd.notna(v) else "")
-                continue
-            if pd.api.types.is_float_dtype(data[col]):
-                data[col] = data[col].apply(lambda v: f"{v:,.2f}" if pd.notna(v) else "")
-        
-        # Build column_config to force left alignment on all columns
-        column_config_dict = {}
-        for col in data.columns:
-            column_config_dict[col] = st.column_config.Column(width="medium")
-        
-        kwargs["column_config"] = column_config_dict
-    
-    return _original_st_dataframe(data, *args, **kwargs)
-
-
-st.dataframe = _left_aligned_dataframe
-
-AUTH_COOKIE_NAME = "cloud_advisor_auth"
-AUTH_COOKIE_DAYS = 7
-
-
-@st.cache_resource
-def _initialize_database():
-    initialize_core_tables()
-    return True
-
-
-_initialize_database()
-
 
 # Instantiated once per script run (every Streamlit rerun).
 # Must NOT be cached with @st.cache_resource — it renders a hidden HTML

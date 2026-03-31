@@ -1,5 +1,7 @@
 import streamlit as st
+
 def main():
+    st.success("DEMO DASHBOARD LOADED")
     st.set_page_config(layout="wide")
 
     st.markdown("### 🚀 Demo Mode")

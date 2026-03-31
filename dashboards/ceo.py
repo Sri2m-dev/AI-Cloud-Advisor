@@ -11,6 +11,8 @@ from services.aws_cost import get_cost_data
 
 def show_dashboard():
 
+    st.error("DEV DASHBOARD LOADED")
+
     # 1. HEADER
     st.markdown("""
     # ☁️ AI Cloud Advisor
