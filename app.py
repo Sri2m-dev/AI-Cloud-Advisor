@@ -7,8 +7,8 @@ ENV = os.getenv("APP_ENV", "demo")
 st.write("ENV VALUE:", ENV)
 
 if ENV == "demo":
-    from demo_ceo.app import main as demo_main
-    demo_main()
+    from demo_ceo.app import main
+    main()
 
 elif ENV == "dev":
     from dashboards.ceo import show_dashboard
