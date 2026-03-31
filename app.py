@@ -16,27 +16,6 @@ elif ENV == "dev":
 
 else:
     st.error("Invalid ENV")
-- AWS/Azure/GCP (cloud infrastructure)
-- Stripe (payments)
-
-**Data Handling:**
-- We do NOT store personal identifiable information unless required for account management.
-- We only process cloud cost and usage data.
-- All data is encrypted in transit (HTTPS).
-- Data is stored in the EU region by default.
-- Users can request data deletion at any time.
-- Data is processed in compliance with GDPR and other applicable regulations.
-
-**Contact:** support@yourcompany.com
-"""
-
-TERMS_OF_SERVICE_TEXT = """
-By using this platform:
-
-- You agree to data processing for cost optimization.
-- You are responsible for your cloud credentials.
-- We provide insights, not financial guarantees.
-"""
 import os
 import requests
 from frontend_api import get_cost_data
@@ -45,7 +24,7 @@ def plan_and_billing_page():
     st.markdown(f"""
         <style>
         .plan-billing-header-row {{display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;}}
-        .plan-billing-header-title {{font-size: 2.8rem; font-weight: 700; margin-bottom: 0.2em;}}
+        .plan-billing-header-title {font-size: 2.8rem; font-weight: 700; margin-bottom: 0.2em;}
         .plan-billing-header-plan {{font-size: 1.1rem; color: #444; margin-left: auto;}}
         </style>
         <div class='plan-billing-header-row'>
@@ -53,11 +32,7 @@ def plan_and_billing_page():
             <div class='plan-billing-header-plan'>Plan: {current_plan}</div>
         </div>
     """, unsafe_allow_html=True)
-import os
-import html
-import html
-# Import required modules
-import os
+
 import streamlit as st
 # Hide Streamlit chrome that should not be visible to end users
 

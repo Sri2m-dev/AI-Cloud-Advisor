@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from services.aws_cost import get_cost_data
 
-def show_demo_dashboard():
+def show_dashboard():
 
     # 1. HEADER
     st.markdown("""
@@ -50,6 +50,8 @@ def show_demo_dashboard():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Improved Alerts
+    # For import compatibility
+    __all__ = ["show_dashboard"]
     st.markdown("""
     <div style="
         background:#FFF3CD;
