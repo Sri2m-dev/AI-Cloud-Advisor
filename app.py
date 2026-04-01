@@ -1,43 +1,11 @@
 import streamlit as st
-import os
+from dashboards.ceo import render_dashboard
 
-# Remove yagmail import if present
-# import yagmail   # ❌ REMOVED
+def main():
+    render_dashboard()
 
-ENV = os.getenv("APP_ENV", "demo")
-
-st.write("ENV VALUE:", ENV)
-
-if ENV == "demo":
-    from demo_ceo.app import main
+if __name__ == "__main__":
     main()
-else:
-    from dashboards.ceo import show_dashboard
-    show_dashboard()
-
-    # Top N
-    st.markdown("### Top 10 Days by Cost")
-    top_days = filtered.groupby('date')['cost'].sum().reset_index().sort_values('cost', ascending=False).head(10)
-    st.dataframe(top_days.rename(columns={'date': 'Date', 'cost': 'Total Cost'}))
-
-    # Anomaly highlight
-    st.markdown("### Anomaly/Spike Detection")
-    mean = trend['cost'].mean()
-    std = trend['cost'].std()
-    spikes = trend[trend['cost'] > mean + 2*std]
-    if not spikes.empty:
-        st.error(f"Spikes detected on: {', '.join(spikes['date'].dt.strftime('%Y-%m-%d'))}")
-    else:
-        st.success("No major cost spikes detected.")
-
-    # Download/export
-    st.markdown("---")
-    st.download_button("Download Filtered Data (CSV)", filtered.to_csv(index=False).encode('utf-8'), file_name="filtered_cost_data.csv", mime="text/csv")
-
-def ai_advisor_page():
-    st.write("Preview the types of AI-generated optimization opportunities that will be managed in Recommendations.")
-
-    recommendation_preview = pd.DataFrame(
         [
             {"Recommendation": "Downsize underutilized EC2 instances", "Potential Savings": "$840/month", "Priority": "High"},
             {"Recommendation": "Evaluate Savings Plans coverage gaps", "Potential Savings": "$1,260/month", "Priority": "High"},
