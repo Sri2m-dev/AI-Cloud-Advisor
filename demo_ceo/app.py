@@ -456,6 +456,17 @@ def render_cost_opportunity():
     render_savings()
 
 
+def sanitize_for_ai(resource):
+    return {
+        "resource_type": resource.get("type"),
+        "cpu_avg": resource.get("cpu_avg"),
+        "memory_avg": resource.get("memory_avg"),
+        "monthly_cost": resource.get("monthly_cost"),
+        "waste_estimate": resource.get("waste_estimate"),
+        "rule_triggered": resource.get("rule_triggered")
+    }
+
+
 def render_infra_overview():
     def gradient_card(title, value, subtext, css_class):
         return f"""
