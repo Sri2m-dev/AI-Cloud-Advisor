@@ -307,7 +307,7 @@ def render_cost_drivers():
 # COST SAVINGS
 # -----------------------
 def render_savings():
-    st.markdown('<div class="major-section-text">💰 Cost Reduction Opportunity</div>', unsafe_allow_html=True)
+    st.markdown('<div class="major-section-text">💰 Cost Reduction</div>', unsafe_allow_html=True)
 
     def savings_card(title, value, subtitle, color):
         return f"""
@@ -380,6 +380,7 @@ def render_ceo_summary():
     st.warning("""
 Cloud cost is increasing faster than business growth.
 
+Key Insights:
 • Compute is the primary cost driver  
 • €8.3K monthly savings identified  
 • Immediate optimization required  
@@ -430,21 +431,33 @@ def render_cto_features():
     st.dataframe(cto_display, use_container_width=True, hide_index=True)
 
 
-def render_ceo_dashboard():
-    render_executive_snapshot()
+def render_client_context():
+    st.markdown("""
+<div style="
+    background:#f9fafb;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid #e5e7eb;
+    margin-bottom:15px;
+">
+<b>Client:</b> Demo Enterprise
+&nbsp;&nbsp;&nbsp;
+<b>Cloud:</b> AWS + Azure
+&nbsp;&nbsp;&nbsp;
+<b>Report Period:</b> March 2026
+</div>
+""", unsafe_allow_html=True)
+
+
+def render_primary_cost_drivers():
     render_cost_drivers()
+
+
+def render_cost_opportunity():
     render_savings()
-    render_ownership()
-    render_recommendations()
-    render_ceo_summary()
 
 
-def render_cto_dashboard():
-    st.markdown('<div class="major-section-text">🛠️ CTO Dashboard</div>', unsafe_allow_html=True)
-
-    # -----------------------
-    # GRADIENT CARD FUNCTION
-    # -----------------------
+def render_infra_overview():
     def gradient_card(title, value, subtext, css_class):
         return f"""
         <div class="kpi-card {css_class}">
@@ -454,9 +467,6 @@ def render_cto_dashboard():
         </div>
         """
 
-    # -----------------------
-    # KPI SNAPSHOT
-    # -----------------------
     st.markdown("### Infrastructure Overview")
 
     col1, col2, col3, col4 = st.columns(4)
@@ -473,10 +483,9 @@ def render_cto_dashboard():
     with col4:
         st.markdown(gradient_card("Optimization", "€6.2K", "Monthly potential", "green"), unsafe_allow_html=True)
 
-    # -----------------------
-    # 1. RESOURCE UTILIZATION
-    # -----------------------
-    import pandas as pd
+
+def render_resource_utilization():
+    st.markdown("### Resource Utilization")
 
     utilization_data = [
         ["EC2 - m5.large", "Compute", 22, 35, "Underutilized"],
@@ -492,11 +501,8 @@ def render_cto_dashboard():
     )
 
     df_display = df_util.copy()
-
-    # Rename column
     df_display.rename(columns={"Type": "Service"}, inplace=True)
 
-    # Add icons to Service column
     icons = {
         "Compute": "💻 Compute",
         "Database": "🗄️ Database",
@@ -553,8 +559,7 @@ def render_cto_dashboard():
             return f"🔴 {val}%"
         elif val > 40:
             return f"🟡 {val}%"
-        else:
-            return f"🟢 {val}%"
+        return f"🟢 {val}%"
 
     def color_mem(val):
         val = int(val)
@@ -562,15 +567,12 @@ def render_cto_dashboard():
             return f"🔴 {val}%"
         elif val > 40:
             return f"🟡 {val}%"
-        else:
-            return f"🟢 {val}%"
+        return f"🟢 {val}%"
 
-    # Status color
     def format_status(x):
         if "Idle" in x or "Under" in x or "Over" in x:
             return f"🔴 {x}"
-        else:
-            return f"🟢 {x}"
+        return f"🟢 {x}"
 
     df_display["CPU %"] = df_display["CPU %"].apply(color_cpu)
     df_display["Memory %"] = df_display["Memory %"].apply(color_mem)
@@ -585,7 +587,6 @@ def render_cto_dashboard():
         "Status"
     ]].copy()
 
-    # Format currency for left-aligned text display in the table.
     df_table["Monthly Cost (€)"] = df_table["Monthly Cost (€)"].apply(lambda x: f"€{int(x):,}")
     df_table["Waste (€)"] = df_table["Waste (€)"].apply(lambda x: f"€{int(x):,}")
 
@@ -598,7 +599,6 @@ def render_cto_dashboard():
         "Status"
     ]].astype(str)
 
-    st.markdown("### Resource Utilization")
     st.dataframe(df_table, use_container_width=True, hide_index=True)
 
     for _, row in df_display.iterrows():
@@ -609,20 +609,16 @@ def render_cto_dashboard():
 **Monthly Cost:** €{row['Monthly Cost (€)']}  
 **Estimated Waste:** €{row['Waste (€)']}  
 """)
-
             st.markdown("### Root Cause")
             st.write("- Low utilization over 7 days")
             st.write("- No autoscaling policy")
-
             st.markdown("### Risk")
             st.warning("Wasted infrastructure cost accumulating monthly")
-
             st.markdown("### Recommendation")
             st.success("Resize instance or schedule shutdown")
 
-    # -----------------------
-    # 2. OPTIMIZATION OPPORTUNITIES
-    # -----------------------
+
+def render_optimization_opportunities():
     waste_data = [
         ["Idle EC2 instances", "€2,400", "Low CPU usage (<20%)"],
         ["Over-provisioned RDS", "€1,800", "Memory underutilized"],
@@ -635,7 +631,6 @@ def render_cto_dashboard():
         columns=["Issue", "Monthly Waste", "Reason"]
     )
 
-    # Calculate total savings
     total_savings = df_waste["Monthly Waste"].apply(
         lambda x: int(x.replace("€", "").replace(",", ""))
     ).sum()
@@ -662,8 +657,7 @@ def render_cto_dashboard():
             return "🗄️ Database"
         elif "EBS" in issue or "storage" in issue.lower():
             return "📦 Storage"
-        else:
-            return "⚙️ Other"
+        return "⚙️ Other"
 
     st.markdown("## 🔧 Optimization Opportunities")
 
@@ -674,20 +668,17 @@ def render_cto_dashboard():
     df_waste_sorted = df_waste_sorted.sort_values(by="waste_val", ascending=False)
 
     for _, row in df_waste_sorted.iterrows():
-
         waste_val = int(row["Monthly Waste"].replace("€", "").replace(",", ""))
         savings = int(waste_val * 0.9)
 
         tag = get_tag(row["Issue"])
 
         with st.expander(f"{tag} | {row['Issue']} — {row['Monthly Waste']}"):
-
             st.markdown(f"""
         **💰 Cost Impact:** {row['Monthly Waste']}  
         **📉 Root Cause:** {row['Reason']}  
         """)
 
-            # Recommendation logic
             if "EC2" in row["Issue"]:
                 rec = "Resize instance or schedule shutdown"
             elif "RDS" in row["Issue"]:
@@ -705,7 +696,6 @@ def render_cto_dashboard():
             if st.button(f"Apply Fix for {row['Issue']}", key=row['Issue']):
                 st.success("✅ Optimization applied (simulated)")
 
-    # Export button
     csv = df_waste_sorted.to_csv(index=False).encode('utf-8')
 
     st.download_button(
@@ -715,9 +705,8 @@ def render_cto_dashboard():
         mime="text/csv",
     )
 
-    # -----------------------
-    # 4. ARCHITECTURE RISKS
-    # -----------------------
+
+def render_architecture_risks():
     st.markdown("### Architecture Risks")
 
     risks = [
@@ -730,16 +719,44 @@ def render_cto_dashboard():
     for risk in risks:
         st.markdown(f"""<div style="background:#fff7ed; border-left:5px solid #f97316; padding:14px; border-radius:8px; margin-bottom:10px;"><b>{risk[0]}</b><br>{risk[1]}<br><span style="color:#6b7280;">{risk[2]}</span></div>""", unsafe_allow_html=True)
 
+
+def render_ceo_dashboard():
+    render_executive_snapshot()
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_primary_cost_drivers()
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_cost_opportunity()
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_ceo_summary()
+
+
+def render_cto_dashboard():
+    st.markdown('<div class="major-section-text">🛠️ CTO Dashboard</div>', unsafe_allow_html=True)
+    st.info("""
+This view provides deep technical insights into infrastructure efficiency,
+resource utilization, and optimization opportunities.
+""")
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_infra_overview()
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_resource_utilization()
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_optimization_opportunities()
+    st.markdown("<br>", unsafe_allow_html=True)
+    render_architecture_risks()
+
 # -----------------------
 # MAIN
 # -----------------------
 def main():
     render_header()
+    render_client_context()
 
     view = st.radio(
-        "Select View",
+        "Dashboard View",
         ["CEO Dashboard", "CTO Dashboard"],
-        horizontal=True
+        horizontal=True,
+        label_visibility="collapsed"
     )
 
     if view == "CEO Dashboard":
