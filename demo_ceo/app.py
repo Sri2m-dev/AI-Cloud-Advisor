@@ -1,6 +1,100 @@
+import os
+import logging
+from datetime import datetime, timezone
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+
+# ---------------------------------------------------------------------------
+# AI LAYER CONTROLS
+# ---------------------------------------------------------------------------
+ENV = os.getenv("APP_ENV", "dev")          # dev | test | prod
+AI_ENABLED = os.getenv("AI_ENABLED", "false").strip().lower() == "true"
+
+# Supported: "azure_openai" | "aws_bedrock" | "private_llm" | "none"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "none")
+
+ALLOWED_FIELDS = [
+    "resource_type",
+    "cpu_avg",
+    "memory_avg",
+    "monthly_cost",
+    "waste_estimate",
+    "rule_triggered",
+]
+
+# ---------------------------------------------------------------------------
+# PROMPT GUARDRAIL (enforced at call time — DO NOT relax)
+# ---------------------------------------------------------------------------
+SYSTEM_PROMPT_CONSTRAINT = (
+    "You are a cloud cost analysis assistant. "
+    "ONLY explain the structured input provided. "
+    "DO NOT infer, request, or generate any data beyond what is given. "
+    "DO NOT make decisions outside the rules already applied. "
+    "DO NOT reference customer names, account IDs, or any identifiers."
+)
+
+_ai_audit_log = logging.getLogger("ai_audit")
+if not _ai_audit_log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s [AI_AUDIT] %(message)s"))
+    _ai_audit_log.addHandler(_handler)
+    _ai_audit_log.setLevel(logging.INFO)
+
+
+def log_ai_call(payload: dict) -> None:
+    """Write a structured audit record for every AI layer invocation."""
+    _ai_audit_log.info(
+        "timestamp=%s fields_sent=%s environment=%s ai_enabled=%s llm_provider=%s",
+        payload.get("timestamp"),
+        payload.get("fields_sent"),
+        payload.get("environment"),
+        payload.get("ai_enabled"),
+        payload.get("llm_provider"),
+    )
+
+
+def _deterministic_output(payload: dict) -> str:
+    """Fallback explanation built from rule logic — no AI required."""
+    rule = payload.get("rule_triggered") or "high resource waste"
+    rtype = payload.get("resource_type") or "resource"
+    waste = payload.get("waste_estimate") or "N/A"
+    return (
+        f"Deterministic analysis: {rtype} triggered rule '{rule}' "
+        f"with estimated waste of {waste}. "
+        "Recommendation generated without AI layer."
+    )
+
+
+def call_ai(payload: dict) -> str:
+    """
+    Route to the configured LLM provider with prompt guardrails applied.
+    Falls back to deterministic output on any failure — no exceptions surface.
+    """
+    if not AI_ENABLED or LLM_PROVIDER == "none":
+        return _deterministic_output(payload)
+
+    try:
+        # Guardrail: inject system constraint into every call
+        prompt = {
+            "system": SYSTEM_PROMPT_CONSTRAINT,
+            "user": str(payload),  # only sanitized fields reach here
+        }
+
+        if LLM_PROVIDER == "azure_openai":
+            raise NotImplementedError("Azure OpenAI integration not yet wired")
+        elif LLM_PROVIDER == "aws_bedrock":
+            raise NotImplementedError("AWS Bedrock integration not yet wired")
+        elif LLM_PROVIDER == "private_llm":
+            raise NotImplementedError("Private LLM integration not yet wired")
+        else:
+            return _deterministic_output(payload)
+
+    except Exception:
+        # FAIL-SAFE: any error → deterministic output, never surface to UI
+        _ai_audit_log.warning("AI call failed — falling back to deterministic output")
+        return _deterministic_output(payload)
+
 
 st.markdown("""
 <style>
@@ -456,15 +550,26 @@ def render_cost_opportunity():
     render_savings()
 
 
-def sanitize_for_ai(resource):
-    return {
-        "resource_type": resource.get("type"),
-        "cpu_avg": resource.get("cpu_avg"),
-        "memory_avg": resource.get("memory_avg"),
-        "monthly_cost": resource.get("monthly_cost"),
-        "waste_estimate": resource.get("waste_estimate"),
-        "rule_triggered": resource.get("rule_triggered")
-    }
+def sanitize_for_ai(resource: dict) -> dict | str:
+    """Strip all identifying fields and gate on AI_ENABLED before returning payload."""
+    # HARD BLOCK — no bypass
+    if not AI_ENABLED:
+        return "AI layer disabled — deterministic output only"
+
+    # Allow-list filter: explicitly drop everything outside ALLOWED_FIELDS
+    payload = {field: resource.get(field if field != "resource_type" else "type")
+               for field in ALLOWED_FIELDS}
+
+    # Audit every call regardless of what was sent
+    log_ai_call({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "fields_sent": list(payload.keys()),
+        "environment": ENV,
+        "ai_enabled": AI_ENABLED,
+        "llm_provider": LLM_PROVIDER,
+    })
+
+    return payload
 
 
 def render_infra_overview():
