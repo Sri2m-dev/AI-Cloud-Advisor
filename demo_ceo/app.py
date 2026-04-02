@@ -237,10 +237,9 @@ def render_cost_drivers():
 
     top = df.sort_values(by="Cost", ascending=False).iloc[0]
 
-    st.warning(
-        f"🔥 Top Cost Driver: {top['Service']} ({top['Cloud']}) — "
-        f"{top['MoM']} increase driven by {top['Cause']}"
-    )
+    st.info(f"""
+🔥 Top Cost Driver: {top['Service']} contributing highest spend.
+""")
 
     st.markdown('<h3 class="subtitle-20">Cost Drivers Breakdown</h3>', unsafe_allow_html=True)
 
@@ -307,7 +306,7 @@ def render_cost_drivers():
 # COST SAVINGS
 # -----------------------
 def render_savings():
-    st.markdown('<div class="major-section-text">💰 Cost Reduction</div>', unsafe_allow_html=True)
+    st.markdown('<div class="major-section-text">💰 Optimization Potential</div>', unsafe_allow_html=True)
 
     def savings_card(title, value, subtitle, color):
         return f"""
@@ -667,6 +666,11 @@ def render_optimization_opportunities():
     )
     df_waste_sorted = df_waste_sorted.sort_values(by="waste_val", ascending=False)
 
+    top_waste = df_waste_sorted.iloc[0]
+    st.warning(f"""
+🔥 Top Optimization Opportunity: {top_waste['Issue']} saving {top_waste['Monthly Waste']}
+""")
+
     for _, row in df_waste_sorted.iterrows():
         waste_val = int(row["Monthly Waste"].replace("€", "").replace(",", ""))
         savings = int(waste_val * 0.9)
@@ -721,9 +725,13 @@ def render_architecture_risks():
 
 
 def render_ceo_dashboard():
+    st.caption("High-level overview of cloud cost performance and savings potential")
+    st.markdown("<br>", unsafe_allow_html=True)
     render_executive_snapshot()
+    st.markdown("---")
     st.markdown("<br>", unsafe_allow_html=True)
     render_primary_cost_drivers()
+    st.markdown("---")
     st.markdown("<br>", unsafe_allow_html=True)
     render_cost_opportunity()
     st.markdown("<br>", unsafe_allow_html=True)
@@ -732,18 +740,26 @@ def render_ceo_dashboard():
 
 def render_cto_dashboard():
     st.markdown('<div class="major-section-text">🛠️ CTO Dashboard</div>', unsafe_allow_html=True)
-    st.info("""
-This view provides deep technical insights into infrastructure efficiency,
-resource utilization, and optimization opportunities.
-""")
+    st.caption("Deep technical analysis of infrastructure efficiency and optimization opportunities")
     st.markdown("<br>", unsafe_allow_html=True)
     render_infra_overview()
     st.markdown("<br>", unsafe_allow_html=True)
     render_resource_utilization()
     st.markdown("<br>", unsafe_allow_html=True)
     render_optimization_opportunities()
+    st.markdown("---")
     st.markdown("<br>", unsafe_allow_html=True)
     render_architecture_risks()
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### ℹ️ How Intelligence Works")
+    st.info("""
+Optimization decisions are generated using deterministic rules.
+
+An optional intelligence layer enhances explanations using 
+enterprise-grade LLMs without accessing sensitive data.
+
+This layer can be disabled without impacting core functionality.
+""")
 
 # -----------------------
 # MAIN
