@@ -8,6 +8,11 @@ from services.aws_cost import get_aws_cost
 
 import streamlit as st
 
+
+@st.cache_data(ttl=3600)
+def load_cost_data():
+    return get_aws_cost()
+
 # Protect page
 if not st.session_state.get("authenticated"):
     st.warning("Please login from the main page")
@@ -41,7 +46,7 @@ fig = px.line(data, x="Month", y="Cost", markers=True)
 st.plotly_chart(fig, width="stretch")
 
 # AWS Cost Trend
-df = get_aws_cost()
+df = load_cost_data()
 st.subheader("AWS Cost Trend")
 st.line_chart(df.set_index("date"))
 
