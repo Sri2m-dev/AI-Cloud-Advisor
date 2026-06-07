@@ -1,0 +1,16 @@
+<svg width="820" height="128" viewBox="0 0 820 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="820" height="128" rx="28" fill="#0B1F33"/>
+  <rect x="20" y="20" width="88" height="88" rx="24" fill="url(#g1)"/>
+  <path d="M52 78C44.268 78 38 71.732 38 64C38 56.268 44.268 50 52 50C54.404 50 56.666 50.601 58.646 51.66C61.145 45.935 66.854 42 73.5 42C82.613 42 90 49.387 90 58.5C90 59.177 89.96 59.844 89.882 60.5C94.692 61.462 98.312 65.709 98.312 70.812C98.312 76.625 93.6 81.337 87.787 81.337H52V78Z" fill="white"/>
+
+  <text x="132" y="84" fill="white" font-size="56" font-weight="800" font-family="Segoe UI, Arial, Helvetica, sans-serif" letter-spacing="1.4">
+    AI CLOUD <tspan fill="#8DE3C2">ADVISOR</tspan>
+  </text>
+
+  <defs>
+    <linearGradient id="g1" x1="20" y1="20" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E88E5"/>
+      <stop offset="1" stop-color="#21C39A"/>
+    </linearGradient>
+  </defs>
+</svg>

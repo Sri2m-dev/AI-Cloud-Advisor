@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from shared.styles import configure_page
 
 # ---------------------------------------------------------------------------
 # AI LAYER CONTROLS
@@ -40,6 +41,9 @@ if not _ai_audit_log.handlers:
     _handler.setFormatter(logging.Formatter("%(asctime)s [AI_AUDIT] %(message)s"))
     _ai_audit_log.addHandler(_handler)
     _ai_audit_log.setLevel(logging.INFO)
+
+
+configure_page(page_title="AI Cloud Advisor", page_icon=":cloud:")
 
 
 def log_ai_call(payload: dict) -> None:
@@ -270,11 +274,6 @@ strong {
 }
 </style>
 """, unsafe_allow_html=True)
-
-# -----------------------
-# PAGE CONFIG
-# -----------------------
-st.set_page_config(page_title="AI Cloud Advisor", layout="wide")
 
 # -----------------------
 # HEADER
@@ -898,3 +897,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

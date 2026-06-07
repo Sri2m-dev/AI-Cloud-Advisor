@@ -1,0 +1,32 @@
+{
+  "family": "ai-cloud-advisor-frontend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-cloud-advisor-task-role",
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "<ECR_OR_GHCR_FRONTEND_IMAGE>",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8501, "protocol": "tcp" }],
+      "environment": [
+        { "name": "PYTHONPATH", "value": "/app" }
+      ],
+      "secrets": [
+        { "name": "SUPABASE_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:SUPABASE_URL" },
+        { "name": "SUPABASE_SERVICE_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:SUPABASE_SERVICE_KEY" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ai-cloud-advisor/frontend",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

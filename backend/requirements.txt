@@ -1,2 +1,13 @@
 fastapi
 uvicorn
+PyJWT
+python-dotenv
+supabase
+pandas
+reportlab
+pytest
+httpx
+redis
+apscheduler
+celery
+prometheus-client

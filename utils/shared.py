@@ -47,6 +47,8 @@ def can_manage_recommendation(item, username, action="view"):
 
 def login_page():
     import streamlit as st
+    from auth.role_constants import normalize_role
+
     st.markdown("## Login")
     st.info("Demo Credentials:  \n\nCEO → ceo / ceo123 \nCTO → cto / cto123")
     username = st.text_input("Username")
@@ -57,15 +59,19 @@ def login_page():
         # Demo users
         if username == "ceo" and password == "ceo123":
             st.session_state["logged_in"] = True
-            st.session_state["role"] = "CEO"
+            st.session_state["role_display"] = "CEO"
+            st.session_state["role"] = "executive"
             st.rerun()
         elif username == "cto" and password == "cto123":
             st.session_state["logged_in"] = True
-            st.session_state["role"] = "CTO"
+            st.session_state["role_display"] = "CTO"
+            st.session_state["role"] = normalize_role("CTO")
             st.rerun()
         elif username.strip() == "admin" and password.strip() == "admin123":
             st.session_state["logged_in"] = True
-            st.session_state["role"] = "admin"
+            st.session_state["role_display"] = "Admin"
+            st.session_state["role"] = normalize_role("Admin")
             st.rerun()
         else:
             st.error("Invalid credentials")
+

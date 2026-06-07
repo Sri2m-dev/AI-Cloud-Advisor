@@ -1,0 +1,36 @@
+{
+  "family": "ai-cloud-advisor-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-cloud-advisor-task-role",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "<ECR_OR_GHCR_API_IMAGE>",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "PYTHONPATH", "value": "/app" },
+        { "name": "REDIS_URL", "value": "redis://<REDIS_ENDPOINT>:6379/0" },
+        { "name": "CELERY_BROKER_URL", "value": "redis://<REDIS_ENDPOINT>:6379/0" },
+        { "name": "CELERY_RESULT_BACKEND", "value": "redis://<REDIS_ENDPOINT>:6379/0" },
+        { "name": "BACKGROUND_JOBS_ENABLED", "value": "false" }
+      ],
+      "secrets": [
+        { "name": "SUPABASE_URL", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:SUPABASE_URL" },
+        { "name": "SUPABASE_SERVICE_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:SUPABASE_SERVICE_KEY" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ai-cloud-advisor/api",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

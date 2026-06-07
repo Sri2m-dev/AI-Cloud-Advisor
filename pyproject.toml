@@ -9,6 +9,9 @@ exclude = [
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.mypy]
 python_version = "3.11"
 files = ["cost_loader.py", "finops_metrics.py", "ai_recommender.py", "config.py", "tests"]

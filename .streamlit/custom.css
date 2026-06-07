@@ -211,3 +211,223 @@ h3 {
     margin-top: 0.5rem !important;
     margin-bottom: 0.5rem !important;
 }
+
+/* Page Width Utilization — Enterprise Command Center Layout */
+.main .block-container {
+    max-width: 1600px !important;
+    padding: 24px 32px !important;
+    margin: 0 auto !important;
+}
+
+/* Ensure full-width usage without ultra-narrow layouts */
+[data-testid="stMainBlockContainer"] {
+    max-width: 100% !important;
+    padding: 0 !important;
+}
+
+/* Dashboard containers expand to full width */
+.stContainer {
+    max-width: 100% !important;
+}
+
+/* Expand column layouts to use full available space */
+.stColumn {
+    max-width: 100% !important;
+}
+
+/* Executive KPI Header Bar — Enhanced Prominence */
+[data-testid="stMetricContainer"] {
+    min-height: 120px !important;
+    padding: 18px 16px !important;
+    border-radius: 12px !important;
+}
+
+.stMetric {
+    background: linear-gradient(135deg, #e6f2fa 0%, #f0fafe 100%) !important;
+    border: 1.5px solid #b3d9ed !important;
+    border-radius: 12px !important;
+    padding: 20px 18px !important;
+    min-height: 125px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    box-shadow: 0 2px 8px rgba(13, 138, 188, 0.08) !important;
+    transition: all 0.2s ease !important;
+}
+
+.stMetric:hover {
+    box-shadow: 0 4px 12px rgba(13, 138, 188, 0.12) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* KPI Label — Enhanced Clarity */
+.stMetric label {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    letter-spacing: 0.02em !important;
+    margin-bottom: 8px !important;
+}
+
+/* KPI Value — Large and Bold */
+.stMetric [data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    color: #0D8ABC !important;
+    line-height: 1.2 !important;
+    margin-bottom: 6px !important;
+}
+
+/* KPI Delta/Trend — Improved Visibility */
+.stMetric [data-testid="stMetricDelta"] {
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    color: #64748b !important;
+}
+
+/* Enhanced Column Spacing for KPI Row */
+.stRow {
+    gap: 12px !important;
+}
+
+/* KPI Section Container Spacing */
+[data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+}
+
+/* Card-based Layout Styling — Executive Reports & Settings */
+[data-testid="stContainer"] {
+    border-radius: 12px !important;
+}
+
+.stContainer > [data-testid="stVerticalBlock"] > [data-testid="stMarkdownContainer"]:first-child {
+    margin-bottom: 12px !important;
+}
+
+/* Bordered containers with subtle styling */
+[data-testid="stContainer"] {
+    background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%) !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 12px !important;
+    padding: 16px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-testid="stContainer"]:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+    transition: box-shadow 0.2s ease !important;
+}
+
+/* Card Headers (h3 within containers) */
+[data-testid="stContainer"] [data-testid="stMarkdownContainer"] h3 {
+    margin-top: 0 !important;
+    margin-bottom: 12px !important;
+    color: #1f2937 !important;
+    font-size: 1.1rem !important;
+}
+
+/* Compact Recommendation Cards — Optimization Section */
+.recommendation-card {
+    margin-bottom: 10px !important;
+    padding: 12px !important;
+}
+
+/* Reduce vertical spacing in recommendation containers */
+[data-testid="stContainer"] [data-testid="stCaption"] {
+    margin-bottom: 4px !important;
+    margin-top: 2px !important;
+    font-size: 0.85rem !important;
+}
+
+/* Compact button styling in recommendation cards */
+[data-testid="stContainer"] .stButton {
+    margin-bottom: 4px !important;
+}
+
+/* Reduce column gap within recommendation cards */
+[data-testid="stContainer"] [data-testid="stHorizontalBlock"] {
+    gap: 8px !important;
+}
+
+/* Financial metrics styling */
+[data-testid="stContainer"] [data-testid="stMarkdownContainer"] strong {
+    color: #0D8ABC !important;
+    font-weight: 700 !important;
+}
+
+/* ===== NORMALIZED KPI CARD SYSTEM ===== */
+
+/* Ensure all metric containers have uniform height */
+[data-testid="stMetricContainer"] {
+    height: 140px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+}
+
+/* Override stMetric to enforce consistent height */
+.stMetric {
+    height: 140px !important;
+    justify-content: center !important;
+}
+
+/* Typography normalization */
+.stMetric label {
+    margin-bottom: 10px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.03em !important;
+    font-size: 0.85rem !important;
+}
+
+.stMetric [data-testid="stMetricValue"] {
+    margin-bottom: 8px !important;
+    min-height: 2.5rem !important;
+}
+
+/* ===== RECOMMENDATION CARD STYLING ===== */
+
+/* Recommendation card container */
+[data-testid="stContainer"]:has([class*="recommendation"]),
+[data-testid="stContainer"]:has(> [data-testid="stMarkdown"] > strong) {
+    padding: 16px !important;
+    border: 1.5px solid #e5e7eb !important;
+    background: #fff !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Recommendation card hover effect */
+[data-testid="stContainer"]:has([class*="recommendation"]):hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1) !important;
+    border-color: #0D8ABC !important;
+}
+
+/* Recommendation header styling */
+[data-testid="stContainer"] > [data-testid="stMarkdownContainer"] > h4,
+[data-testid="stContainer"] > [data-testid="stMarkdownContainer"] > h3 {
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+    font-size: 1.1rem !important;
+}
+
+/* Executive summary in recommendations */
+.recommendation-summary {
+    background: #f8f9fa !important;
+    border-left: 4px solid #0D8ABC !important;
+    padding: 10px 12px !important;
+    margin: 8px 0 !important;
+    border-radius: 4px !important;
+    font-size: 0.95rem !important;
+}
+
+/* ===== RESPONSIVE COLUMN SPACING ===== */
+
+/* Tighter spacing for more items per row */
+[data-testid="stHorizontalBlock"] {
+    gap: 10px !important;
+}
+
+/* Better alignment of metric rows */
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    min-width: 0 !important;
+}

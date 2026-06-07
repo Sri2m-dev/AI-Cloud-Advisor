@@ -1,66 +1,140 @@
+from services.supabase_client import supabase
 import pandas as pd
+import uuid
+from datetime import datetime
+from config import DEFAULT_ORG_ID
 
-def generate_recommendations(df):
-    recommendations = []
-
-    if df.empty:
+class RecommendationEngine:
+    @staticmethod
+    def generate_idle_resource_recommendations(org_id=DEFAULT_ORG_ID):
+        response = supabase.table(
+            "unified_cloud_costs"
+        ).select("*").eq("organization_id", org_id).execute()
+        df = pd.DataFrame(response.data)
+        if df.empty or "utilization" not in df.columns:
+            return []
+        recommendations = []
+        idle_resources = df[df["utilization"] < 10]
+        for _, row in idle_resources.iterrows():
+            resource_id = row.get("resource_id") or "Unknown Resource"
+            service_name = row.get("service_name") or "Unknown Service"
+            cloud = row.get("cloud") or "Unknown Cloud"
+            utilization = row.get("utilization", 0)
+            recommendations.append({
+                "id": str(uuid.uuid4()),
+                "organization_id": org_id,
+                "title": "Idle Resource Detected",
+                "recommendation_type": "Cost Optimization",
+                "description": (
+                    f"""
+{service_name} resource
+in {cloud} appears underutilized.\n\nCurrent utilization:\n{utilization}%\n"""
+                ),
+                "priority": "High",
+                "status": "Pending",
+                "estimated_savings": float(row.get("cost", 0)) * 0.7,
+                "service": service_name,
+                "owner": row.get("owner"),
+                "resource_id": resource_id,
+                "created_at": datetime.utcnow().isoformat()
+            })
         return recommendations
 
-    # Ensure numeric
-    df["total_cost"] = pd.to_numeric(df["total_cost"], errors="coerce")
-    df = df.dropna(subset=["total_cost"])
-
-    avg_cost = df["total_cost"].mean()
-    latest_cost = df["total_cost"].iloc[-1]
-
-    # 🔴 1. Cost Spike Detection
-    if latest_cost > avg_cost * 1.2:
-        recommendations.append({
-            "title": "Investigate cost spike",
-            "category": "anomaly",
-            "priority": "High",
-            "savings": round(latest_cost - avg_cost, 2),
-            "confidence": 0.9,
-            "description": "Recent spend is significantly higher than average.",
-            "actions": [
-                "Check top services contributing to spike",
-                "Compare last 7 days vs previous baseline",
-                "Validate expected vs unexpected usage"
-            ]
-        })
-
-    # 🟡 2. Idle Resource Detection (example)
-    if df["total_cost"].mean() < 50:
-        recommendations.append({
-            "title": "Review underutilized resources",
-            "category": "optimization",
-            "priority": "Medium",
-            "savings": 200,
-            "confidence": 0.75,
-            "description": "Low usage detected — possible idle resources.",
-            "actions": [
-                "Check EC2 CPU utilization",
-                "Identify unused storage volumes",
-                "Stop idle workloads"
-            ]
-        })
-
-    # 🔵 3. Forecast Risk (basic)
-    if len(df) > 7:
-        trend = df["total_cost"].pct_change().mean()
-        if trend > 0.05:
+    @staticmethod
+    def generate_untagged_resource_recommendations(org_id=DEFAULT_ORG_ID):
+        response = supabase.table(
+            "unified_cloud_costs"
+        ).select("*").eq("organization_id", org_id).execute()
+        df = pd.DataFrame(response.data)
+        if df.empty or "tags" not in df.columns:
+            return []
+        recommendations = []
+        untagged = df[df["tags"].isnull()]
+        for _, row in untagged.iterrows():
+            resource_id = row.get("resource_id") or "Unknown Resource"
+            service_name = row.get("service_name") or "Unknown Service"
             recommendations.append({
-                "title": "Rising cost trend detected",
-                "category": "forecast",
-                "priority": "High",
-                "savings": 500,
-                "confidence": 0.85,
-                "description": "Costs are steadily increasing.",
-                "actions": [
-                    "Enable budgets and alerts",
-                    "Evaluate Savings Plans",
-                    "Review scaling policies"
-                ]
+                "id": str(uuid.uuid4()),
+                "organization_id": org_id,
+                "title": "Missing Mandatory Tags",
+                "recommendation_type": "Governance",
+                "description": (
+                    f"Resource {resource_id} ({service_name}) is missing governance tags."
+                ),
+                "priority": "Medium",
+                "status": "Pending",
+                "estimated_savings": 0,
+                "service": service_name,
+                "owner": row.get("owner"),
+                "resource_id": resource_id,
+                "created_at": datetime.utcnow().isoformat()
             })
+        return recommendations
 
-    return recommendations
+    @staticmethod
+    def generate_orphaned_resource_recommendations(org_id=DEFAULT_ORG_ID):
+        response = supabase.table(
+            "unified_cloud_costs"
+        ).select("*").eq("organization_id", org_id).execute()
+        df = pd.DataFrame(response.data)
+        if df.empty or "owner" not in df.columns:
+            return []
+        recommendations = []
+        orphaned = df[df["owner"].isnull()]
+        for _, row in orphaned.iterrows():
+            recommendations.append({
+                "id": str(uuid.uuid4()),
+                "organization_id": org_id,
+                "title": "Orphaned Resource",
+                "recommendation_type": "Governance",
+                "description": (
+                    f"Resource {row['resource_id']} has no assigned owner."
+                ),
+                "priority": "High",
+                "status": "Pending",
+                "estimated_savings": 0,
+                "service": row.get("service_name"),
+                "owner": None,
+                "created_at": datetime.utcnow().isoformat()
+            })
+        return recommendations
+
+    @staticmethod
+    def generate_cost_anomaly_recommendations():
+        # Placeholder: implement cost anomaly logic as needed
+        return []
+
+    @staticmethod
+    def save_recommendations(recommendations):
+        if not recommendations:
+            return
+        supabase.table(
+            "recommendations"
+        ).insert(recommendations).execute()
+
+    @staticmethod
+    def run_all_recommendation_jobs(org_id=DEFAULT_ORG_ID):
+        idle = (
+            RecommendationEngine
+            .generate_idle_resource_recommendations(org_id)
+        )
+        untagged = (
+            RecommendationEngine
+            .generate_untagged_resource_recommendations(org_id)
+        )
+        orphaned = (
+            RecommendationEngine
+            .generate_orphaned_resource_recommendations(org_id)
+        )
+        all_recommendations = (
+            idle +
+            untagged +
+            orphaned
+        )
+        RecommendationEngine.save_recommendations(
+            all_recommendations
+        )
+        return {
+            "generated": len(all_recommendations)
+        }
+

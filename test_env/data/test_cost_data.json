@@ -1,0 +1,151 @@
+{
+  "last_updated": "2026-04-10T22:04:30",
+  "source": "Test Mock API",
+  "total_spend": 40000,
+  "previous_spend": 32000,
+  "services": [
+    {
+      "name": "Compute",
+      "cost": 18000,
+      "savings": 4000,
+      "cloud": "AWS",
+      "date": "2026-04-10",
+      "resources": [
+        {
+          "id": "i-123",
+          "type": "t3.large",
+          "utilization": 20,
+          "waste": 500
+        },
+        {
+          "id": "i-456",
+          "type": "m5.xlarge",
+          "utilization": 35,
+          "waste": 800
+        },
+        {
+          "id": "i-789",
+          "type": "c5.2xlarge",
+          "utilization": 18,
+          "waste": 950
+        }
+      ]
+    },
+    {
+      "name": "Database",
+      "cost": 9000,
+      "savings": 2000,
+      "cloud": "AWS",
+      "date": "2026-04-10",
+      "resources": [
+        {
+          "id": "db-101",
+          "type": "db.r6g.large",
+          "utilization": 42,
+          "waste": 300
+        },
+        {
+          "id": "db-202",
+          "type": "db.m6i.xlarge",
+          "utilization": 28,
+          "waste": 700
+        }
+      ]
+    },
+    {
+      "name": "Storage",
+      "cost": 6000,
+      "savings": 1200,
+      "cloud": "Azure",
+      "date": "2026-04-10",
+      "resources": [
+        {
+          "id": "st-303",
+          "type": "Premium SSD",
+          "utilization": 40,
+          "waste": 220
+        },
+        {
+          "id": "st-404",
+          "type": "Blob Cool Tier",
+          "utilization": 24,
+          "waste": 350
+        }
+      ]
+    },
+    {
+      "name": "Networking",
+      "cost": 4000,
+      "savings": 800,
+      "cloud": "AWS",
+      "date": "2026-04-10",
+      "resources": [
+        {
+          "id": "net-505",
+          "type": "NAT Gateway",
+          "utilization": 31,
+          "waste": 260
+        },
+        {
+          "id": "net-606",
+          "type": "Load Balancer",
+          "utilization": 48,
+          "waste": 140
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "cost": 3000,
+      "savings": 500,
+      "cloud": "GCP",
+      "date": "2026-04-10",
+      "resources": [
+        {
+          "id": "an-707",
+          "type": "BigQuery Slot",
+          "utilization": 44,
+          "waste": 120
+        },
+        {
+          "id": "an-808",
+          "type": "Dataflow Job",
+          "utilization": 26,
+          "waste": 180
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "A1",
+      "title": "Right-size EC2 instances",
+      "service": "Compute",
+      "status": "Not Started",
+      "estimated_savings": 4000,
+      "realized_savings": 0,
+      "priority": "P1 \u2022 Savings",
+      "owner": "Platform Engineering"
+    },
+    {
+      "id": "A2",
+      "title": "Delete idle EBS volumes",
+      "service": "Storage",
+      "status": "In Progress",
+      "estimated_savings": 1500,
+      "realized_savings": 500,
+      "priority": "P1 \u2022 Efficiency",
+      "owner": "Infrastructure Operations"
+    },
+    {
+      "id": "A3",
+      "title": "Tune database instance sizing",
+      "service": "Database",
+      "status": "Completed",
+      "estimated_savings": 3000,
+      "realized_savings": 1800,
+      "priority": "P1 \u2022 Governance",
+      "owner": "FinOps / Finance"
+    }
+  ]
+}

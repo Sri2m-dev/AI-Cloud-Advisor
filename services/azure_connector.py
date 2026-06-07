@@ -2,8 +2,16 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
-from azure.identity import ClientSecretCredential
-from azure.mgmt.resource import ResourceManagementClient
+
+# ✅ SAFE IMPORTS (prevents crash if Azure SDK not installed)
+try:
+    from azure.identity import ClientSecretCredential
+    from azure.mgmt.resource import ResourceManagementClient
+    AZURE_AVAILABLE = True
+except ImportError:
+    ClientSecretCredential = None
+    ResourceManagementClient = None
+    AZURE_AVAILABLE = False
 
 
 AZURE_MANAGEMENT_SCOPE = "https://management.azure.com/.default"
@@ -11,6 +19,9 @@ AZURE_COST_API_VERSION = "2023-03-01"
 
 
 def _azure_credential(tenant_id, client_id, client_secret):
+    if not AZURE_AVAILABLE:
+        raise ImportError("Azure SDK not installed")
+
     return ClientSecretCredential(
         tenant_id=tenant_id,
         client_id=client_id,
@@ -37,81 +48,112 @@ def _normalize_azure_date(value):
 
 
 def get_azure_cost(tenant_id, client_id, client_secret, subscription_id, days=30):
-    credential = _azure_credential(tenant_id, client_id, client_secret)
-    token = credential.get_token(AZURE_MANAGEMENT_SCOPE)
-
-    end_date = datetime.now(timezone.utc).date()
-    start_date = end_date - timedelta(days=days)
-    url = (
-        f"https://management.azure.com/subscriptions/{subscription_id}"
-        f"/providers/Microsoft.CostManagement/query?api-version={AZURE_COST_API_VERSION}"
-    )
-    payload = {
-        "type": "ActualCost",
-        "timeframe": "Custom",
-        "timePeriod": {
-            "from": start_date.isoformat(),
-            "to": end_date.isoformat(),
-        },
-        "dataset": {
-            "granularity": "Daily",
-            "aggregation": {
-                "totalCost": {
-                    "name": "PreTaxCost",
-                    "function": "Sum",
-                }
-            },
-            "grouping": [
-                {
-                    "type": "Dimension",
-                    "name": "ServiceName",
-                }
-            ],
-        },
-    }
-    response = requests.post(
-        url,
-        headers={
-            "Authorization": f"Bearer {token.token}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=60,
-    )
-    response.raise_for_status()
-
-    properties = response.json().get("properties", {})
-    columns = [column["name"] for column in properties.get("columns", [])]
-    rows = properties.get("rows", [])
-    if not rows:
+    # ✅ SAFE FALLBACK
+    if not AZURE_AVAILABLE:
         return pd.DataFrame(columns=["date", "Service", "Cost"])
 
-    frame = pd.DataFrame(rows, columns=columns)
-    date_column = _first_matching_column(frame.columns, "UsageDate", "Date")
-    service_column = _first_matching_column(frame.columns, "ServiceName", "MeterCategory")
-    cost_column = _first_matching_column(frame.columns, "PreTaxCost", "Cost", "CostUSD", "totalCost")
-    if not date_column or not service_column or not cost_column:
-        raise ValueError("Azure cost response was missing expected columns.")
+    try:
+        credential = _azure_credential(tenant_id, client_id, client_secret)
+        token = credential.get_token(AZURE_MANAGEMENT_SCOPE)
 
-    normalized = pd.DataFrame(
-        {
-            "date": frame[date_column].map(_normalize_azure_date).dt.date.astype("string"),
-            "Service": frame[service_column].fillna("Other").astype(str),
-            "Cost": pd.to_numeric(frame[cost_column], errors="coerce").fillna(0.0),
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days)
+
+        url = (
+            f"https://management.azure.com/subscriptions/{subscription_id}"
+            f"/providers/Microsoft.CostManagement/query?api-version={AZURE_COST_API_VERSION}"
+        )
+
+        payload = {
+            "type": "ActualCost",
+            "timeframe": "Custom",
+            "timePeriod": {
+                "from": start_date.isoformat(),
+                "to": end_date.isoformat(),
+            },
+            "dataset": {
+                "granularity": "Daily",
+                "aggregation": {
+                    "totalCost": {
+                        "name": "PreTaxCost",
+                        "function": "Sum",
+                    }
+                },
+                "grouping": [
+                    {
+                        "type": "Dimension",
+                        "name": "ServiceName",
+                    }
+                ],
+            },
         }
-    )
-    normalized = normalized.dropna(subset=["date"])
-    return (
-        normalized.groupby(["date", "Service"], as_index=False, dropna=False)["Cost"]
-        .sum()
-        .sort_values(["date", "Service"], ascending=[False, True])
-        .reset_index(drop=True)
-    )
+
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {token.token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=60,
+        )
+
+        response.raise_for_status()
+
+        properties = response.json().get("properties", {})
+        columns = [column["name"] for column in properties.get("columns", [])]
+        rows = properties.get("rows", [])
+
+        if not rows:
+            return pd.DataFrame(columns=["date", "Service", "Cost"])
+
+        frame = pd.DataFrame(rows, columns=columns)
+
+        date_column = _first_matching_column(frame.columns, "UsageDate", "Date")
+        service_column = _first_matching_column(frame.columns, "ServiceName", "MeterCategory")
+        cost_column = _first_matching_column(frame.columns, "PreTaxCost", "Cost", "CostUSD", "totalCost")
+
+        if not date_column or not service_column or not cost_column:
+            raise ValueError("Azure cost response missing expected columns")
+
+        normalized = pd.DataFrame(
+            {
+                "date": frame[date_column].map(_normalize_azure_date).dt.date.astype("string"),
+                "Service": frame[service_column].fillna("Other").astype(str),
+                "Cost": pd.to_numeric(frame[cost_column], errors="coerce").fillna(0.0),
+            }
+        )
+
+        normalized = normalized.dropna(subset=["date"])
+
+        return (
+            normalized.groupby(["date", "Service"], as_index=False)["Cost"]
+            .sum()
+            .sort_values(["date", "Service"], ascending=[False, True])
+            .reset_index(drop=True)
+        )
+
+    except Exception as e:
+        print(f"Azure cost fetch error: {e}")
+        return pd.DataFrame(columns=["date", "Service", "Cost"])
+
 
 def get_azure_resource_groups(tenant_id, client_id, client_secret, subscription_id):
     """
     Authenticate with Azure and list resource groups.
     """
-    credential = _azure_credential(tenant_id, client_id, client_secret)
-    resource_client = ResourceManagementClient(credential, subscription_id)
-    return [rg.name for rg in resource_client.resource_groups.list()]
+
+    # ✅ SAFE FALLBACK
+    if not AZURE_AVAILABLE:
+        return []
+
+    try:
+        credential = _azure_credential(tenant_id, client_id, client_secret)
+        resource_client = ResourceManagementClient(credential, subscription_id)
+
+        return [rg.name for rg in resource_client.resource_groups.list()]
+
+    except Exception as e:
+        print(f"Azure resource group fetch error: {e}")
+        return []
+

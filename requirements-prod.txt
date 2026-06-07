@@ -1,0 +1,7 @@
+# requirements-prod.txt
+# Production-only dependencies (if any)
+# Example: gunicorn for API serving, sentry-sdk for error monitoring
+
+gunicorn==22.0.0
+sentry-sdk==2.5.0
+# Add any other production-only dependencies here

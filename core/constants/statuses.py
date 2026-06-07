@@ -1,0 +1,10 @@
+RECOMMENDATION_STATUSES = [
+    "OPEN",
+    "UNDER_REVIEW",
+    "APPROVED",
+    "REJECTED",
+    "IMPLEMENTED",
+    "COMPLETED",
+    "SNOOZED"
+]
+

@@ -1,0 +1,34 @@
+Recommendations generated: 4
+Traceback (most recent call last):
+  File "C:\Users\SrikanthMudaliar\AI-Cloud-Advisor\scripts\generate_recommendations.py", line 6, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
+Traceback (most recent call last):
+  File "C:\Users\SrikanthMudaliar\AI-Cloud-Advisor\scripts\generate_recommendations.py", line 6, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
+Traceback (most recent call last):
+  File "C:\Users\SrikanthMudaliar\AI-Cloud-Advisor\scripts\generate_recommendations.py", line 6, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
+Traceback (most recent call last):
+  File "C:\Users\SrikanthMudaliar\AI-Cloud-Advisor\scripts\generate_recommendations.py", line 6, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
+Traceback (most recent call last):
+  File "C:\Users\SrikanthMudaliar\AI-Cloud-Advisor\scripts\generate_recommendations.py", line 6, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
+Traceback (most recent call last):
+  File "C:\Users\SrikanthMudaliar\AI-Cloud-Advisor\scripts\generate_recommendations.py", line 6, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
+Upsert failed: {'message': 'new row for relation "recommendations" violates check constraint "valid_status"', 'code': '23514', 'hint': None, 'details': 'Failing row contains (bf67df1c-ae3c-44b3-91c1-e704d0f71668, bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c, Compute, High utilization detected - consider autoscaling, 0, pending, 2026-05-30 03:32:15.14593, null, OPTIMIZATION, High utilization detected - consider autoscaling, HIGH, null, null, null, null, null, null, null, null, null, null).'}
+Recommendations generated: 4
+Upsert failed: {'message': 'new row for relation "recommendations" violates check constraint "valid_status"', 'code': '23514', 'hint': None, 'details': 'Failing row contains (775c4bf9-ed00-4e96-bef2-6511b2ea447a, bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c, Compute, High utilization detected - consider autoscaling, 0, pending, 2026-05-31 03:30:13.363946, null, OPTIMIZATION, High utilization detected - consider autoscaling, HIGH, null, null, null, null, null, null, null, null, null, null).'}
+Recommendations generated: 4
+===================================
+SUPABASE URL: https://iafrrtmvvqmuksvprrsj.supabase.co
+===================================
+Upsert failed: {'message': 'new row for relation "recommendations" violates check constraint "valid_status"', 'code': '23514', 'hint': None, 'details': 'Failing row contains (988e3056-08ba-482e-80da-a2678b55f312, bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c, Compute, High utilization detected - consider autoscaling, 0, pending, 2026-06-02 03:30:07.286477, null, OPTIMIZATION, High utilization detected - consider autoscaling, HIGH, null, null, null, null, null, null, null, null, null, null).'}
+Recommendations generated: 4

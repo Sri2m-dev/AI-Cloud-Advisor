@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+archive
+backups
+backup_unused
+Dev
+temp_uploads
+exports
+node_modules
+memories

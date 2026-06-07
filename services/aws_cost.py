@@ -46,3 +46,4 @@ def load_cost_file(uploaded_file):
             "cost": cost
         })
     return pd.DataFrame(data)
+

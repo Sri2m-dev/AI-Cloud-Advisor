@@ -13,3 +13,4 @@ def get_cost_data():
         GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}]
     )
     return response
+

@@ -1,48 +1,26 @@
 import streamlit as st
+from components.navigation import render_navigation
 
-def render_sidebar(user_role="CEO"):
+
+def render_sidebar(user_role: str = None, role: str = None):
+    """Render a modern branded sidebar and the app navigation.
+
+    This intentionally keeps behavior simple and delegates page links to
+    `components.navigation.render_navigation()` so navigation is centralized.
+    """
+    user = st.session_state.get("user", "Unknown")
+    selected_role = st.session_state.get("role", role or user_role or "Unknown")
+    organization = st.session_state.get("organization_name", "Demo Enterprise")
+
     with st.sidebar:
-        st.markdown("## Cloud Advisory")
-
-        st.markdown("""
-        <div style="
-            background:#2F80ED;
-            color:white;
-            width:50px;
-            height:50px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            border-radius:10px;
-            font-weight:bold;
-        ">
-        AD
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"**Signed in as:** {user_role}")
-        st.markdown("Company: Cloud Advisor Internal")
-
-        st.markdown("🔒 All data stored in EU region (GDPR compliant)")
-
+        st.markdown("# AI Cloud Advisor")
+        st.markdown("#### Enterprise Cloud Governance")
         st.markdown("---")
-
-        st.markdown("### Go to:")
-        st.radio(
-            "",
-            [
-                "Dashboard",
-                "Privacy Policy",
-                "Terms of Service",
-                    page = st.radio(
-            ],
-            key="nav_radio"
+        st.markdown(
+            f"**User:** {user}  \n"
+            f"**Role:** {selected_role}  \n"
+            f"**Organization:** {organization}"
         )
-
         st.markdown("---")
+        render_navigation()
 
-        st.markdown("### 📊 Data Controls")
-
-        st.button("🗑️ Delete My Data")
-                    return page
-        st.button("📤 Export My Data")

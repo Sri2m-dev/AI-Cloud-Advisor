@@ -1,48 +1,56 @@
-import base64
-import contextlib
-import hashlib
-import json
 import os
+import json
+import base64
+import hashlib
+from cryptography.fernet import Fernet
+import contextlib
+import pandas as pd
+from pathlib import Path
 import sqlite3
 import time
-from datetime import datetime, timezone
-from pathlib import Path
+import datetime
+from supabase import create_client
+from datetime import timezone
+from shared.recommendation_schema import normalize_recommendation, with_legacy_aliases
+# If you use PostgreSQL, uncomment these lines and ensure psycopg2 is installed:
 
-import pandas as pd
 import psycopg2
-from cryptography.fernet import Fernet
 from psycopg2.extras import RealDictCursor
 
+FERNET_KEY_ENV = "FERNET_KEY"
+FERNET_KEY_FILE = Path("fernet.key")
 
-SQLITE_DB_PATH = "cloud_advisor.db"
-DB_INIT_LOCK_PATH = f"{SQLITE_DB_PATH}.init.lock"
-SCHEMA_VERSION = "2026-03-16-tenant-billing-v1"
-FERNET_KEY_ENV = "CLOUD_ADVISOR_CREDENTIAL_KEY"
-FERNET_KEY_FILE = Path(__file__).resolve().parent.parent / ".streamlit" / "credential.key"
-INTERNAL_COMPANY = "Cloud Advisor Internal"
-GLOBAL_ADMIN_ROLES = {"global_admin", "admin"}
-COMPANY_ADMIN_ROLES = {"global_admin", "admin", "client_admin"}
-RECOMMENDATION_MANAGER_ROLES = {"global_admin", "admin", "client_admin", "premium"}
-REQUIRED_TABLES = {
-    "companies",
-    "company_subscriptions",
-    "billing_data",
-    "users",
-    "subscriptions",
-    "audit_log",
-    "forecast_notes",
-    "cloud_accounts",
-    "cloud_sync_runs",
-    "recommendations",
-    "recommendation_events",
-}
-REQUIRED_CORE_TABLES = {
-    "companies",
-    "company_subscriptions",
-    "users",
-    "subscriptions",
-    "audit_log",
-}
+GLOBAL_ADMIN_ROLES = {"global_admin"}
+COMPANY_ADMIN_ROLES = {"company_admin"}
+RECOMMENDATION_MANAGER_ROLES = {"recommendation_manager"}
+INTERNAL_COMPANY = "internal"
+SQLITE_DB_PATH = "cloud_advisor.db"  # Update this if your DB file is different
+DB_INIT_LOCK_PATH = "db_init.lock"
+REQUIRED_TABLES = []
+REQUIRED_CORE_TABLES = []
+SCHEMA_VERSION = "1.0"
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+
+class _SupabaseProxy:
+    def __init__(self):
+        self._client = None
+
+    def _initialize(self):
+        if self._client is None:
+            if not SUPABASE_URL or not SUPABASE_KEY:
+                raise RuntimeError("SUPABASE_URL and SUPABASE_KEY are required")
+            self._client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        return self._client
+
+    def __getattr__(self, name):
+        return getattr(self._initialize(), name)
+
+
+supabase = _SupabaseProxy()
+
 
 PLAN_CATALOG = {
     "Starter": {
@@ -487,7 +495,7 @@ def upsert_company_subscription(
             company_name, plan, billing_cycle, subscription_status, trial_started_at, trial_ends_at,
             cancel_at_period_end, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id,
             stripe_price_id, current_period_end, source, last_synced_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(company_name) DO UPDATE SET
             plan = excluded.plan,
             billing_cycle = excluded.billing_cycle,
@@ -890,6 +898,16 @@ def _ensure_recommendations_table(conn):
     _ensure_column(conn, "recommendations", "rationale", "TEXT")
     _ensure_column(conn, "recommendations", "effort_level", "TEXT")
     _ensure_column(conn, "recommendations", "action_steps", "TEXT")
+    # Canonical recommendation schema columns
+    _ensure_column(conn, "recommendations", "cloud", "TEXT")
+    _ensure_column(conn, "recommendations", "service", "TEXT")
+    _ensure_column(conn, "recommendations", "resource_id", "TEXT")
+    _ensure_column(conn, "recommendations", "savings_monthly", "REAL")
+    _ensure_column(conn, "recommendations", "risk_score", "REAL")
+    _ensure_column(conn, "recommendations", "effort_score", "REAL")
+    _ensure_column(conn, "recommendations", "assigned_to", "TEXT")
+    _ensure_column(conn, "recommendations", "recommendation", "TEXT")
+    _ensure_column(conn, "recommendations", "implementation_steps", "TEXT")
     _ensure_column(conn, "recommendations", "created_at", "TEXT")
     _ensure_column(conn, "recommendations", "updated_at", "TEXT")
     _ensure_column(conn, "recommendations", "completed_at", "TEXT")
@@ -1587,7 +1605,7 @@ def save_cloud_account(username, provider, account_name, account_identifier, cre
                 credentials_encrypted, sync_enabled, status, validation_status,
                 validation_message, health_score, last_validation_at, sync_frequency_hours,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
@@ -1927,7 +1945,25 @@ def save_recommendation(
     _ensure_recommendations_table(conn)
     company = get_user_company(username) or _default_company_for_role(get_user_role(username), username)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    serialized_steps = json.dumps(action_steps) if action_steps is not None else None
+    canonical = normalize_recommendation(
+        {
+            "id": None,
+            "cloud": provider,
+            "category": category,
+            "service": title,
+            "resource_id": resource or account_identifier,
+            "priority": priority,
+            "savings_monthly": estimated_savings,
+            "risk_score": confidence_score or 0,
+            "effort_score": 0,
+            "status": "new",
+            "assigned_to": owner,
+            "created_at": now,
+            "recommendation": description or title,
+            "implementation_steps": action_steps,
+        }
+    )
+    serialized_steps = json.dumps(canonical["implementation_steps"]) if canonical["implementation_steps"] else None
     existing = conn.execute(
         """
         SELECT id, status
@@ -1940,24 +1976,35 @@ def save_recommendation(
         conn.execute(
             """
             UPDATE recommendations
-            SET description = ?, account_identifier = ?, provider = ?, owner = COALESCE(?, owner),
-                priority = COALESCE(?, priority), estimated_savings = COALESCE(?, estimated_savings),
+            SET description = ?, recommendation = ?, account_identifier = ?, provider = ?, cloud = ?, service = ?, resource_id = ?,
+                owner = COALESCE(?, owner), assigned_to = COALESCE(?, assigned_to),
+                priority = COALESCE(?, priority), estimated_savings = COALESCE(?, estimated_savings), savings_monthly = COALESCE(?, savings_monthly),
+                risk_score = COALESCE(?, risk_score), effort_score = COALESCE(?, effort_score),
                 due_date = COALESCE(?, due_date), confidence_score = COALESCE(?, confidence_score),
                 rationale = COALESCE(?, rationale), effort_level = COALESCE(?, effort_level),
-                action_steps = COALESCE(?, action_steps), updated_at = ?
+                action_steps = COALESCE(?, action_steps), implementation_steps = COALESCE(?, implementation_steps), updated_at = ?
             WHERE id = ?
             """,
             (
-                description,
+                canonical["recommendation"],
+                canonical["recommendation"],
                 account_identifier,
-                provider,
-                owner,
-                priority,
-                estimated_savings,
+                canonical["cloud"],
+                canonical["cloud"],
+                canonical["service"],
+                canonical["resource_id"],
+                canonical["assigned_to"] or None,
+                canonical["assigned_to"] or None,
+                canonical["priority"],
+                canonical["savings_monthly"],
+                canonical["savings_monthly"],
+                canonical["risk_score"],
+                canonical["effort_score"],
                 due_date,
                 confidence_score,
                 rationale,
                 effort_level,
+                serialized_steps,
                 serialized_steps,
                 now,
                 existing[0],
@@ -1970,26 +2017,37 @@ def save_recommendation(
             INSERT INTO recommendations (
                 username, company, account_identifier, provider, category, title, description, status,
                 owner, priority, estimated_savings, due_date, source, resource,
-                confidence_score, rationale, effort_level, action_steps, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confidence_score, rationale, effort_level, action_steps,
+                cloud, service, resource_id, savings_monthly, risk_score, effort_score,
+                assigned_to, recommendation, implementation_steps, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
                 company,
                 account_identifier,
-                provider,
+                canonical["cloud"],
                 category,
                 title,
-                description,
-                owner,
-                priority,
-                estimated_savings,
+                canonical["recommendation"],
+                canonical["assigned_to"] or None,
+                canonical["priority"],
+                canonical["savings_monthly"],
                 due_date,
                 source,
-                resource,
+                canonical["resource_id"],
                 confidence_score,
                 rationale,
                 effort_level,
+                serialized_steps,
+                canonical["cloud"],
+                canonical["service"],
+                canonical["resource_id"],
+                canonical["savings_monthly"],
+                canonical["risk_score"],
+                canonical["effort_score"],
+                canonical["assigned_to"] or None,
+                canonical["recommendation"],
                 serialized_steps,
                 now,
                 now,
@@ -2008,7 +2066,9 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
          SELECT id, username, company, account_identifier, provider, category, title, description,
                status, owner, priority, estimated_savings, realized_savings, due_date,
                dismiss_reason, source, resource, confidence_score, rationale, effort_level,
-               action_steps, created_at, updated_at, completed_at
+               action_steps, created_at, updated_at, completed_at,
+               cloud, service, resource_id, savings_monthly, risk_score, effort_score,
+               assigned_to, recommendation, implementation_steps
         FROM recommendations
     """
     conditions = []
@@ -2030,15 +2090,39 @@ def list_recommendations(username=None, status=None, source=None, limit=100):
     rows = []
     for row in conn.execute(query, tuple(params)).fetchall():
         item = dict(row)
-        raw_steps = item.get("action_steps")
+        raw_steps = item.get("implementation_steps") or item.get("action_steps")
         if raw_steps:
             try:
-                item["action_steps"] = json.loads(raw_steps)
+                parsed_steps = json.loads(raw_steps)
             except (TypeError, json.JSONDecodeError):
-                item["action_steps"] = [str(raw_steps)]
+                parsed_steps = [str(raw_steps)]
         else:
-            item["action_steps"] = []
-        rows.append(item)
+            parsed_steps = []
+
+        canonical = normalize_recommendation(
+            {
+                "id": item.get("id"),
+                "cloud": item.get("cloud") or item.get("provider"),
+                "category": item.get("category"),
+                "service": item.get("service") or item.get("title"),
+                "resource_id": item.get("resource_id") or item.get("resource") or item.get("account_identifier"),
+                "priority": item.get("priority"),
+                "savings_monthly": item.get("savings_monthly", item.get("estimated_savings", 0)),
+                "risk_score": item.get("risk_score", item.get("confidence_score", 0)),
+                "effort_score": item.get("effort_score", 0),
+                "status": item.get("status"),
+                "assigned_to": item.get("assigned_to") or item.get("owner"),
+                "created_at": item.get("created_at"),
+                "recommendation": item.get("recommendation") or item.get("description") or item.get("title"),
+                "implementation_steps": parsed_steps,
+            }
+        )
+        merged = dict(item)
+        merged.update(with_legacy_aliases(canonical))
+        merged["id"] = item.get("id")
+        merged["action_steps"] = canonical["implementation_steps"]
+        merged["implementation_steps"] = canonical["implementation_steps"]
+        rows.append(merged)
     conn.close()
     return rows
 
@@ -2196,5 +2280,6 @@ def get_connected_account_count(username=None):
     count = cur.fetchone()[0]
     conn.close()
     return count
+
 
 

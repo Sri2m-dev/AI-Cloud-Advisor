@@ -1,0 +1,10 @@
+# requirements-dev.txt
+# Development-only dependencies for linting, testing, debugging, telemetry
+
+pytest==8.2.0
+pytest-cov==5.0.0
+flake8==7.0.0
+black==24.4.2
+mypy==1.10.0
+ipython==8.24.0
+# Add more dev tools as needed

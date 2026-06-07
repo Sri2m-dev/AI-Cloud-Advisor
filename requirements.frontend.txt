@@ -1,0 +1,10 @@
+streamlit
+streamlit-autorefresh
+pandas
+plotly
+supabase
+python-dotenv
+reportlab
+httpx
+redis
+apscheduler

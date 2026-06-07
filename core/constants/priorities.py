@@ -1,0 +1,7 @@
+RECOMMENDATION_PRIORITIES = [
+    "LOW",
+    "MEDIUM",
+    "HIGH",
+    "CRITICAL"
+]
+
