@@ -10,9 +10,9 @@ from core.entities.entity import (
     EntityRelationship,
     EntityType,
     LifecycleState,
-    RelationshipType,
 )
 from repositories.entity_repository import EntityRepository
+from services.ontology_service import OntologyService
 
 
 @dataclass(slots=True)
@@ -40,8 +40,13 @@ class EntityQualityMetrics:
 
 
 class EntityService:
-    def __init__(self, repository: EntityRepository | None = None):
+    def __init__(
+        self,
+        repository: EntityRepository | None = None,
+        ontology_service: OntologyService | None = None,
+    ):
         self.repository = repository or EntityRepository()
+        self.ontology_service = ontology_service or OntologyService()
 
     def validate(self, entity: EnterpriseEntity) -> list[str]:
         errors = []
@@ -107,20 +112,51 @@ class EntityService:
         target_entity_id: UUID | str,
         confidence: float = 1.0,
         source_system: str = "manual",
+        created_by: UUID | str | None = None,
+        verification_method: str = "unverified",
+        status: str | None = None,
+        strength: str | None = None,
         metadata: dict | None = None,
     ) -> EntityRelationship:
-        if relationship_type not in {item.value for item in RelationshipType}:
-            raise ValueError(f"Unsupported relationship type: {relationship_type}")
-        self._get_required(source_entity_id)
-        self._get_required(target_entity_id)
+        source_entity = self._get_required(source_entity_id)
+        target_entity = self._get_required(target_entity_id)
+        validation = self.ontology_service.require_valid_relationship(
+            relationship_type,
+            source_entity.entity_type,
+            target_entity.entity_type,
+        )
+        self.ontology_service.require_cardinality_allows(
+            relationship_type,
+            source_entity.entity_type,
+            target_entity.entity_type,
+            existing_targets_for_source=self._count_relationship_targets(source_entity.id, relationship_type),
+            existing_sources_for_target=self._count_relationship_sources(target_entity.id, relationship_type),
+            same_relationship_exists=self._relationship_exists(source_entity.id, relationship_type, target_entity.id),
+        )
+        semantics = self.ontology_service.relationship_semantics(
+            relationship_type,
+            source_entity.entity_type,
+            target_entity.entity_type,
+        )
         return self.repository.add_relationship(
             EntityRelationship(
                 source_entity_id=UUID(str(source_entity_id)),
                 relationship_type=relationship_type,
                 target_entity_id=UUID(str(target_entity_id)),
-                confidence=confidence,
+                confidence_score=confidence,
                 source_system=source_system,
-                metadata=metadata or {},
+                created_by=UUID(str(created_by)) if created_by else None,
+                last_verified=datetime.now(timezone.utc).isoformat(timespec="seconds") if verification_method != "unverified" else None,
+                verification_method=verification_method,
+                status=status or ("Active" if verification_method != "unverified" else "Pending"),
+                strength=strength or (validation.default_strength or semantics.get("default_strength") or "Medium"),
+                direction=validation.direction or semantics.get("direction") or "Forward",
+                ontology_version=validation.ontology_version or semantics.get("ontology_version") or "1.2.1",
+                metadata={
+                    **(metadata or {}),
+                    "relationship_group": semantics.get("relationship_group"),
+                    "cardinality": validation.cardinality or semantics.get("cardinality"),
+                },
             )
         )
 
@@ -184,6 +220,43 @@ class EntityService:
             raise KeyError(f"Entity not found: {entity_id}")
         return entity
 
+    def _relationship_exists(
+        self,
+        source_entity_id: UUID | str,
+        relationship_type: str,
+        target_entity_id: UUID | str,
+    ) -> bool:
+        source_id = UUID(str(source_entity_id))
+        target_id = UUID(str(target_entity_id))
+        return any(
+            relationship.source_entity_id == source_id
+            and relationship.relationship_type == relationship_type
+            and relationship.target_entity_id == target_id
+            for relationship in self.repository.get_relationships()
+        )
+
+    def _count_relationship_targets(self, source_entity_id: UUID | str, relationship_type: str) -> int:
+        source_id = UUID(str(source_entity_id))
+        return len(
+            {
+                relationship.target_entity_id
+                for relationship in self.repository.get_relationships()
+                if relationship.source_entity_id == source_id
+                and relationship.relationship_type == relationship_type
+            }
+        )
+
+    def _count_relationship_sources(self, target_entity_id: UUID | str, relationship_type: str) -> int:
+        target_id = UUID(str(target_entity_id))
+        return len(
+            {
+                relationship.source_entity_id
+                for relationship in self.repository.get_relationships()
+                if relationship.target_entity_id == target_id
+                and relationship.relationship_type == relationship_type
+            }
+        )
+
     @staticmethod
     def _age_days(timestamp: str) -> int:
         try:
@@ -203,4 +276,3 @@ def group_relationships_by_entity(
         grouped[relationship.source_entity_id].append(relationship)
         grouped[relationship.target_entity_id].append(relationship)
     return grouped
-
