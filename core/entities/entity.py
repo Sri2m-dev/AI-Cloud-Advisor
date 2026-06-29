@@ -64,6 +64,25 @@ class RelationshipType(str, Enum):
     APPROVES = "APPROVES"
 
 
+class RelationshipStatus(str, Enum):
+    ACTIVE = "Active"
+    STALE = "Stale"
+    PENDING = "Pending"
+
+
+class RelationshipStrength(str, Enum):
+    CRITICAL = "Critical"
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+
+class RelationshipDirection(str, Enum):
+    FORWARD = "Forward"
+    REVERSE = "Reverse"
+    BIDIRECTIONAL = "Bidirectional"
+
+
 @dataclass(slots=True)
 class SourceSystemReference:
     system: str
@@ -80,23 +99,41 @@ class EntityRelationship:
     source_entity_id: UUID
     relationship_type: str
     target_entity_id: UUID
-    confidence: float = 1.0
+    id: UUID = field(default_factory=uuid4)
+    confidence_score: float = 1.0
     source_system: str = "manual"
+    created_by: UUID | None = None
+    last_verified: str | None = None
+    verification_method: str = "unverified"
+    status: str = RelationshipStatus.PENDING.value
+    strength: str = RelationshipStrength.MEDIUM.value
+    direction: str = RelationshipDirection.FORWARD.value
+    ontology_version: str = "1.2.1"
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
 
+    @property
+    def confidence(self) -> float:
+        return self.confidence_score
+
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
+        payload["id"] = str(self.id)
         payload["source_entity_id"] = str(self.source_entity_id)
         payload["target_entity_id"] = str(self.target_entity_id)
+        payload["created_by"] = str(self.created_by) if self.created_by else None
         return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "EntityRelationship":
         data = dict(payload)
+        if "confidence" in data and "confidence_score" not in data:
+            data["confidence_score"] = data.pop("confidence")
+        data["id"] = UUID(str(data["id"])) if data.get("id") else uuid4()
         data["source_entity_id"] = UUID(str(data["source_entity_id"]))
         data["target_entity_id"] = UUID(str(data["target_entity_id"]))
+        data["created_by"] = UUID(str(data["created_by"])) if data.get("created_by") else None
         return cls(**data)
 
 
@@ -172,4 +209,3 @@ class EnterpriseEntity:
             for reference in data.get("source_systems", [])
         ]
         return cls(**data)
-
