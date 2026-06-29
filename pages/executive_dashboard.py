@@ -9,7 +9,7 @@ from components.cards import (
     render_kpi_card,
     render_risk_card,
 )
-from components.layout import render_page, render_section
+from components.layout import render_empty_state, render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.supabase_client import supabase
@@ -59,7 +59,7 @@ def format_compact_currency(value):
 
 
 st.set_page_config(
-    page_title="Executive Dashboard",
+    page_title="Enterprise Business Health",
     layout="wide",
 )
 
@@ -128,10 +128,45 @@ opportunities_found = safe_int(
     len(recommendations),
 )
 
+
+def inject_executive_dashboard_styles():
+    st.markdown(
+        """
+        <style>
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            min-height: 164px;
+        }
+        [data-testid="stMetric"] {
+            min-height: 140px;
+        }
+        [data-testid="stDataFrame"] {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .js-plotly-plot {
+            border: 1px solid var(--nexora-border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--nexora-surface);
+        }
+        @media (max-width: 900px) {
+            [data-testid="column"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_dashboard_content():
+    inject_executive_dashboard_styles()
+
     render_section(
         "Executive KPI Summary",
-        "Enterprise technology spend, optimization, governance, actions, and active risk.",
+        "Enterprise spend, optimization value, governance health, executive actions, and active risk.",
         divider=False,
     )
 
@@ -139,7 +174,7 @@ def render_dashboard_content():
 
     with col1:
         render_kpi_card(
-            "Total Technology Spend",
+            "Enterprise Spend",
             format_compact_currency(total_spend),
             subtitle="Cloud + SaaS + MSP + Licenses",
             icon="cost",
@@ -220,7 +255,7 @@ def render_dashboard_content():
         )
 
     render_section(
-        "Technology Investment Allocation",
+        "Enterprise Investment Allocation",
         "Current allocation across cloud, SaaS, managed services, and licenses.",
         divider=True,
     )
@@ -245,14 +280,26 @@ def render_dashboard_content():
         )
 
     with alloc_right:
-        fig = px.pie(
-            allocation_df,
-            names="Category",
-            values="Spend",
-            title="Technology Spend Allocation",
-            hole=0.4,
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        if allocation_df["Spend"].sum() > 0:
+            fig = px.pie(
+                allocation_df,
+                names="Category",
+                values="Spend",
+                title="Enterprise Spend Allocation",
+                hole=0.4,
+                color_discrete_sequence=["#2563EB", "#16A34A", "#F59E0B", "#7C3AED"],
+            )
+            fig.update_layout(
+                margin=dict(l=16, r=16, t=48, b=16),
+                legend_title_text="Category",
+                font=dict(size=13),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            render_empty_state(
+                "No spend allocation available",
+                "Cloud, SaaS, managed services, and license spend will appear once source data is loaded.",
+            )
 
     render_section(
         "Governance & Risk",
@@ -340,13 +387,13 @@ def render_dashboard_content():
         render_health_card("Risk Posture", f"{risk_posture}%", subtitle="Operational exposure", status="healthy" if risk_posture >= 80 else "warning")
 
     narrative = (
-        f"Technology spend is {format_compact_currency(total_spend)} with "
+        f"Enterprise technology spend is {format_compact_currency(total_spend)} with "
         f"{format_compact_currency(potential_savings)} in identified optimization potential. "
         f"Governance health is {governance_score}% and {critical_risks} critical risks are currently flagged."
     )
     render_insight_card(
         "Executive Summary",
-        "Technology Business Health",
+        "Enterprise Business Health",
         description=narrative,
         icon="executive",
         status="info",
@@ -354,8 +401,8 @@ def render_dashboard_content():
 
 
 render_page(
-    title="Technology Business Health",
-    description="Executive overview of technology spend, risk, governance, and optimization opportunities.",
-    breadcrumbs=["Home", "Executive", "Executive Dashboard"],
+    title="Enterprise Business Health",
+    description="Executive overview of enterprise spend, risk, governance, and optimization opportunities.",
+    breadcrumbs=["Executive Overview", "Executive", "Executive Dashboard"],
     content=render_dashboard_content,
 )

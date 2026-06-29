@@ -42,7 +42,7 @@ SECTION_KEYWORDS = {
 
 SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
     "executive": [
-        {"label": "Home", "page_label": "Executive Dashboard", "section": "Home", "icon": "home"},
+        {"label": "Executive Overview", "page_label": "Executive Dashboard", "section": "Home", "icon": "home"},
         {"label": "Executive Dashboard", "page_label": "Executive Dashboard", "section": "Executive", "icon": "executive"},
         {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
         {"label": "Approvals", "page_label": "Approvals", "section": "Governance", "icon": "approval"},
