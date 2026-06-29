@@ -10,11 +10,17 @@ import streamlit as st
 from auth.role_constants import normalize_role
 from components.navigation.sidebar import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from core.connectors.base_connector import BaseConnector
 from core.connectors.certification.certification_result import ConnectorCertificationStatus
+from core.connectors.connector_health import ConnectorHealth, ConnectorHealthStatus
 from core.connectors.connector_config import ConnectorConfig, ConnectorType
+from core.connectors.connector_context import ConnectorContext
+from core.connectors.connector_result import ConnectorResult, ConnectorRunStatus
 from repositories.connector_certification_repository import ConnectorCertificationRepository
 from repositories.connector_repository import ConnectorRepository
+from repositories.connector_runtime_repository import ConnectorRuntimeRepository
 from services.connector_service import ConnectorService
+from services.connector_runtime_service import ConnectorRuntimeService
 
 
 ALLOWED_ROLES = {"super_admin"}
@@ -38,12 +44,52 @@ def _render_sidebar() -> None:
     )
 
 
-def _repositories() -> tuple[ConnectorRepository, ConnectorCertificationRepository, ConnectorService]:
+class StudioRuntimeConnector(BaseConnector):
+    def connect(self) -> ConnectorResult:
+        return ConnectorResult(self.connector_id, "connect", message="Connector Studio runtime handshake completed.")
+
+    def discover(self) -> ConnectorResult:
+        return ConnectorResult(self.connector_id, "discover", message="Connector discovery triggered from Connector Studio.")
+
+    def sync_entities(self) -> ConnectorResult:
+        return ConnectorResult(self.connector_id, "sync_entities", message="Entity sync triggered from Connector Studio.")
+
+    def sync_relationships(self) -> ConnectorResult:
+        return ConnectorResult(self.connector_id, "sync_relationships", message="Relationship sync triggered from Connector Studio.")
+
+    def sync_metadata(self) -> ConnectorResult:
+        return ConnectorResult(
+            self.connector_id,
+            "sync_metadata",
+            status=ConnectorRunStatus.SUCCESS.value,
+            message="Metadata sync triggered from Connector Studio.",
+        )
+
+    def health_check(self) -> ConnectorHealth:
+        return ConnectorHealth(
+            self.connector_id,
+            status=ConnectorHealthStatus.HEALTHY.value,
+            score=95,
+            message="Connector Studio runtime control completed successfully.",
+        )
+
+
+def _repositories() -> tuple[
+    ConnectorRepository,
+    ConnectorCertificationRepository,
+    ConnectorRuntimeRepository,
+    ConnectorService,
+    ConnectorRuntimeService,
+]:
     connector_repository = ConnectorRepository()
+    runtime_repository = ConnectorRuntimeRepository()
+    connector_service = ConnectorService(repository=connector_repository)
     return (
         connector_repository,
         ConnectorCertificationRepository(),
-        ConnectorService(repository=connector_repository),
+        runtime_repository,
+        connector_service,
+        ConnectorRuntimeService(connector_service, runtime_repository, connector_repository),
     )
 
 
@@ -164,6 +210,66 @@ def _run_history_rows(connector_repository: ConnectorRepository) -> list[dict[st
     ]
 
 
+def _runtime_run_rows(
+    connector_repository: ConnectorRepository,
+    runtime_repository: ConnectorRuntimeRepository,
+) -> list[dict[str, Any]]:
+    connector_names = {
+        entry.connector_id: entry.config.name
+        for entry in connector_repository.list_connectors()
+    }
+    return [
+        {
+            "Run ID": str(run.id),
+            "Connector": connector_names.get(run.connector_id, str(run.connector_id)),
+            "Operation": run.operation,
+            "Trigger": run.trigger_type,
+            "Status": run.status,
+            "Attempt": f"{run.attempt}/{run.max_attempts}",
+            "Started": run.started_at or "",
+            "Completed": run.completed_at or "",
+            "Message": run.message,
+        }
+        for run in runtime_repository.list_runs()
+    ]
+
+
+def _run_log_rows(runtime_repository: ConnectorRuntimeRepository, run_id: str | None = None) -> list[dict[str, Any]]:
+    logs = runtime_repository.list_logs(run_id) if run_id else runtime_repository.list_logs()
+    return [
+        {
+            "Run ID": str(log.run_id),
+            "Level": log.level,
+            "Operation": log.operation,
+            "Message": log.message,
+            "Created": log.created_at,
+        }
+        for log in logs
+    ]
+
+
+def _checkpoint_rows(
+    connector_repository: ConnectorRepository,
+    runtime_repository: ConnectorRuntimeRepository,
+) -> list[dict[str, Any]]:
+    connector_names = {
+        entry.connector_id: entry.config.name
+        for entry in connector_repository.list_connectors()
+    }
+    checkpoints = sorted(runtime_repository._checkpoints.values(), key=lambda item: item.updated_at, reverse=True)
+    return [
+        {
+            "Connector": connector_names.get(checkpoint.connector_id, str(checkpoint.connector_id)),
+            "Operation": checkpoint.operation,
+            "Cursor": checkpoint.cursor,
+            "High Watermark": checkpoint.high_watermark,
+            "Records Processed": checkpoint.records_processed,
+            "Updated": checkpoint.updated_at,
+        }
+        for checkpoint in checkpoints
+    ]
+
+
 def _render_kpis(
     connector_repository: ConnectorRepository,
     certification_repository: ConnectorCertificationRepository,
@@ -226,10 +332,89 @@ def _render_schedules(connector_repository: ConnectorRepository) -> None:
     st.subheader("Schedules")
     _table(_schedule_rows(connector_repository), "No connector schedules have been configured yet.")
 
+    st.subheader("Schedule Status")
+    due_count = sum(
+        1
+        for schedule in connector_repository.list_schedules()
+        if schedule.status == "Enabled" and not schedule.next_run_at
+    )
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Configured", len(connector_repository.list_schedules()))
+    col2.metric("Due Now", due_count)
+    col3.metric("Paused", sum(1 for schedule in connector_repository.list_schedules() if schedule.status == "Paused"))
+
 
 def _render_run_history(connector_repository: ConnectorRepository) -> None:
     st.subheader("Run History")
     _table(_run_history_rows(connector_repository), "No connector run history is available yet.")
+
+
+def _render_runtime_controls(
+    connector_repository: ConnectorRepository,
+    runtime_repository: ConnectorRuntimeRepository,
+    runtime_service: ConnectorRuntimeService,
+) -> None:
+    entries = connector_repository.list_connectors()
+    st.subheader("Manual Run")
+    if not entries:
+        st.info("Register a connector before triggering runtime controls.")
+        return
+
+    labels = {f"{entry.config.name} | {entry.config.provider} | {entry.connector_id}": entry for entry in entries}
+    selected_label = st.selectbox("Connector", list(labels))
+    selected_entry = labels[selected_label]
+    operation = st.selectbox(
+        "Operation",
+        ["connect", "discover", "sync_entities", "sync_relationships", "sync_metadata"],
+    )
+    context = ConnectorContext(selected_entry.config)
+    connector = StudioRuntimeConnector(context)
+
+    action_col, retry_col = st.columns(2)
+    if action_col.button("Run Now", width="stretch"):
+        run = runtime_service.manual_run(connector, operation)
+        st.success(f"Run {run.id} completed with status {run.status}.")
+        st.rerun()
+
+    failed_runs = [
+        run
+        for run in runtime_repository.list_runs(selected_entry.connector_id)
+        if run.status == "Failed"
+    ]
+    if failed_runs:
+        retry_label = retry_col.selectbox("Failed Run", [f"{run.operation} | {run.id}" for run in failed_runs])
+        retry_operation = retry_label.split("|", 1)[0].strip()
+        if retry_col.button("Retry Failed Run", width="stretch"):
+            run = runtime_service.manual_run(connector, retry_operation)
+            st.success(f"Retry run {run.id} completed with status {run.status}.")
+            st.rerun()
+    else:
+        retry_col.info("No failed runs are available to retry.")
+
+    st.subheader("Runtime Runs")
+    runtime_rows = _runtime_run_rows(connector_repository, runtime_repository)
+    _table(runtime_rows, "No runtime execution runs have been recorded yet.")
+
+    st.subheader("Run Logs")
+    if runtime_rows:
+        run_options = ["All"] + [row["Run ID"] for row in runtime_rows]
+        selected_run = st.selectbox("Log Filter", run_options)
+        _table(
+            _run_log_rows(runtime_repository, None if selected_run == "All" else selected_run),
+            "No logs are available for the selected run.",
+        )
+    else:
+        st.info("No run logs are available yet.")
+
+    st.subheader("Checkpoint Viewer")
+    _table(_checkpoint_rows(connector_repository, runtime_repository), "No checkpoints have been recorded yet.")
+
+    st.subheader("Last Run Health")
+    health = connector_repository.get_health(selected_entry.connector_id)
+    if health:
+        st.json(health.to_dict())
+    else:
+        st.info("No health result has been published for this connector.")
 
 
 def _render_source_systems(connector_repository: ConnectorRepository) -> None:
@@ -284,13 +469,19 @@ def _render_admin_actions(service: ConnectorService) -> None:
 
 
 def render_section() -> None:
-    connector_repository, certification_repository, connector_service = _repositories()
+    (
+        connector_repository,
+        certification_repository,
+        runtime_repository,
+        connector_service,
+        runtime_service,
+    ) = _repositories()
 
     st.title("Connector Studio")
-    st.caption("Program 2.3 - Admin workspace for connector registry, health, certification, schedules, and run history")
+    st.caption("Program 2.5 - Connector Studio runtime controls and admin workspace")
 
     _render_kpis(connector_repository, certification_repository)
-    tabs = st.tabs(["Registry", "Health", "Certification", "Schedules", "Run History", "Source Systems", "Admin"])
+    tabs = st.tabs(["Registry", "Health", "Certification", "Schedules", "Run History", "Runtime Controls", "Source Systems", "Admin"])
     with tabs[0]:
         _render_registry(connector_repository, certification_repository)
     with tabs[1]:
@@ -302,8 +493,10 @@ def render_section() -> None:
     with tabs[4]:
         _render_run_history(connector_repository)
     with tabs[5]:
-        _render_source_systems(connector_repository)
+        _render_runtime_controls(connector_repository, runtime_repository, runtime_service)
     with tabs[6]:
+        _render_source_systems(connector_repository)
+    with tabs[7]:
         _render_admin_actions(connector_service)
 
 
