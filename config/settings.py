@@ -9,7 +9,7 @@ load_dotenv()
 load_dotenv(".env.dev", override=False)
 
 # Environment
-ENVIRONMENT = os.getenv("CLOUD_ADVISOR_ENV", "development")
+ENVIRONMENT = os.getenv("ENVIRONMENT") or os.getenv("CLOUD_ADVISOR_ENV", "development")
 
 # Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
