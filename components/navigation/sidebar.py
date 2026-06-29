@@ -34,7 +34,7 @@ SECTION_KEYWORDS = {
     "Intelligence": ["AI", "Copilot", "Knowledge Graph", "Dependency", "Impact", "Simulation", "Prediction", "Capacity", "Goal", "Agent", "Workflow", "Learning"],
     "Observability": ["Observability", "Incident", "Scheduler", "Performance"],
     "Governance": ["Governance", "Risk", "Approval", "Audit", "Security", "Compliance", "Disaster Recovery", "Readiness", "Data Quality"],
-    "Platform": ["Platform", "Connector Health", "Connector Operations", "Data Sources", "Entity Registry"],
+    "Platform": ["Platform", "Connector Health", "Connector Operations", "Data Sources", "Entity Registry", "Enterprise Data Fabric"],
     "Marketplace": ["Marketplace", "Connector Studio", "Connector Marketplace"],
     "Administration": ["Administration", "Reports"],
     "Settings": ["Settings"],
