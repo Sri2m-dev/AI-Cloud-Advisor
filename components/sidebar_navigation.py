@@ -54,6 +54,7 @@ ROLE_PAGES = {
         "Disaster Recovery Dashboard",
         "Enterprise Readiness",
         "Data Quality Dashboard",
+        "Entity Registry",
         "Scheduler Operations",
         "Enterprise Observability",
         "Incident Timeline",
@@ -373,6 +374,7 @@ PAGE_PATHS = {
     "Disaster Recovery Dashboard": "pages/disaster_recovery_dashboard.py",
     "Enterprise Readiness": "pages/enterprise_readiness.py",
     "Data Quality Dashboard": "pages/data_quality_dashboard.py",
+    "Entity Registry": "pages/entity_registry.py",
     "Scheduler Operations": "pages/scheduler_operations.py",
     "Enterprise Observability": "pages/enterprise_observability.py",
     "Incident Timeline": "pages/incident_timeline.py",
@@ -415,7 +417,7 @@ def get_role_pages(role: str):
 
 
 def render_sidebar_navigation(role: str):
-    from components.navigation import render_enterprise_sidebar
+    from components.navigation.sidebar import render_enterprise_sidebar
 
     return render_enterprise_sidebar(
         role,
