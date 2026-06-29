@@ -5,7 +5,7 @@ from services import audit_service
 
 init_session()
 
-st.set_page_config(page_title="Logout | AI Cloud Advisor", page_icon=":unlock:", layout="centered")
+st.set_page_config(page_title="Logout | Nexora", page_icon=":unlock:", layout="centered")
 st.title("🔓 Logout")
 
 if "user" in st.session_state and st.session_state.user:

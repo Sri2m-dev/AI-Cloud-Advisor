@@ -1,278 +1,426 @@
+from __future__ import annotations
+
 import os
 import sys
-import streamlit as st
-from shared.session import init_session
-from shared.styles import configure_page
-from components.sidebar import render_sidebar
-from auth.role_constants import normalize_role
+from datetime import datetime
 
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+import pandas as pd
+import streamlit as st
+
+ROOT_DIR = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__),
+        ".."
+    )
+)
+
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-configure_page(page_title="Approval Center | AI Cloud Advisor", page_icon=":white_check_mark:")
+from shared.auth import require_role
+from shared.session import init_session
+from shared.styles import configure_page
+from components.cards import render_approval_card, render_insight_card, render_kpi_card, render_metric_card
+from components.layout import render_page, render_section
+from components.navigation import render_enterprise_sidebar
+from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+
+from services.approval_service import (
+    ApprovalService
+)
+
+configure_page(
+    page_title="Approvals",
+    page_icon="✅",
+)
 
 init_session()
 
-from shared.auth import require_role
-
 require_role([
     "executive",
+    "cio",
+    "finance",
     "technical",
     "super_admin",
 ])
 
-render_sidebar(role=st.session_state.get("role", "Unknown"))
-
-from components.layout import render_page_header, render_section
-from components.recommendation_table import render_recommendation_table
-from services.approval_service import (
-    get_approvals,
-    approve_request,
-    reject_request,
-    escalate_request,
-    get_approval_center_snapshot,
-    get_workflow_transitions,
+role = st.session_state.get("role", "cio")
+render_enterprise_sidebar(
+    role,
+    page_paths=PAGE_PATHS,
+    role_pages=ROLE_PAGES,
+    active_page=PAGE_PATHS["Approvals"],
 )
-from services.audit_service import get_org_events
-import pandas as pd
 
-username = st.session_state.get("user")
-user_role = st.session_state.get("role")
-org_id = st.session_state.get("organization_id")
+current_role = st.session_state.get("role", "").lower()
+is_ceo_view = current_role == "executive"
 
-from core.errors.error_handler import handle_error
+APPROVAL_COLUMNS = [
+    "id",
+    "request_type",
+    "title",
+    "description",
+    "status",
+    "priority",
+    "workflow_stage",
+    "current_approver_role",
+    "workflow_status",
+    "created_at",
+]
 
-try:
-    render_page_header(
-        "Approval Center",
-        "Live approval workflow with audit logging"
+
+def approval_table(rows):
+    df = pd.DataFrame(rows)
+
+    visible_columns = [
+        column
+        for column in APPROVAL_COLUMNS
+        if column in df.columns
+    ]
+
+    return df[visible_columns]
+
+
+def render_workflow_timeline(history_rows):
+    for index, row in enumerate(history_rows):
+        action = row.get("action", "Workflow Update")
+        from_stage = row.get("from_stage", "Submitted")
+        to_stage = row.get("to_stage", "Pending")
+        created_at = row.get("created_at", "Time unavailable")
+
+        st.markdown(
+            f"""
+            ✅ **{action}**
+
+            {from_stage} → {to_stage}
+
+            ({created_at})
+            """
+        )
+
+        if index < len(history_rows) - 1:
+            st.markdown("↓")
+
+def count_due_today(approvals):
+    today = datetime.utcnow().date()
+    due_today = 0
+
+    for approval in approvals:
+        if str(approval.get("status", "")).upper() != "PENDING":
+            continue
+
+        due_date = approval.get("due_date")
+        if not due_date:
+            continue
+
+        try:
+            due_dt = datetime.fromisoformat(
+                str(due_date).replace("Z", "+00:00")
+            )
+        except Exception:
+            continue
+
+        if due_dt.date() == today:
+            due_today += 1
+
+    return due_today
+
+
+def render_approval_content():
+    # --------------------------------------------------
+    # KPI SECTION
+    # --------------------------------------------------
+
+    metrics = ApprovalService.get_dashboard_metrics()
+    stage_metrics = (
+        ApprovalService
+        .get_workflow_stage_metrics()
+    )
+    overdue_approvals = (
+        ApprovalService
+        .get_overdue_approvals()
+    )
+    sla = ApprovalService.get_sla_metrics()
+    approval_register = ApprovalService.get_all_approvals()
+
+    overdue_count = len(overdue_approvals)
+    due_today_count = count_due_today(approval_register)
+
+    render_section(
+        "Approval Overview",
+        "Decision queue status across pending, approved, rejected, and total approval requests.",
+        divider=False,
     )
 
-    # ==============================================================================
-    # Live Approvals Section
-    # ==============================================================================
-    
-    render_section("📋 Live Approvals from Supabase")
-    
-    # Fetch live data
-    all_approvals = get_approvals(limit=200)
-    
-    if all_approvals:
-        # Create interactive table with action buttons
-        st.subheader(f"Total Approvals: {len(all_approvals)}")
-        
-        # Status distribution
-        status_counts = {}
-        for approval in all_approvals:
-            status = approval.get("status", "UNKNOWN")
-            status_counts[status] = status_counts.get(status, 0) + 1
-        
-        # Display metrics
-        metric_cols = st.columns(len(status_counts))
-        for idx, (status, count) in enumerate(status_counts.items()):
-            with metric_cols[idx]:
-                st.metric(status, count)
-        
-        st.markdown("---")
-        
-        # Filter options
-        filter_col1, filter_col2, filter_col3 = st.columns(3)
-        with filter_col1:
-            status_filter = st.selectbox(
-                "Filter by Status",
-                ["All"] + list(set(a.get("status") for a in all_approvals))
-            )
-        with filter_col2:
-            priority_filter = st.selectbox(
-                "Filter by Priority",
-                ["All"] + list(set(a.get("priority") for a in all_approvals if a.get("priority")))
-            )
-        with filter_col3:
-            search_title = st.text_input("Search by title", "")
-        
-        # Apply filters
-        filtered_approvals = all_approvals
-        if status_filter != "All":
-            filtered_approvals = [a for a in filtered_approvals if a.get("status") == status_filter]
-        if priority_filter != "All":
-            filtered_approvals = [a for a in filtered_approvals if a.get("priority") == priority_filter]
-        if search_title:
-            filtered_approvals = [a for a in filtered_approvals if search_title.lower() in a.get("title", "").lower()]
-        
-        st.markdown(f"**Showing {len(filtered_approvals)} of {len(all_approvals)} approvals**")
-        
-        # Display approvals with action buttons
-        for idx, approval in enumerate(filtered_approvals):
-            approval_id = approval.get("id")
-            title = approval.get("title", f"Approval {approval_id}")
-            status = approval.get("status", "UNKNOWN")
-            priority = approval.get("priority", "N/A")
-            description = approval.get("description", "")
-            created_by = approval.get("created_by", "Unknown")
-            created_at = approval.get("created_at", "N/A")
-            
-            # Create expander for each approval
-            with st.expander(f"📌 {title} - [{status}] - Priority: {priority}"):
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.write(f"**Status**: {status}")
-                    st.write(f"**Priority**: {priority}")
-                    st.write(f"**Created by**: {created_by}")
-                    st.write(f"**Created at**: {created_at}")
-                    
-                    if description:
-                        st.write(f"**Description**: {description}")
-                    
-                    if approval.get("approval_comments"):
-                        st.info(f"**Comments**: {approval.get('approval_comments')}")
-                
-                with col2:
-                    st.write("")  # Spacing
-                
-                st.markdown("---")
-                
-                # Action buttons (only for PENDING approvals)
-                if status == "PENDING":
-                    action_col1, action_col2, action_col3 = st.columns(3)
-                    
-                    with action_col1:
-                        comments = st.text_input(
-                            "Approval comments (optional)",
-                            key=f"comments_{idx}_{approval_id}"
-                        )
-                        if st.button("✅ Approve", key=f"approve_{idx}_{approval_id}"):
-                            result = approve_request(
-                                approval_id=approval_id,
-                                approved_by=username,
-                                comments=comments,
-                                user_role=user_role,
-                                org_id=org_id,
-                            )
-                            if "error" not in result:
-                                st.success(f"✅ Approval '{title}' approved successfully!")
-                                st.rerun()
-                            else:
-                                st.error(f"❌ Error approving: {result.get('error')}")
-                    
-                    with action_col2:
-                        reason = st.text_input(
-                            "Rejection reason",
-                            key=f"reason_{idx}_{approval_id}"
-                        )
-                        if st.button("❌ Reject", key=f"reject_{idx}_{approval_id}"):
-                            if reason:
-                                result = reject_request(
-                                    approval_id=approval_id,
-                                    rejected_by=username,
-                                    reason=reason,
-                                    user_role=user_role,
-                                    org_id=org_id,
-                                )
-                                if "error" not in result:
-                                    st.success(f"❌ Approval '{title}' rejected!")
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ Error rejecting: {result.get('error')}")
-                            else:
-                                st.warning("Please provide a rejection reason")
-                    
-                    with action_col3:
-                        escalate_to = st.text_input(
-                            "Escalate to user ID",
-                            key=f"escalate_to_{idx}_{approval_id}"
-                        )
-                        reason = st.text_input(
-                            "Escalation reason",
-                            key=f"escalation_reason_{idx}_{approval_id}"
-                        )
-                        if st.button("⬆️ Escalate", key=f"escalate_{idx}_{approval_id}"):
-                            if escalate_to and reason:
-                                result = escalate_request(
-                                    approval_id=approval_id,
-                                    escalated_by=username,
-                                    escalate_to=escalate_to,
-                                    reason=reason,
-                                    user_role=user_role,
-                                    org_id=org_id,
-                                )
-                                if "error" not in result:
-                                    st.success(f"⬆️ Approval '{title}' escalated!")
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ Error escalating: {result.get('error')}")
-                            else:
-                                st.warning("Please provide escalation details")
-                else:
-                    st.info(f"This approval is already {status} and cannot be modified.")
-    
-    else:
-        st.info("No approvals found in the system.")
-    
-    st.markdown("---")
-    
-    # ==============================================================================
-    # Approval Statistics
-    # ==============================================================================
-    
-    render_section("📊 Approval Statistics")
-    
-    pending = [a for a in all_approvals if a.get("status") == "PENDING"]
-    approved = [a for a in all_approvals if a.get("status") == "APPROVED"]
-    rejected = [a for a in all_approvals if a.get("status") == "REJECTED"]
-    escalated = [a for a in all_approvals if a.get("status") == "ESCALATED"]
-    
-    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
-    with stat_col1:
-        st.metric("⏳ Pending", len(pending), delta=None)
-    with stat_col2:
-        st.metric("✅ Approved", len(approved), delta=None)
-    with stat_col3:
-        st.metric("❌ Rejected", len(rejected), delta=None)
-    with stat_col4:
-        st.metric("⬆️ Escalated", len(escalated), delta=None)
-    
-    st.markdown("---")
-    
-    # ==============================================================================
-    # Audit Trail
-    # ==============================================================================
-    
-    render_section("📝 Audit Trail")
-    
-    audit_events = get_org_events(org_id=org_id, limit=50)
-    
-    if audit_events:
-        audit_df = pd.DataFrame([
-            {
-                "Timestamp": event.get("timestamp", "N/A"),
-                "Event Type": event.get("event_type", "N/A"),
-                "User": event.get("user_id", "N/A"),
-                "Action": event.get("action", "N/A"),
-                "Resource": event.get("resource_id", "N/A"),
-                "Status": event.get("status", "N/A"),
-            }
-            for event in audit_events
-        ])
-        st.dataframe(audit_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No audit events found.")
-    
-    st.markdown("---")
-    
-    # ==============================================================================
-    # Workflow Transitions Reference
-    # ==============================================================================
-    
-    render_section("🔄 Workflow State Transitions")
-    
-    transitions = get_workflow_transitions()
-    if transitions:
-        transitions_df = pd.DataFrame(transitions)
-        st.dataframe(transitions_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No workflow transitions available.")
+    metric_columns = st.columns(4)
 
-except Exception as e:
-    handle_error(e)
+    with metric_columns[0]:
+        render_kpi_card(
+            "Pending",
+            metrics["pending"],
+            icon="approval",
+            status="watch" if metrics["pending"] else "healthy",
+        )
+
+    with metric_columns[1]:
+        render_kpi_card(
+            "Approved",
+            metrics["approved"],
+            icon="success",
+            status="healthy",
+        )
+
+    with metric_columns[2]:
+        render_kpi_card(
+            "Rejected",
+            metrics["rejected"],
+            icon="error",
+            status="warning" if metrics["rejected"] else "healthy",
+        )
+
+    with metric_columns[3]:
+        render_kpi_card(
+            "Total",
+            metrics["total"],
+            icon="governance",
+            status="info",
+        )
+
+    if not is_ceo_view:
+
+        render_section(
+            "Workflow Queue",
+            "Approval volume by workflow stage.",
+            divider=True,
+        )
+
+        workflow_cols = st.columns(5)
+
+        with workflow_cols[0]:
+            render_metric_card("PMO", stage_metrics["pmo"], icon="governance", status="info")
+
+        with workflow_cols[1]:
+            render_metric_card("Finance", stage_metrics["finance"], icon="finance", status="info")
+
+        with workflow_cols[2]:
+            render_metric_card("CIO", stage_metrics["cio"], icon="technology", status="info")
+
+        with workflow_cols[3]:
+            render_metric_card("CEO", stage_metrics["ceo"], icon="executive", status="info")
+
+        with workflow_cols[4]:
+            render_metric_card("Completed", stage_metrics["completed"], icon="success", status="healthy")
+
+        render_section(
+            "SLA",
+            "Approval aging and service-level posture.",
+            divider=True,
+        )
+
+        sla_cols = st.columns(3)
+
+        with sla_cols[0]:
+            render_metric_card("Overdue", overdue_count, icon="warning", status="critical" if overdue_count else "healthy")
+
+        with sla_cols[1]:
+            render_metric_card("Due Today", due_today_count, icon="info", status="watch" if due_today_count else "healthy")
+
+        with sla_cols[2]:
+            render_metric_card(
+                "SLA %",
+                sla.get(
+                    "sla_compliance_percent",
+                    sla.get("sla_compliance", 100)
+                ),
+                icon="success",
+                status="healthy",
+            )
+
+    # --------------------------------------------------
+    # PENDING APPROVALS
+    # --------------------------------------------------
+
+    render_section(
+        "Pending Approvals",
+        "Approval requests awaiting action for the current role.",
+        divider=True,
+    )
+
+    pending = (
+        ApprovalService
+        .get_pending_approvals(current_role)
+    )
+
+    if pending:
+
+        pending_card_columns = st.columns(2)
+        for index, row in enumerate(pending[:4]):
+            with pending_card_columns[index % 2]:
+                render_approval_card(
+                    title=row.get("title") or row.get("request_type") or "Approval Request",
+                    value=row.get("priority") or row.get("status") or "Pending",
+                    description=row.get("description"),
+                    status="watch",
+                    footer=f"Stage: {row.get('workflow_stage', '-')} | Created: {str(row.get('created_at', '-'))[:19]}",
+                )
+
+        pending_df = approval_table(pending)
+
+        st.dataframe(
+            pending_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        approval_ids = [
+            row["id"]
+            for row in pending
+        ]
+
+        selected_id = st.selectbox(
+            "Select Approval",
+            approval_ids
+        )
+
+        history_rows = ApprovalService.get_approval_history(selected_id)
+
+        if history_rows:
+            render_section("Approval Timeline", divider=True)
+            render_workflow_timeline(history_rows)
+
+        comments = st.text_area(
+            "Comments"
+        )
+
+        action_columns = st.columns(2 if is_ceo_view else 3)
+
+        with action_columns[0]:
+
+            if st.button(
+                "Approve",
+                use_container_width=True
+            ):
+
+                ApprovalService.approve_request(
+                    approval_id=selected_id,
+                    approver_id=1,
+                    comments=comments,
+                )
+
+                st.success(
+                    "Request Approved"
+                )
+
+                st.rerun()
+
+        with action_columns[1]:
+
+            if st.button(
+                "Reject",
+                use_container_width=True
+            ):
+
+                ApprovalService.reject_request(
+                    approval_id=selected_id,
+                    approver_id=1,
+                    comments=comments,
+                )
+
+                st.warning(
+                    "Request Rejected"
+                )
+
+                st.rerun()
+
+        if not is_ceo_view:
+
+            with action_columns[2]:
+
+                if st.button(
+                    "Escalate",
+                    use_container_width=True
+                ):
+
+                    ApprovalService.escalate_request(
+                        approval_id=selected_id,
+                        escalated_to=999,
+                        comments=comments,
+                    )
+
+                    st.info(
+                        "Request Escalated"
+                    )
+
+                    st.rerun()
+
+    else:
+
+        render_insight_card(
+            title="No Pending Approvals",
+            description="There are no executive decisions awaiting approval.",
+            status="healthy",
+        )
+
+    # --------------------------------------------------
+    # ALL APPROVALS
+    # --------------------------------------------------
+
+    render_section(
+        "Recent Decisions",
+        "Approval register and recent governance decisions.",
+        divider=True,
+    )
+
+    if not is_ceo_view:
+
+        history = approval_register
+
+        if history:
+
+            history_df = approval_table(history)
+
+            st.dataframe(
+                history_df,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            render_insight_card(
+                title="No Approval History",
+                description="No completed approval decisions are available yet.",
+                status="info",
+            )
+    else:
+        render_insight_card(
+            title="Executive View",
+            description="Recent decision history is available to operational approver roles.",
+            status="info",
+        )
+
+    render_section(
+        "Approval Governance Insight",
+        "Approval queue health, SLA compliance, and governance posture.",
+        divider=True,
+    )
+
+    render_insight_card(
+        title="Approval Governance",
+        value=f"{metrics['pending']} Pending",
+        description=(
+            f"{overdue_count} approvals are overdue, {due_today_count} are due today, "
+            f"and SLA compliance is {sla.get('sla_compliance_percent', sla.get('sla_compliance', 100))}."
+        ),
+        status="warning" if overdue_count else "healthy",
+    )
+
+
+render_page(
+    title="Approvals",
+    description=(
+        "CEO approval queue and governance decisions"
+        if is_ceo_view
+        else "Executive approval queue and governance decisions"
+    ),
+    breadcrumbs=["Home", "Governance", "Approvals"],
+    content=render_approval_content,
+)

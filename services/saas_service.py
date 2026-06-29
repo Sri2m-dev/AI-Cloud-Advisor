@@ -111,16 +111,98 @@ def _vendor(row: dict[str, Any]):
 
 
 def _application(row: dict[str, Any]):
-    return str(_first(row, "application", "app_name", "tool_name", "product", "service", "service_name", default=_vendor(row)))
+    return str(
+        _first(
+            row,
+            "application",
+            "app_name",
+            "tool_name",
+            "product",
+            "software_name",
+            "service",
+            "service_name",
+            default=_vendor(row),
+        )
+    )
 
 
 def _category(row: dict[str, Any]):
-    return str(_first(row, "category", "tool_category", "function", "department", default="Uncategorized"))
+    category = _first(
+        row,
+        "category",
+        "tool_category",
+        "function",
+        "department",
+    )
+
+    if category:
+        return str(category)
+
+    text = " ".join(
+        str(value).lower()
+        for value in (
+            _vendor(row),
+            _application(row),
+        )
+    )
+
+    category_keywords = {
+        "Collaboration": [
+            "slack",
+            "teams",
+            "zoom",
+            "meet",
+            "webex",
+            "collaboration",
+            "chat",
+        ],
+        "Project Mgmt": [
+            "jira",
+            "azure devops",
+            "ado",
+            "asana",
+            "trello",
+            "monday",
+            "project",
+        ],
+        "CRM": [
+            "salesforce",
+            "hubspot",
+            "crm",
+        ],
+        "Productivity": [
+            "microsoft 365",
+            "office",
+            "google workspace",
+            "workspace",
+            "docs",
+        ],
+        "Security": [
+            "okta",
+            "crowdstrike",
+            "sentinel",
+            "security",
+            "sso",
+        ],
+        "Analytics": [
+            "tableau",
+            "power bi",
+            "looker",
+            "analytics",
+            "bi",
+        ],
+    }
+
+    for category_name, keywords in category_keywords.items():
+        if any(keyword in text for keyword in keywords):
+            return category_name
+
+    return _application(row)
 
 
 def get_saas_license_utilization(org_id):
     rows, error = _fetch_first_available(
-        ("saas_licenses", "saas_subscriptions", "saas_cost"),
+        ("saas_licenses", "license_cost", "saas_subscriptions", "saas_cost"),
         org_id=org_id,
     )
     if error and not rows:
@@ -140,8 +222,8 @@ def get_saas_license_utilization(org_id):
                 "monthly_cost": 0.0,
             },
         )
-        total = _to_int(_first(row, "total_licenses", "license_count", "purchased_licenses", "seats", "quantity"))
-        assigned = _to_int(_first(row, "assigned_licenses", "assigned_seats", "used_licenses", "licensed_users"))
+        total = _to_int(_first(row, "total_licenses", "license_count", "purchased_licenses", "licenses_purchased", "seats", "quantity"))
+        assigned = _to_int(_first(row, "assigned_licenses", "assigned_seats", "used_licenses", "licenses_used", "licensed_users"))
         active = _to_int(_first(row, "active_users", "utilized_licenses", "usage_count", "users_active"))
         monthly = _to_float(_first(row, "monthly_cost", "cost", "amount", "spend", "total_cost"))
 
@@ -172,7 +254,7 @@ def get_inactive_saas_users(org_id):
 
     data = []
     for row in rows:
-        last_seen = _first(row, "last_login_at", "last_activity_at", "last_used_at", "last_seen_at")
+        last_seen = _first(row, "last_login_at", "last_activity_at", "last_used_at", "last_seen_at", "last_active")
         inactive_days = _days_since(last_seen)
         status = str(_first(row, "status", "user_status", default="")).lower()
         is_inactive = status in {"inactive", "disabled", "suspended"} or (inactive_days is not None and inactive_days >= 30)
@@ -222,7 +304,7 @@ def get_duplicate_saas_tools(org_id):
 
 
 def get_renewal_forecasting(org_id):
-    rows, error = _fetch_first_available(("saas_contracts", "saas_subscriptions", "saas_licenses"), org_id=org_id)
+    rows, error = _fetch_first_available(("saas_renewals", "saas_contracts", "saas_subscriptions", "saas_licenses"), org_id=org_id)
     if error and not rows:
         return _response(errors=error)
 

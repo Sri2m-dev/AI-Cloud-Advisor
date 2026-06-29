@@ -10,5 +10,5 @@ def scoped_query(
         client
         .table(table_name)
         .select("*")
-        .eq("organization_id", tenant_id)
+        .eq("org_id", tenant_id)
     )

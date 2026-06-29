@@ -1,7 +1,10 @@
 import os
 import sys
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
+
 import streamlit as st
-import pandas as pd
 
 ROOT_DIR = os.path.abspath(
     os.path.join(
@@ -16,8 +19,16 @@ if ROOT_DIR not in sys.path:
 from shared.session import init_session
 from shared.styles import configure_page
 from shared.auth import require_role
-from components.sidebar import render_sidebar
-from components.layout import render_page_header
+from components.cards import render_insight_card, render_metric_card
+from components.layout import render_footer, render_page, render_section, render_status_badge
+from components.navigation import render_enterprise_sidebar
+from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from backend.services.report_service import (
+    build_report_pdf,
+    list_report_schedules,
+    save_report_schedule,
+)
+from services import audit_service
 
 from services.reporting_service import (
     get_executive_summary,
@@ -26,137 +37,755 @@ from services.reporting_service import (
     get_saas_summary,
     get_report_history,
 )
+from services.supabase_client import supabase
+
+
+def format_currency(value):
+    try:
+        return f"${float(value):,.0f}"
+    except (TypeError, ValueError):
+        return "$0"
+
+
+def format_number(value):
+    try:
+        return f"{float(value):,.0f}"
+    except (TypeError, ValueError):
+        return "0"
+
+
+def format_percent(value):
+    try:
+        return f"{float(value):.0f}%"
+    except (TypeError, ValueError):
+        return "0%"
+
+
+def spend_value(row, new_key, old_key):
+    return row.get(
+        new_key,
+        row.get(old_key, 0)
+    )
+
+
+def calculate_next_run(frequency):
+    now = datetime.utcnow()
+    frequency_key = str(frequency or "").lower()
+
+    if frequency_key == "daily":
+        return now + timedelta(days=1)
+    if frequency_key == "weekly":
+        return now + timedelta(weeks=1)
+    if frequency_key == "quarterly":
+        return now + timedelta(days=90)
+
+    return now + timedelta(days=30)
+
+
+def log_report_request(report_name):
+    org_id = st.session_state.get("organization_id")
+    requested_by = (
+        st.session_state.get("user")
+        or st.session_state.get("email")
+        or "unknown"
+    )
+
+    report_id = str(uuid.uuid4())
+    safe_name = (
+        report_name.lower()
+        .replace("&", "and")
+        .replace(" ", "_")
+        .replace("/", "_")
+    )
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    file_name = f"{safe_name}_{timestamp}.pdf"
+
+    output_dir = Path("exports") / "reports"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_path = output_dir / file_name
+
+    payload = {
+        "id": report_id,
+        "org_id": org_id,
+        "tenant_id": org_id,
+        "report_name": report_name,
+        "requested_by": requested_by,
+        "delivery_channel": "ui",
+        "status": "queued",
+        "recipients": [],
+        "notes": "Report generation requested from Reports Center.",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    try:
+        supabase.table("report_history").insert(payload).execute()
+
+        pdf_bytes = build_report_pdf(
+            report_name=report_name,
+            tenant_id=org_id,
+            requested_by=requested_by,
+        )
+
+        file_path.write_bytes(pdf_bytes)
+
+        supabase.table("report_history").update(
+            {
+                "status": "generated",
+                "file_name": file_name,
+                "notes": f"{report_name} generated successfully from Reports Center.",
+            }
+        ).eq("id", report_id).execute()
+
+        audit_service.log_report_generated(
+            report_id=report_id,
+            generated_by=requested_by,
+            org_id=org_id,
+            report_type=report_name,
+            file_name=file_name,
+        )
+
+        return True
+
+    except Exception as e:
+        st.error(f"REPORT ERROR: {e}")
+
+        try:
+            supabase.table("report_history").update(
+                {
+                    "status": "failed",
+                    "notes": str(e),
+                }
+            ).eq("id", report_id).execute()
+        except Exception:
+            pass
+
+        return False
+
+
+def get_enterprise_spend_breakdown():
+    try:
+        response = (
+            supabase
+            .table("mart_enterprise_spend_v2")
+            .select("*")
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else {}
+    except Exception:
+        return {}
+
+
+def get_enterprise_forecast_total():
+    try:
+        response = (
+            supabase
+            .table("mart_enterprise_forecast")
+            .select("*")
+            .execute()
+        )
+        rows = response.data or []
+    except Exception:
+        rows = []
+
+    total = 0
+    for row in rows:
+        for key in (
+            "projected_monthly_spend",
+            "forecast_spend",
+            "forecast_cost",
+            "amount",
+        ):
+            if key in row:
+                total += float(row.get(key) or 0)
+                break
+
+    return total
+
+
+def report_card(title, items, button_label, key):
+    with st.container():
+        render_insight_card(
+            title=title,
+            value=button_label.replace("Generate ", ""),
+            description="Report package",
+            icon="intelligence",
+            status="ready",
+        )
+        for label, value in items:
+            render_metric_card(
+                title=label,
+                value=value,
+                icon="reports",
+                status="info",
+            )
+
+        if st.button(
+            button_label,
+            key=key,
+            use_container_width=True,
+        ):
+            saved = log_report_request(title)
+
+            if saved:
+                st.success(f"{title} generated successfully.")
+                st.rerun()
+            else:
+                st.error(f"{title} generation could not be queued.")
+
+
+def last_generated_for(report_name, rows):
+    for row in rows:
+        if row.get("report_name") == report_name and str(row.get("status", "")).lower() == "generated":
+            return str(row.get("created_at", ""))[:19] or "Generated"
+    return "Not generated"
+
+
+def render_report_catalog_card(report_name, audience, purpose, frequency, last_generated, button_key):
+    safe_report_name = str(report_name)
+    with st.container():
+        st.markdown(
+            f"""
+            <div class="nexora-card" style="
+                min-height: 178px;
+                padding: 1rem;
+                margin-bottom: 0.5rem;
+            ">
+                <div style="font-size:1.05rem;font-weight:700;color:var(--nexora-text);margin-bottom:0.65rem;">
+                    {safe_report_name}
+                </div>
+                <div style="display:grid;gap:0.35rem;font-size:0.9rem;color:var(--nexora-text-muted);">
+                    <div><strong style="color:var(--nexora-text);">Audience:</strong> {audience}</div>
+                    <div><strong style="color:var(--nexora-text);">Purpose:</strong> {purpose}</div>
+                    <div><strong style="color:var(--nexora-text);">Frequency:</strong> {frequency}</div>
+                    <div><strong style="color:var(--nexora-text);">Last Generated:</strong> {last_generated}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "Generate",
+            key=button_key,
+            use_container_width=True,
+        ):
+            saved = log_report_request(safe_report_name)
+
+            if saved:
+                st.success(f"{safe_report_name} generated successfully.")
+                st.rerun()
+            else:
+                st.error(f"{safe_report_name} generation could not be queued.")
+
+
+def render_simple_report_catalog_card(report_name, description, last_generated, button_key):
+    safe_report_name = str(report_name)
+    with st.container():
+        st.markdown(
+            f"""
+            <div class="nexora-card" style="
+                min-height: 150px;
+                padding: 1rem;
+                margin-bottom: 0.5rem;
+            ">
+                <div style="font-size:1.05rem;font-weight:700;color:var(--nexora-text);margin-bottom:0.6rem;">
+                    {safe_report_name}
+                </div>
+                <div style="font-size:0.92rem;color:var(--nexora-text-muted);line-height:1.45;margin-bottom:0.75rem;">
+                    {description}
+                </div>
+                <div style="font-size:0.88rem;color:var(--nexora-text-muted);">
+                    <strong style="color:var(--nexora-text);">Last Generated:</strong> {last_generated}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "Generate",
+            key=button_key,
+            use_container_width=True,
+        ):
+            saved = log_report_request(safe_report_name)
+
+            if saved:
+                st.success(f"{safe_report_name} generated successfully.")
+                st.rerun()
+            else:
+                st.error(f"{safe_report_name} generation could not be queued.")
+
 
 configure_page(
-    page_title="Reports Center",
-    page_icon="📊"
+    page_title="Executive Reports Center",
+    page_icon=":bar_chart:",
 )
 
 init_session()
 
 require_role([
     "executive",
+    "cio",
     "technical",
     "finance",
     "super_admin",
 ])
 
-render_sidebar(
-    role=st.session_state.get(
-        "role",
-        "Unknown"
-    )
+role = st.session_state.get("role", "cio")
+render_enterprise_sidebar(
+    role,
+    page_paths=PAGE_PATHS,
+    role_pages=ROLE_PAGES,
+    active_page=PAGE_PATHS["Reports"],
 )
 
-render_page_header(
-    "Reports Center",
-    "Executive and Operational Reporting"
+render_page(
+    title="Executive Reports Center",
+    description="Board, financial, governance, and optimization reporting.",
+    breadcrumbs=["Home", "Administration", "Reports"],
+    content=None,
+    show_footer=False,
 )
 
-st.markdown("---")
-
-# Executive Summary
-
-st.subheader("Executive Summary")
+st.markdown("<main class='nexora-page-shell'>", unsafe_allow_html=True)
 
 summary = get_executive_summary()
+recommendations = get_recommendation_summary()
+approvals = get_approval_summary()
+saas = get_saas_summary()
+spend_breakdown = get_enterprise_spend_breakdown()
+forecast_total = get_enterprise_forecast_total()
 
-if summary:
+current_role = st.session_state.get("role", "").lower()
+org_id = st.session_state.get("organization_id")
+report_history_all = get_report_history()
 
-    col1, col2, col3, col4 = st.columns(4)
+approved_recommendations = (
+    recommendations.get("APPROVED", 0)
+    + recommendations.get("approved", 0)
+)
+
+implemented_recommendations = (
+    recommendations.get("IMPLEMENTED", 0)
+    + recommendations.get("COMPLETED", 0)
+    + recommendations.get("implemented", 0)
+    + recommendations.get("completed", 0)
+)
+
+approved_approvals = (
+    approvals.get("APPROVED", 0)
+    + approvals.get("approved", 0)
+)
+
+pending_approvals = (
+    approvals.get("PENDING", 0)
+    + approvals.get("PENDING_APPROVAL", 0)
+    + approvals.get("pending", 0)
+)
+
+if current_role in ["executive", "super_admin"]:
+
+    render_section("Report Catalog", "Executive-ready report packages for board, finance, governance, and optimization review.", divider=True)
+
+    executive_reports = [
+        {
+            "name": "Board Pack",
+            "purpose": "Board Meeting",
+            "audience": "Board / CEO",
+            "frequency": "Monthly",
+            "key": "generate_board_pack",
+        },
+        {
+            "name": "Financial Review",
+            "purpose": "CFO Review",
+            "audience": "CEO / CFO",
+            "frequency": "Monthly",
+            "key": "generate_financial_review",
+        },
+        {
+            "name": "Governance Review",
+            "purpose": "Risk Committee",
+            "audience": "CEO / Risk Committee",
+            "frequency": "Quarterly",
+            "key": "generate_governance_review",
+        },
+        {
+            "name": "Optimization Review",
+            "purpose": "Cost Reduction",
+            "audience": "CEO / CIO / CFO",
+            "frequency": "Monthly",
+            "key": "generate_optimization_review",
+        },
+    ]
+
+    catalog_rows = [executive_reports[:2], executive_reports[2:]]
+    for catalog_row in catalog_rows:
+        cols = st.columns(2)
+        for index, report in enumerate(catalog_row):
+            with cols[index]:
+                render_report_catalog_card(
+                    report["name"],
+                    report["audience"],
+                    report["purpose"],
+                    report["frequency"],
+                    last_generated_for(report["name"], report_history_all),
+                    report["key"],
+                )
+
+if current_role in ["cio", "super_admin"]:
+
+    render_section("CIO Report Catalog", "Technology, cloud, risk, and SaaS report packages for CIO review.", divider=True)
+
+    cio_reports = [
+        {
+            "name": "Technology Spend Report",
+            "description": "Application, platform, SaaS, license, MSP, and cloud spend package for CIO financial review.",
+            "key": "generate_cio_technology_spend_report",
+        },
+        {
+            "name": "Cloud Strategy Report",
+            "description": "Strategic view of enterprise cloud posture, forecast, savings opportunity, and active risk.",
+            "key": "generate_cio_cloud_strategy_report",
+        },
+        {
+            "name": "Risk & Governance Report",
+            "description": "Governance, policy, approval, and technology risk package for CIO decision-making.",
+            "key": "generate_cio_risk_governance_report",
+        },
+        {
+            "name": "SaaS Governance Report",
+            "description": "SaaS spend, license usage, renewal risk, vendor footprint, and optimization package.",
+            "key": "generate_cio_saas_governance_report",
+        },
+    ]
+
+    for report_row in [cio_reports[:2], cio_reports[2:]]:
+        cols = st.columns(2)
+        for index, report in enumerate(report_row):
+            with cols[index]:
+                render_simple_report_catalog_card(
+                    report["name"],
+                    report["description"],
+                    last_generated_for(report["name"], report_history_all),
+                    report["key"],
+                )
+
+if current_role in ["finance", "super_admin"]:
+
+    render_section("Finance Reports", "Budget, forecast, SaaS, license, and savings reports.", divider=True)
+
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.metric(
-            "Total Spend",
-            summary.get("total_spend", 0)
+        report_card(
+            "Budget vs Actual Report",
+            [
+                ("Enterprise Spend", format_currency(summary.get("total_spend", 0))),
+                ("Forecast", format_currency(forecast_total)),
+                ("Budget Performance", format_percent(summary.get("budget_performance", summary.get("budget_adherence", 0)))),
+            ],
+            "Generate Budget Report",
+            "generate_finance_budget_report",
         )
 
     with col2:
-        st.metric(
-            "Anomalies",
-            summary.get("anomaly_count", 0)
+        report_card(
+            "Forecast Report",
+            [
+                ("Forecast Spend", format_currency(forecast_total)),
+                ("Cloud Spend", format_currency(spend_value(spend_breakdown, "cloud_spend", "cloud_cost"))),
+                ("SaaS Spend", format_currency(spend_value(spend_breakdown, "saas_spend", "saas_cost"))),
+            ],
+            "Generate Forecast Report",
+            "generate_finance_forecast_report",
         )
 
+    col3, col4 = st.columns(2)
+
     with col3:
-        st.metric(
-            "Optimization",
-            summary.get("optimization", 0)
+        report_card(
+            "SaaS & License Report",
+            [
+                ("SaaS Spend", format_currency(saas.get("total_cost", spend_value(spend_breakdown, "saas_spend", "saas_cost")))),
+                ("License Spend", format_currency(spend_value(spend_breakdown, "license_spend", "license_cost"))),
+                ("Users", format_number(saas.get("total_users", 0))),
+            ],
+            "Generate SaaS Report",
+            "generate_finance_saas_report",
         )
 
     with col4:
-        st.metric(
-            "Governance Score",
-            summary.get("governance_score", 0)
+        report_card(
+            "Savings Report",
+            [
+                ("Savings Identified", format_currency(summary.get("optimization_savings", summary.get("optimization", 0)))),
+                ("Savings Realized", format_currency(summary.get("savings_realized", 0))),
+                ("Approved Recommendations", format_number(approved_recommendations)),
+            ],
+            "Generate Savings Report",
+            "generate_finance_savings_report",
         )
 
-st.markdown("---")
+if current_role in ["technical", "super_admin"]:
 
-# Recommendations
+    render_section("Technical Reports", "Resource, cost intelligence, optimization, and audit reports.", divider=True)
 
-st.subheader("Recommendations")
+    col1, col2 = st.columns(2)
 
-recommendations = get_recommendation_summary()
+    with col1:
+        report_card(
+            "Resource Inventory Report",
+            [
+                ("Enterprise Spend", format_currency(summary.get("total_spend", 0))),
+                ("Active Risks", format_number(summary.get("anomaly_count", 0))),
+                ("Governance Score", format_percent(summary.get("governance_score", 0))),
+            ],
+            "Generate Resource Inventory Report",
+            "generate_technical_inventory_report",
+        )
 
-if recommendations:
-    st.dataframe(
-        pd.DataFrame(
-            recommendations.items(),
-            columns=["Status", "Count"]
-        ),
-        use_container_width=True
-    )
+    with col2:
+        report_card(
+            "Cost Intelligence Report",
+            [
+                ("Optimization Opportunity", format_currency(summary.get("optimization_savings", summary.get("optimization", 0)))),
+                ("Forecast", format_currency(forecast_total)),
+                ("Cloud Spend", format_currency(spend_value(spend_breakdown, "cloud_spend", "cloud_cost"))),
+            ],
+            "Generate Cost Intelligence Report",
+            "generate_technical_cost_report",
+        )
 
-st.markdown("---")
+    col3, col4 = st.columns(2)
 
-# Approvals
+    with col3:
+        report_card(
+            "Optimization Report",
+            [
+                ("Savings Opportunity", format_currency(summary.get("optimization_savings", summary.get("optimization", 0)))),
+                ("Approved Recommendations", format_number(approved_recommendations)),
+                ("Implemented Recommendations", format_number(implemented_recommendations)),
+            ],
+            "Generate Optimization Report",
+            "generate_technical_optimization_report",
+        )
 
-st.subheader("Approval Summary")
+    with col4:
+        report_card(
+            "Risk & Audit Report",
+            [
+                ("Risks", format_number(summary.get("anomaly_count", 0))),
+                ("Approvals", format_number(pending_approvals + approved_approvals)),
+                ("Governance Score", format_percent(summary.get("governance_score", 0))),
+            ],
+            "Generate Risk & Audit Report",
+            "generate_technical_risk_report",
+        )
 
-approvals = get_approval_summary()
+schedule_rows = list_report_schedules(org_id) if org_id else []
 
-if approvals:
-    st.dataframe(
-        pd.DataFrame(
-            approvals.items(),
-            columns=["Status", "Count"]
-        ),
-        use_container_width=True
-    )
+st.divider()
+render_section("Generated Reports", "Generated report history and downloads.", divider=True)
 
-st.markdown("---")
+report_history = report_history_all
+report_history = sorted(
+    report_history,
+    key=lambda row: str(row.get("created_at", "")),
+    reverse=True,
+)
 
-# SaaS
+if current_role == "executive":
+    executive_report_names = {
+        "Board Pack",
+        "Financial Review",
+        "Governance Review",
+        "Optimization Review",
+    }
+    report_history = [
+        row for row in report_history
+        if row.get("report_name") in executive_report_names
+    ]
 
-st.subheader("SaaS Summary")
+history_status_options = [
+    "All",
+    "Generated",
+    "Failed",
+    "Queued",
+]
+default_history_index = 1 if current_role == "executive" else 0
+history_status = st.selectbox(
+    "Status Filter",
+    history_status_options,
+    index=default_history_index,
+)
 
-saas = get_saas_summary()
+if history_status != "All":
+    report_history = [
+        row for row in report_history
+        if str(row.get("status", "")).lower() == history_status.lower()
+    ]
 
-col1, col2 = st.columns(2)
+if report_history:
+    header_cols = st.columns([2, 2, 2, 1, 1])
+    header_cols[0].write("**Report**")
+    header_cols[1].write("**Generated By**")
+    header_cols[2].write("**Date**")
+    header_cols[3].write("**Status**")
+    header_cols[4].write("**Download**")
 
-with col1:
-    st.metric(
-        "Licensed Users",
-        saas.get("total_users", 0)
-    )
+    for row in report_history:
+        file_name = row.get("file_name")
+        report_path = Path("exports") / "reports" / str(file_name)
 
-with col2:
-    st.metric(
-        "Total SaaS Spend",
-        saas.get("total_cost", 0)
-    )
+        row_cols = st.columns([2, 2, 2, 1, 1])
+        row_cols[0].write(row.get("report_name", "Report"))
+        row_cols[1].write(row.get("requested_by", "unknown"))
+        row_cols[2].write(str(row.get("created_at", ""))[:19] or "-")
+        row_cols[3].write(row.get("status", "unknown"))
 
-st.markdown("---")
-
-# Report History
-
-st.subheader("Report History")
-
-history = get_report_history()
-
-if history:
-    st.dataframe(
-        pd.DataFrame(history),
-        use_container_width=True
-    )
+        if file_name and report_path.exists():
+            with open(report_path, "rb") as f:
+                row_cols[4].download_button(
+                    "📄 Download",
+                    data=f,
+                    file_name=file_name,
+                    mime="application/pdf",
+                    key=row.get("id", file_name),
+                )
+        else:
+            row_cols[4].write("-")
 else:
-    st.info("No reports generated yet")
+    st.info("No generated reports found yet.")
+
+st.divider()
+render_section("Scheduled Reports", "Recurring report schedules and delivery status.", divider=True)
+
+schedule_header = st.columns([2, 1, 2, 2, 1])
+schedule_header[0].write("**Report**")
+schedule_header[1].write("**Frequency**")
+schedule_header[2].write("**Recipient**")
+schedule_header[3].write("**Next Run**")
+schedule_header[4].write("**Status**")
+
+if schedule_rows:
+    for schedule in schedule_rows:
+        schedule_cols = st.columns([2, 1, 2, 2, 1])
+        schedule_cols[0].write(schedule.get("report_type", "Report"))
+        schedule_cols[1].write(schedule.get("frequency", "-"))
+        schedule_cols[2].write(schedule.get("recipient_email", "-"))
+        schedule_cols[3].write(str(schedule.get("next_run", ""))[:19] or "-")
+        with schedule_cols[4]:
+            is_active = schedule.get("enabled", schedule.get("active"))
+            render_status_badge("healthy" if is_active else "unknown", label="Active" if is_active else "Inactive")
+else:
+    st.info("No scheduled reports configured yet.")
+
+if "show_report_schedule_form" not in st.session_state:
+    st.session_state["show_report_schedule_form"] = False
+
+if st.button(
+    "Schedule Report",
+    key="open_schedule_report_form",
+):
+    st.session_state["show_report_schedule_form"] = True
+
+if st.session_state.get("show_report_schedule_form"):
+    with st.form("schedule_report_form"):
+        report_type = st.selectbox(
+            "Report Type",
+            [
+                "Board Pack",
+                "Financial Review",
+                "Governance Review",
+                "Optimization Review",
+            ],
+        )
+        frequency = st.selectbox(
+            "Frequency",
+            [
+                "Daily",
+                "Weekly",
+                "Monthly",
+                "Quarterly",
+            ],
+            index=2,
+        )
+        recipient = st.text_input(
+            "Recipient",
+            value="ceo@company.com",
+        )
+
+        submitted = st.form_submit_button(
+            "Save Schedule",
+            use_container_width=True,
+        )
+
+        if submitted:
+            next_run = calculate_next_run(frequency)
+            result = save_report_schedule(
+                tenant_id=org_id,
+                report_type=report_type,
+                frequency=frequency,
+                recipient=recipient,
+                active=True,
+                next_run=next_run.isoformat(),
+            )
+
+            if result.get("saved"):
+                st.session_state["show_report_schedule_form"] = False
+                st.success(f"{report_type} scheduled.")
+                st.rerun()
+            else:
+                st.error(
+                    f"Report schedule could not be saved.\n\n"
+                    f"{result.get('error', 'Unknown error')}"
+                )
+
+render_section("Report Definitions", "Plain-language guide to executive reporting packages.", divider=True)
+definition_cols = st.columns(2)
+definitions = [
+    ("Board Pack", "Board-ready package summarizing technology spend, risk, governance, optimization, and executive decisions."),
+    ("Financial Review", "Finance-focused view of spend, forecast, savings, budget posture, and cost movement."),
+    ("Governance Review", "Risk and governance package covering policy health, approvals, active risks, and controls."),
+    ("Optimization Review", "Savings and optimization package for cost reduction, realized savings, and remaining opportunities."),
+    ("Scheduled Reports", "Recurring report deliveries configured for a recipient, cadence, and next run date."),
+    ("Generated Reports", "Historical report packages generated through Nexora and available for download when files exist."),
+]
+for index, (title, description) in enumerate(definitions):
+    with definition_cols[index % 2]:
+        render_insight_card(
+            title=title,
+            description=description,
+            icon="reports",
+            status="info",
+        )
+
+render_section("Report Governance Insight", "Report generation, scheduling, and governance posture.", divider=True)
+
+generated_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "generated")
+failed_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "failed")
+queued_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "queued")
+scheduled_count = len(schedule_rows)
+
+governance_cols = st.columns(4)
+with governance_cols[0]:
+    render_metric_card("Generated Reports", generated_count, icon="success", status="healthy")
+with governance_cols[1]:
+    render_metric_card("Scheduled Reports", scheduled_count, icon="reports", status="info")
+with governance_cols[2]:
+    render_metric_card("Queued Reports", queued_count, icon="info", status="watch" if queued_count else "healthy")
+with governance_cols[3]:
+    render_metric_card("Failed Reports", failed_count, icon="error", status="critical" if failed_count else "healthy")
+
+render_insight_card(
+    title="Report Governance",
+    value="Executive Reporting Control",
+    description=(
+        "Report generation is tracked through history records, scheduled delivery metadata, "
+        "and audit logging. Generated packages remain available for download when the report file exists."
+    ),
+    icon="governance",
+    status="warning" if failed_count else "healthy",
+)
+
+render_footer()
+st.markdown("</main>", unsafe_allow_html=True)

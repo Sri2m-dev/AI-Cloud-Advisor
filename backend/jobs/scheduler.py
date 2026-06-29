@@ -10,6 +10,7 @@ from backend.jobs.tasks import (
     job_alert_processor_hourly,
     job_anomaly_scan_hourly,
     job_cost_ingestion_hourly,
+    job_discovery_scheduler_hourly,
     job_escalation_hourly,
     job_kpi_refresh_15m,
     job_optimization_engine_daily,
@@ -26,6 +27,14 @@ def _register_jobs() -> None:
         job_cost_ingestion_hourly,
         trigger=IntervalTrigger(hours=1),
         id="cost_ingestion_hourly",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+    SCHEDULER.add_job(
+        job_discovery_scheduler_hourly,
+        trigger=IntervalTrigger(hours=1),
+        id="discovery_scheduler_hourly",
         replace_existing=True,
         coalesce=True,
         max_instances=1,

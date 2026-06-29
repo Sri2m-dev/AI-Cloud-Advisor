@@ -3,9 +3,9 @@ from shared.session import init_session
 from shared.auth import require_role
 from shared.styles import configure_page
 from core.auth import logout_button
-from components.sidebar import render_sidebar
+from components.sidebar_navigation import render_sidebar_navigation
 
-configure_page(page_title="Technical Analytics | AI Cloud Advisor", page_icon=":bar_chart:")
+configure_page(page_title="Technical Analytics | Nexora", page_icon=":bar_chart:")
 
 init_session()
 require_role([
@@ -14,7 +14,8 @@ require_role([
     "super_admin",
 ])
 
-render_sidebar(role=st.session_state.get("role", "Unknown"))
+role = st.session_state.get("role", "Unknown")
+render_sidebar_navigation(role)
 
 from services.analytics_service import (
     get_ingestion_freshness,

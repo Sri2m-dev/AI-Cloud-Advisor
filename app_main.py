@@ -4,7 +4,7 @@ from auth.role_constants import normalize_role
 from components.sidebar_navigation import DEFAULT_ROLE_PAGE
 
 configure_page(
-    page_title="AI Cloud Advisor",
+    page_title="NEXORA",
     page_icon="☁️",
     layout="wide",
     initial_sidebar_state="collapsed"

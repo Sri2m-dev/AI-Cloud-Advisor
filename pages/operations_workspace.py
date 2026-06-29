@@ -1,19 +1,37 @@
+from __future__ import annotations
+
 import os
 import sys
-import streamlit as st
-from shared.session import init_session
-from shared.styles import configure_page
-from components.sidebar import render_sidebar
 
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+import pandas as pd
+import streamlit as st
+
+ROOT_DIR = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__),
+        ".."
+    )
+)
+
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-configure_page(page_title="Operations Workspace | AI Cloud Advisor", page_icon=":gear:")
+from shared.session import init_session
+from shared.styles import configure_page
+from shared.auth import require_role
+from components.sidebar_navigation import render_sidebar_navigation
+from components.layout import render_page_header
+
+from services.operations_workspace_service import (
+    OperationsWorkspaceService,
+)
+
+configure_page(
+    page_title="Operations Workspace",
+    page_icon="⚙️",
+)
 
 init_session()
-
-from shared.auth import require_role
 
 require_role([
     "finance",
@@ -21,53 +39,180 @@ require_role([
     "super_admin",
 ])
 
-render_sidebar(role=st.session_state.get("role", "Unknown"))
+role = st.session_state.get("role", "Unknown")
+render_sidebar_navigation(role)
 
-from components.layout import render_page_header, render_section
+render_page_header(
+    "Operations Workspace",
+    "Cloud Operations and Engineering Command Center"
+)
 
-render_page_header("Operations Workspace", "Engineering and CloudOps command center")
+# --------------------------------------------------
+# SUMMARY KPIs
+# --------------------------------------------------
 
-org_id = st.session_state.get("organization_id")
+summary = (
+    OperationsWorkspaceService
+    .get_summary()
+)
 
-render_section("Active Incidents")
-# TODO: Implement or migrate get_user_profile, get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.
-# Commenting out undefined function calls for now.
-# get_active_incidents(org_id)
-# data_table(...)
-st.warning("TODO: Implement or migrate get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.")
+c1, c2, c3, c4 = st.columns(4)
 
-render_section("Anomalies")
-# TODO: Implement or migrate get_user_profile, get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.
-# Commenting out undefined function calls for now.
-# get_cost_anomalies(org_id)
-# data_table(...)
-st.warning("TODO: Implement or migrate get_cost_anomalies, data_table, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.")
+c1.metric(
+    "Approvals",
+    summary.get("approvals", 0)
+)
 
-render_section("Untagged Resources")
-# TODO: Implement or migrate get_user_profile, get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.
-# Commenting out undefined function calls for now.
-# get_untagged_resources(org_id)
-# data_table(...)
-st.warning("TODO: Implement or migrate get_untagged_resources, data_table, get_idle_assets, get_automation_failures, get_ingestion_health if needed.")
+c2.metric(
+    "Recommendations",
+    summary.get("recommendations", 0)
+)
 
-render_section("Idle Assets")
-# TODO: Implement or migrate get_user_profile, get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.
-# Commenting out undefined function calls for now.
-# get_idle_assets(org_id)
-# data_table(...)
-st.warning("TODO: Implement or migrate get_idle_assets, data_table, get_untagged_resources, get_automation_failures, get_ingestion_health if needed.")
+c3.metric(
+    "Anomalies",
+    summary.get("anomalies", 0)
+)
 
-render_section("Automation Failures")
-# TODO: Implement or migrate get_user_profile, get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.
-# Commenting out undefined function calls for now.
-# get_automation_failures(org_id)
-# data_table(...)
-st.warning("TODO: Implement or migrate get_automation_failures, data_table, get_untagged_resources, get_idle_assets, get_ingestion_health if needed.")
+c4.metric(
+    "Audit Events",
+    summary.get("audit_events", 0)
+)
 
-render_section("Ingestion Health")
-# TODO: Implement or migrate get_user_profile, get_active_incidents, data_table, get_cost_anomalies, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.
-# Commenting out undefined function calls for now.
-# get_ingestion_health(org_id)
-# data_table(...)
-st.warning("TODO: Implement or migrate get_ingestion_health, data_table, get_untagged_resources, get_idle_assets, get_automation_failures, get_ingestion_health if needed.")
+st.divider()
 
+# --------------------------------------------------
+# APPROVAL REQUESTS
+# --------------------------------------------------
+
+st.subheader(
+    "Approval Requests"
+)
+
+approvals = (
+    OperationsWorkspaceService
+    .get_approval_requests()
+)
+
+if approvals:
+
+    st.dataframe(
+        pd.DataFrame(approvals),
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No approval requests found."
+    )
+
+# --------------------------------------------------
+# RECOMMENDATIONS
+# --------------------------------------------------
+
+st.subheader(
+    "Optimization Recommendations"
+)
+
+recommendations = (
+    OperationsWorkspaceService
+    .get_recommendations()
+)
+
+if recommendations:
+
+    st.dataframe(
+        pd.DataFrame(recommendations),
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No recommendations available."
+    )
+
+# --------------------------------------------------
+# COST ANOMALIES
+# --------------------------------------------------
+
+st.subheader(
+    "Cost Anomalies"
+)
+
+anomalies = (
+    OperationsWorkspaceService
+    .get_cost_anomalies()
+)
+
+if anomalies:
+
+    st.dataframe(
+        pd.DataFrame(anomalies),
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No anomalies detected."
+    )
+
+# --------------------------------------------------
+# AUDIT EVENTS
+# --------------------------------------------------
+
+st.subheader(
+    "Recent Audit Events"
+)
+
+audit_events = (
+    OperationsWorkspaceService
+    .get_audit_events()
+)
+
+if audit_events:
+
+    st.dataframe(
+        pd.DataFrame(audit_events),
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No audit events found."
+    )
+
+# --------------------------------------------------
+# CLOUD COST DATA
+# --------------------------------------------------
+
+st.subheader(
+    "Cloud Cost Records"
+)
+
+costs = (
+    OperationsWorkspaceService
+    .get_cloud_costs()
+)
+
+if costs:
+
+    cost_df = pd.DataFrame(costs)
+
+    st.dataframe(
+        cost_df.head(100),
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No cloud cost data available."
+    )

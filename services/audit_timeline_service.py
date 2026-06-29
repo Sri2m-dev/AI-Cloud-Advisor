@@ -6,6 +6,12 @@ compliance, and reporting.
 from services.supabase_client import supabase
 from core.errors.error_handler import with_error_handling
 
+PRIMARY_AUDIT_TABLE = "audit_events"
+LEGACY_AUDIT_TABLES = [
+    "audit_log",
+    "workspace_activity_log",
+]
+
 
 TIMELINE_EVENT_TYPES = {
     "approvals_assignments": [
@@ -14,6 +20,7 @@ TIMELINE_EVENT_TYPES = {
         "APPROVAL_REJECTED",
         "APPROVAL_ESCALATED",
         "USER_LOGIN",
+        "USER_LOGOUT",
     ],
     "governance_changes": [
         "POLICY_CREATED",
@@ -41,11 +48,101 @@ def _coerce_org_id(org_id):
     return int(org_id) if str(org_id).isdigit() else None
 
 
+def _normalize_legacy_event(row, table_name):
+    event_data = {
+        "action": row.get("action") or row.get("event") or row.get("activity"),
+        "details": row.get("details") or row.get("metadata") or {},
+        "status": row.get("status", "Recorded"),
+        "legacy_table": table_name,
+        "org_id": row.get("org_id") or row.get("organization_id"),
+    }
+
+    return {
+        "event_type": str(event_data["action"] or "LEGACY_AUDIT_EVENT").upper(),
+        "event_source": row.get("category") or row.get("source") or table_name,
+        "entity_id": str(row.get("target") or row.get("entity_id") or row.get("id") or ""),
+        "actor_id": row.get("user_email") or row.get("user_id") or row.get("actor_id") or "unknown",
+        "event_data": event_data,
+        "action": event_data["action"],
+        "status": event_data["status"],
+        "created_at": row.get("created_at") or row.get("timestamp") or row.get("recorded_at") or row.get("updated_at"),
+    }
+
+
+def _legacy_org_matches(row, org_id):
+    if not org_id:
+        return True
+
+    org_value = str(org_id)
+    return str(row.get("org_id") or row.get("organization_id") or "") == org_value
+
+
+def _event_matches(event, event_types):
+    if not event_types:
+        return True
+
+    event_type = str(event.get("event_type") or "").upper()
+    action = str(
+        event.get("action")
+        or (event.get("event_data") or {}).get("action")
+        or ""
+    ).upper()
+
+    return event_type in event_types or action in event_types
+
+
+def _primary_org_matches(row, org_id):
+    if not org_id:
+        return True
+
+    organization_id = _coerce_org_id(org_id)
+    if organization_id is not None:
+        return True
+
+    event_data = row.get("event_data") or {}
+    return str(event_data.get("org_id") or "") == str(org_id)
+
+
+def _get_legacy_events(event_types=None, org_id=None, limit=100):
+    legacy_events = []
+
+    for table_name in LEGACY_AUDIT_TABLES:
+        try:
+            # Legacy audit tables are read-only fallbacks for historical data.
+            # New writes go to audit_events through services.audit_service.
+            rows = (
+                supabase
+                .table(table_name)
+                .select("*")
+                .limit(limit)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            continue
+
+        for row in rows:
+            if not _legacy_org_matches(row, org_id):
+                continue
+
+            event = _normalize_legacy_event(row, table_name)
+            if _event_matches(event, event_types):
+                legacy_events.append(event)
+
+    legacy_events = sorted(
+        legacy_events,
+        key=lambda row: str(row.get("created_at") or ""),
+        reverse=True,
+    )
+    return legacy_events[:limit]
+
+
 def _get_events(event_types=None, org_id=None, limit=100):
     try:
         query = (
             supabase
-            .table("audit_events")
+            .table(PRIMARY_AUDIT_TABLE)
             .select("*")
         )
 
@@ -63,11 +160,27 @@ def _get_events(event_types=None, org_id=None, limit=100):
             .execute()
         )
 
-        return response.data or []
+        primary_events = [
+            row
+            for row in response.data or []
+            if _primary_org_matches(row, org_id)
+        ]
+        if primary_events:
+            return primary_events
+
+        return _get_legacy_events(
+            event_types=event_types,
+            org_id=org_id,
+            limit=limit,
+        )
 
     except Exception as e:
         print(f"Audit timeline error: {e}")
-        return []
+        return _get_legacy_events(
+            event_types=event_types,
+            org_id=org_id,
+            limit=limit,
+        )
 
 
 @with_error_handling

@@ -59,6 +59,7 @@ class DashboardRepository:
         _require_organization_id(organization_id)
 
         try:
+            # Cost rows are intentionally read as an enterprise-wide snapshot here.
             response = (
                 supabase
                 .table("unified_cloud_costs")
@@ -94,6 +95,7 @@ class DashboardRepository:
         _require_organization_id(organization_id)
 
         try:
+            # Approval queue is currently consumed as a global governance snapshot.
             response = (
                 supabase
                 .table("approval_queue")
@@ -130,6 +132,7 @@ class DashboardRepository:
         _require_organization_id(organization_id)
 
         try:
+            # Anomaly view is currently consumed as a global risk snapshot.
             response = (
                 supabase
                 .table("cost_anomaly_view")

@@ -91,7 +91,7 @@ def send_webhook_alert(url: str, title: str, message: str, severity: str = "info
 
 
 def dispatch_alert_channels(alert: dict, config: dict) -> dict:
-    title = f"[{alert.get('alert_type', 'alert')}] AI Cloud Advisor"
+    title = f"[{alert.get('alert_type', 'alert')}] Nexora"
     message = str(alert.get("message", ""))
     severity = str(alert.get("severity", "info"))
     payload = alert.get("payload") or {}

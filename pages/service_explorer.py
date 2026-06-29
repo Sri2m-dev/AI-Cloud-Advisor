@@ -7,7 +7,10 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")
+)
+
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
@@ -16,72 +19,108 @@ from shared.session import init_session
 from shared.styles import configure_page
 from shared.layout import render_page_header
 from shared.charts import render_chart
-from components.sidebar import render_sidebar
-from services.dashboard_metrics import get_executive_dashboard_metrics
+from components.sidebar_navigation import render_sidebar_navigation
+
+from repositories.service_explorer_repository import (
+    ServiceExplorerRepository,
+)
 
 configure_page(
-    page_title="Service Explorer | AI Cloud Advisor",
+    page_title="Service Explorer | Nexora",
     page_icon="📊",
 )
 
 init_session()
 
-require_role([
-    "executive",
-    "technical",
-    "super_admin",
-])
+require_role(
+    [
+        "executive",
+        "cio",
+        "technical",
+        "super_admin",
+    ]
+)
 
-render_sidebar(role=st.session_state.get("role", "Unknown"))
-
-org_id = st.session_state.get("organization_id")
-
-dashboard = get_executive_dashboard_metrics(org_id)
+role = st.session_state.get("role", "Unknown")
+render_sidebar_navigation(role)
 
 render_page_header(
     "Service Explorer",
     "Cloud Service Cost Intelligence and Optimization"
 )
 
-# -----------------------------------------------------
-# Spend by Cloud
-# -----------------------------------------------------
+# =====================================================
+# KPI SECTION
+# =====================================================
 
-cloud_data = dashboard.get("spend_by_cloud", [])
+kpis = ServiceExplorerRepository.get_kpis()
 
-if cloud_data:
-    cloud_df = pd.DataFrame(cloud_data)
+col1, col2, col3, col4, col5 = st.columns(5)
 
-    fig = px.pie(
-        cloud_df,
-        names="cloud",
-        values="spend",
-        hole=0.5,
-        title="Cloud Spend Distribution"
+with col1:
+    st.metric(
+        "Services",
+        kpis["total_services"]
     )
 
-    render_chart(
-        "Spend by Cloud",
-        fig
+with col2:
+    st.metric(
+        "Critical Services",
+        kpis["critical_services"]
     )
 
-# -----------------------------------------------------
-# Top Services
-# -----------------------------------------------------
+with col3:
+    st.metric(
+        "Total Spend",
+        f"${kpis['total_spend']:,.0f}"
+    )
 
-top_services = dashboard.get("top_services", [])
+with col4:
+    st.metric(
+        "Optimization Candidates",
+        kpis["optimization_candidates"]
+    )
 
-st.subheader("Top Services by Spend")
+with col5:
+    st.metric(
+        "Active Anomalies",
+        kpis["active_anomalies"]
+    )
 
-if top_services:
+st.divider()
 
-    service_df = pd.DataFrame(top_services)
+# =====================================================
+# SERVICE CLASSIFICATION
+# =====================================================
+
+service_data = (
+    ServiceExplorerRepository
+    .get_service_classification()
+)
+
+if service_data:
+
+    service_df = pd.DataFrame(service_data)
+
+    st.subheader(
+        "Service Cost Distribution"
+    )
+
+    top_services = (
+        service_df
+        .sort_values(
+            "total_cost",
+            ascending=False
+        )
+        .head(15)
+    )
 
     fig = px.bar(
-        service_df,
-        x="service",
-        y="spend",
-        title="Top Services"
+        top_services,
+        x="service_name",
+        y="total_cost",
+        color="cloud",
+        title="Top Services by Cost"
     )
 
     render_chart(
@@ -90,74 +129,107 @@ if top_services:
     )
 
     st.dataframe(
-        service_df,
+        top_services,
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
     )
 
-else:
-    st.info("No service cost data available.")
+st.divider()
 
-# -----------------------------------------------------
-# Daily Spend Trend
-# -----------------------------------------------------
+# =====================================================
+# OPTIMIZATION OPPORTUNITIES
+# =====================================================
 
-trend_data = dashboard.get(
-    "daily_spend_trend",
-    []
+optimization_data = (
+    ServiceExplorerRepository
+    .get_optimization_opportunities()
 )
 
-st.subheader("Daily Spend Trend")
+if optimization_data:
 
-if trend_data:
+    optimization_df = pd.DataFrame(
+        optimization_data
+    )
 
-    trend_df = pd.DataFrame(trend_data)
+    st.subheader(
+        "Optimization Opportunities"
+    )
 
-    fig = px.line(
-        trend_df,
-        x="date",
-        y="spend",
-        title="Daily Spend"
+    fig = px.bar(
+        optimization_df.head(10),
+        x="service_name",
+        y="total_cost",
+        color="cloud",
+        title="Top Optimization Candidates"
     )
 
     render_chart(
-        "Daily Spend Trend",
+        "Optimization Opportunities",
         fig
     )
 
-# -----------------------------------------------------
-# Recommendations
-# -----------------------------------------------------
+    st.dataframe(
+        optimization_df,
+        use_container_width=True,
+        hide_index=True,
+    )
 
-st.subheader(
-    "Optimization Opportunities"
+st.divider()
+
+# =====================================================
+# COST ANOMALIES
+# =====================================================
+
+anomaly_data = (
+    ServiceExplorerRepository
+    .get_cost_anomalies()
 )
 
-recommendations = dashboard.get(
-    "top_recommendations",
-    []
-)
+if anomaly_data:
 
-if isinstance(recommendations, pd.DataFrame):
-    has_recommendations = not recommendations.empty
-else:
-    has_recommendations = len(recommendations) > 0
+    anomaly_df = pd.DataFrame(
+        anomaly_data
+    )
 
-if has_recommendations:
-
-    rec_df = (
-        recommendations
-        if isinstance(recommendations, pd.DataFrame)
-        else pd.DataFrame(recommendations)
+    st.subheader(
+        "Cost Anomalies"
     )
 
     st.dataframe(
-        rec_df,
+        anomaly_df,
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+    )
+
+st.divider()
+
+# =====================================================
+# AI RECOMMENDATIONS
+# =====================================================
+
+recommendation_data = (
+    ServiceExplorerRepository
+    .get_ai_recommendations()
+)
+
+if recommendation_data:
+
+    recommendation_df = pd.DataFrame(
+        recommendation_data
+    )
+
+    st.subheader(
+        "AI Recommendations"
+    )
+
+    st.dataframe(
+        recommendation_df,
+        use_container_width=True,
+        hide_index=True,
     )
 
 else:
+
     st.info(
-        "No recommendations available."
+        "No AI recommendations available."
     )

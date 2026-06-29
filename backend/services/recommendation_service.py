@@ -4,7 +4,13 @@ from backend.services.tenant_scope import scoped_query
 
 
 def get_recommendations(tenant_id: str, status: str | None = None):
-    query = scoped_query(supabase, "recommendations", tenant_id).order("created_at", desc=True)
+    query = (
+        supabase
+        .table("recommendations")
+        .select("*")
+        .eq("org_id", tenant_id)
+        .order("created_at", desc=True)
+    )
     if status:
         query = query.eq("status", status)
     response = query.execute()

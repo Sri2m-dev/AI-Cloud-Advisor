@@ -4,7 +4,11 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from components.sidebar_navigation import render_sidebar_navigation
 from database.db import supabase
+
+role = st.session_state.get("role", "Unknown")
+render_sidebar_navigation(role)
 
 st.title("📤 Cost Upload Center")
 

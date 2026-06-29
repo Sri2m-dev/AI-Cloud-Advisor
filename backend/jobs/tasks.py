@@ -5,22 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from backend.services.alert_service import dispatch_alert_channels
-from backend.services.alerting_engine import (
-    evaluate_alerts,
-    get_alert_config,
-    record_alert_event,
-)
-from backend.services.report_service import (
-    build_executive_pdf,
-    get_report_distribution_list,
-    record_report_history,
-    send_executive_report_email,
-)
 from data.supabase_client import supabase
-from scripts.generate_recommendations import generate_recommendations
-from services.escalation_service import batch_escalate_stale, get_aging_summary, get_escalation_report
-from services.alert_processor import process_alerts, get_alert_configs
 
 LOGGER = logging.getLogger("background-jobs")
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -56,6 +41,22 @@ def job_cost_ingestion_hourly() -> None:
     LOGGER.info("[job] cost_ingestion_hourly completed")
 
 
+def job_discovery_scheduler_hourly() -> None:
+    LOGGER.info("[job] discovery_scheduler_hourly started")
+    try:
+        from services.discovery_scheduler_service import DiscoverySchedulerService
+
+        result = DiscoverySchedulerService.run_scheduled_discovery()
+        LOGGER.info(
+            "Discovery scheduler completed: status=%s organizations=%s",
+            result.get("status"),
+            result.get("organizations_processed"),
+        )
+    except Exception as exc:
+        LOGGER.exception("Discovery scheduler job failed: %s", exc)
+    LOGGER.info("[job] discovery_scheduler_hourly completed")
+
+
 def job_anomaly_scan_hourly() -> None:
     LOGGER.info("[job] anomaly_scan_hourly started")
     _run_python_script("anomaly_detection_engine.py")
@@ -64,6 +65,17 @@ def job_anomaly_scan_hourly() -> None:
 
 def job_alert_engine_hourly() -> None:
     LOGGER.info("[job] alert_engine_hourly started")
+    try:
+        from backend.services.alert_service import dispatch_alert_channels
+        from backend.services.alerting_engine import (
+            evaluate_alerts,
+            get_alert_config,
+            record_alert_event,
+        )
+    except ImportError as exc:
+        LOGGER.warning("Alert engine unavailable: %s", exc)
+        return
+
     tenants = _get_tenant_ids()
     if not tenants:
         LOGGER.warning("No tenants found for alert evaluation")
@@ -96,6 +108,12 @@ def job_alert_engine_hourly() -> None:
 
 def job_optimization_engine_daily() -> None:
     LOGGER.info("[job] optimization_engine_daily started")
+    try:
+        from scripts.generate_recommendations import generate_recommendations
+    except ImportError as exc:
+        LOGGER.warning("Recommendation generation unavailable: %s", exc)
+        return
+
     tenants = _get_tenant_ids()
     if not tenants:
         generate_recommendations()
@@ -118,6 +136,17 @@ def job_kpi_refresh_15m() -> None:
 
 def job_report_generation_daily() -> None:
     LOGGER.info("[job] report_generation_daily started")
+    try:
+        from backend.services.report_service import (
+            build_executive_pdf,
+            get_report_distribution_list,
+            record_report_history,
+            send_executive_report_email,
+        )
+    except ImportError as exc:
+        LOGGER.warning("Report generation unavailable: %s", exc)
+        return
+
     output_dir = ROOT_DIR / "exports" / "reports"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -161,6 +190,8 @@ def job_escalation_hourly() -> None:
     """Check for stale approvals and escalate them based on SLA rules."""
     LOGGER.info("[job] escalation_hourly started")
     try:
+        from services.escalation_service import batch_escalate_stale, get_aging_summary
+
         # Check PENDING_APPROVAL (48h SLA)
         result_pending = batch_escalate_stale(
             workflow_state="PENDING_APPROVAL",
@@ -207,6 +238,8 @@ def job_alert_processor_hourly() -> None:
     """Process and send pending alerts across all configured channels."""
     LOGGER.info("[job] alert_processor_hourly started")
     try:
+        from services.alert_processor import process_alerts, get_alert_configs
+
         configs = get_alert_configs(active_only=True)
         LOGGER.info("Found %d active alert configs", len(configs))
 

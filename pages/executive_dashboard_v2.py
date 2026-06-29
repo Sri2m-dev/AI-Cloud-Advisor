@@ -2,91 +2,97 @@ from services.supabase_client import supabase
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from shared.session import init_session
+from shared.auth import require_role
+from components.sidebar_navigation import render_sidebar_navigation
+
+
+def fetch_rows(table_name, limit=None):
+    try:
+        query = (
+            supabase
+            .table(table_name)
+            .select("*")
+        )
+        if limit:
+            query = query.limit(limit)
+        response = query.execute()
+        return response.data or []
+    except Exception:
+        return []
+
+
+def fetch_one(table_name):
+    rows = fetch_rows(table_name, limit=1)
+    return rows[0] if rows else {}
+
+
+def spend_value(row, new_key, old_key):
+    return float(
+        row.get(
+            new_key,
+            row.get(old_key, 0)
+        )
+        or 0
+    )
+
 
 st.set_page_config(
-    page_title="Executive Dashboard V2",
+    page_title="Nexora Executive Command Center",
     layout="wide"
 )
 
-st.title("📊 Executive Dashboard V2")
+st.title("📊 Nexora Executive Command Center")
+
+init_session()
+
+require_role([
+    "executive",
+    "super_admin",
+    "cio",
+])
+
+role = st.session_state.get("role", "Unknown")
+render_sidebar_navigation(role)
 
 # =====================================================
 # LOAD EXECUTIVE SUMMARY
 # =====================================================
 
-summary_result = (
-    supabase
-    .table("mart_executive_summary")
-    .select("*")
-    .limit(1)
-    .execute()
-)
-
-summary = (
-    summary_result.data[0]
-    if summary_result.data
-    else {}
-)
+# Executive marts are enterprise-level snapshots in the current model;
+# keep these reads unscoped until org-partitioned marts are introduced.
+summary = fetch_one("mart_executive_summary")
 
 # =====================================================
 # LOAD ENTERPRISE SPEND BREAKDOWN
 # =====================================================
 
-breakdown_result = (
-    supabase
-    .table("mart_enterprise_spend_breakdown")
-    .select("*")
-    .limit(1)
-    .execute()
-)
+# Enterprise spend breakdown is a global mart snapshot for this dashboard.
+spend_breakdown = fetch_one("mart_enterprise_spend_v2")
 
-spend_breakdown = (
-    breakdown_result.data[0]
-    if breakdown_result.data
-    else {}
-)
-
-cloud_cost = float(
-    spend_breakdown.get("cloud_cost", 0)
-)
-
-saas_cost = float(
-    spend_breakdown.get("saas_cost", 0)
-)
-
-msp_cost = float(
-    spend_breakdown.get("msp_cost", 0)
-)
-
-license_cost = float(
-    spend_breakdown.get("license_cost", 0)
-)
+cloud_cost = spend_value(spend_breakdown, "cloud_spend", "cloud_cost")
+saas_cost = spend_value(spend_breakdown, "saas_spend", "saas_cost")
+msp_cost = spend_value(spend_breakdown, "msp_spend", "msp_cost")
+license_cost = spend_value(spend_breakdown, "license_spend", "license_cost")
 
 # =====================================================
 # LOAD CLOUD COST DATA
 # =====================================================
 
-cost_result = (
-    supabase
-    .table("unified_cloud_costs")
-    .select("*")
-    .execute()
-)
-
-df = pd.DataFrame(cost_result.data)
-
-if df.empty:
-    st.warning("No cost data found.")
-    st.stop()
+# Nexora Executive Command Center intentionally uses the enterprise-wide cost snapshot.
+df = pd.DataFrame(fetch_rows("unified_cloud_costs"))
 
 # =====================================================
 # CLEAN DATA
 # =====================================================
 
-df["cost"] = pd.to_numeric(
-    df["cost"],
-    errors="coerce"
-).fillna(0)
+if "cost" not in df.columns:
+    df["cost"] = 0
+else:
+    df["cost"] = pd.to_numeric(
+        df["cost"],
+        errors="coerce"
+    ).fillna(0)
 
 if "usage_date" in df.columns:
     df["usage_date"] = pd.to_datetime(
@@ -118,6 +124,8 @@ cloud_accounts = (
     df["account_id"].nunique()
     if "account_id" in df.columns
     else df["cloud"].nunique()
+    if "cloud" in df.columns
+    else 0
 )
 
 # =====================================================
@@ -190,11 +198,16 @@ st.divider()
 # CLOUD DISTRIBUTION
 # =====================================================
 
-cloud_df = (
-    df.groupby("cloud")["cost"]
-    .sum()
-    .reset_index()
-)
+if "cloud" in df.columns and not df.empty:
+    cloud_df = (
+        df.groupby("cloud")["cost"]
+        .sum()
+        .reset_index()
+    )
+else:
+    cloud_df = pd.DataFrame(
+        [{"cloud": "No data", "cost": 0}]
+    )
 
 largest_cloud = (
     cloud_df.sort_values(
@@ -261,23 +274,30 @@ with col2:
 
     st.subheader("📈 Daily Cost Trend")
 
-    trend_df = (
-        df.groupby("usage_date")["cost"]
-        .sum()
-        .reset_index()
-    )
+    if "usage_date" in df.columns and not df.empty:
+        trend_df = (
+            df.dropna(subset=["usage_date"])
+            .groupby("usage_date")["cost"]
+            .sum()
+            .reset_index()
+        )
+    else:
+        trend_df = pd.DataFrame()
 
-    fig = px.line(
-        trend_df,
-        x="usage_date",
-        y="cost",
-        markers=True
-    )
+    if not trend_df.empty:
+        fig = px.line(
+            trend_df,
+            x="usage_date",
+            y="cost",
+            markers=True
+        )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+    else:
+        st.info("No daily cost trend data available.")
 
 # =====================================================
 # SERVICE CATEGORY BREAKDOWN

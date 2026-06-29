@@ -2,13 +2,24 @@
 Central configuration for environment, Supabase, feature flags, and license settings.
 """
 import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
+load_dotenv(".env.dev", override=False)
 
 # Environment
 ENVIRONMENT = os.getenv("CLOUD_ADVISOR_ENV", "development")
 
 # Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or os.getenv("SUPABASE_SERVICE_KEY")
+    or os.getenv("SUPABASE_KEY")
+    or os.getenv("SUPABASE_ANON_KEY")
+    or ""
+)
 
 # Feature Flags
 FEATURE_FLAGS = {

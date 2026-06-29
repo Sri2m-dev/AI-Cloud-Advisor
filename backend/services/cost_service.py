@@ -20,7 +20,7 @@ def fetch_cost_data(
             supabase
             .table("unified_cloud_costs")
             .select("*")
-            .eq("organization_id", tenant_id)
+            .eq("org_id", tenant_id)
         )
 
         if cloud:

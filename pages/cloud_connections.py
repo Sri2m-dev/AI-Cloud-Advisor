@@ -1,5 +1,16 @@
 import streamlit as st
 from core.supabase_client import supabase
+from auth.guards import require_login
+from components.sidebar_navigation import render_sidebar_navigation
+
+st.set_page_config(
+    page_title="Cloud Connections",
+    layout="wide"
+)
+
+require_login()
+role = st.session_state.get("role", "Unknown")
+render_sidebar_navigation(role)
 
 # =====================================================
 # PAGE HEADER

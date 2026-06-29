@@ -6,6 +6,20 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from services.supabase_client import supabase
 
+PRIMARY_AUDIT_TABLE = "audit_events"
+
+
+def _legacy_organization_id(org_id: Optional[str]) -> int:
+    return int(org_id) if str(org_id).isdigit() else 1
+
+
+def _event_org_matches(row: Dict[str, Any], org_id: Optional[str]) -> bool:
+    if not org_id or str(org_id).isdigit():
+        return True
+
+    event_data = row.get("event_data") or {}
+    return str(event_data.get("org_id") or "") == str(org_id)
+
 
 def log_event(
     event_type: str,
@@ -22,7 +36,7 @@ def log_event(
 
     try:
         audit_record = {
-            "organization_id": int(org_id) if str(org_id).isdigit() else 1,
+            "organization_id": _legacy_organization_id(org_id),
             "event_type": event_type,
             "event_source": resource_type,
             "entity_id": str(resource_id),
@@ -31,22 +45,20 @@ def log_event(
                 "action": action,
                 "details": details or {},
                 "status": status,
+                "user_id": str(user_id),
+                "org_id": str(org_id or ""),
                 "ip_address": ip_address,
                 "user_agent": user_agent
             },
             "created_at": datetime.utcnow().isoformat()
         }
 
-        print("AUDIT RECORD:", audit_record)
-
         response = (
             supabase
-            .table("audit_events")
+            .table(PRIMARY_AUDIT_TABLE)
             .insert(audit_record)
             .execute()
         )
-
-        print("AUDIT RESPONSE:", response)
 
         if response.data:
             return response.data[0]
@@ -71,11 +83,10 @@ def get_events(
 ) -> List[Dict[str, Any]]:
 
     try:
-        query = supabase.table("audit_events").select("*")
+        query = supabase.table(PRIMARY_AUDIT_TABLE).select("*")
 
-        if org_id:
-            org_value = int(org_id) if str(org_id).isdigit() else 1
-            query = query.eq("organization_id", org_value)
+        if org_id and str(org_id).isdigit():
+            query = query.eq("organization_id", _legacy_organization_id(org_id))
 
         if event_type:
             query = query.eq("event_type", event_type)
@@ -87,7 +98,12 @@ def get_events(
             .execute()
         )
 
-        return response.data if response.data else []
+        rows = response.data or []
+        return [
+            row
+            for row in rows
+            if _event_org_matches(row, org_id)
+        ]
 
     except Exception as e:
         print(f"Error fetching audit events: {e}")
@@ -123,7 +139,7 @@ def get_resource_events(
     try:
         response = (
             supabase
-            .table("audit_events")
+            .table(PRIMARY_AUDIT_TABLE)
             .select("*")
             .eq("event_source", resource_type)
             .eq("entity_id", str(resource_id))
@@ -359,6 +375,24 @@ def log_report_generated(report_id, generated_by, org_id, report_type=None, **kw
     )
 
 
+def log_user_logout(user_id=None, username=None, organization_id=None, org_id=None, **kwargs):
+    organization = organization_id or org_id or 1
+
+    return log_event(
+        event_type="USER_LOGOUT",
+        user_id=str(user_id or username or 1),
+        action="logout",
+        resource_type="authentication",
+        resource_id=str(username or user_id or "unknown"),
+        org_id=organization,
+        details={
+            "username": username or user_id,
+            **kwargs,
+        },
+        status="success",
+    )
+
+
 def get_audit_logs(org_id=None, limit=100):
     return get_events(org_id=org_id, limit=limit)
 
@@ -370,57 +404,22 @@ def log_user_login(
     **kwargs
 ):
     try:
-
         organization = organization_id or org_id or 1
+        actor = str(user_id or username or 1)
 
         return log_event(
             event_type="USER_LOGIN",
-            user_id=str(user_id or 1),
+            user_id=actor,
             action="login",
             resource_type="authentication",
-            resource_id=str(username or "unknown"),
+            resource_id=str(username or user_id or "unknown"),
             org_id=organization,
             details={
-                "username": username
+                "username": username or user_id,
+                **kwargs,
             },
             status="success"
         )
-
-    except Exception as e:
-        print(f"Audit login error: {e}")
-        return False
-    
-    """
-    Login audit logging.
-    Compatible with older and newer callers.
-    """
-
-    try:
-        organization = organization_id or org_id
-
-        print(
-            f"LOGIN: user={username} "
-            f"user_id={user_id} "
-            f"org={organization}"
-        )
-
-        return True
-
-    except Exception as e:
-        print(f"Audit login error: {e}")
-        return False
-    
-    """
-    Temporary login audit logger.
-    """
-
-    try:
-        print(
-            f"LOGIN: user={username} "
-            f"org={organization_id}"
-        )
-
-        return True
 
     except Exception as e:
         print(f"Audit login error: {e}")

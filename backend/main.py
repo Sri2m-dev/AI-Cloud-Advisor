@@ -12,7 +12,7 @@ from backend.routes.governance import router as governance_router
 from backend.routes.reports import router as reports_router
 from backend.routes.recommendations import router as recommendations_router
 
-app = FastAPI(title="AI Cloud Advisor API", version="1.0.0")
+app = FastAPI(title="Nexora API", version="1.0.0")
 app.add_middleware(TenantIsolationMiddleware)
 
 REQUEST_COUNT = Counter(
