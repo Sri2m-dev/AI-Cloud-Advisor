@@ -43,7 +43,7 @@ if not _ai_audit_log.handlers:
     _ai_audit_log.setLevel(logging.INFO)
 
 
-configure_page(page_title="AI Cloud Advisor", page_icon=":cloud:")
+configure_page(page_title="NEXORA", page_icon=":cloud:")
 
 
 def log_ai_call(payload: dict) -> None:
@@ -107,7 +107,7 @@ html, body, [class*="css"]  {
     font-family: 'Inter', sans-serif;
 }
 
-/* MAIN TITLE (AI Cloud Advisor) */
+/* MAIN TITLE (NEXORA) */
 .stApp h1, h1, [data-testid="stMarkdownContainer"] h1 {
     font-size: 60px !important;
     font-weight: 700 !important;
@@ -281,7 +281,7 @@ strong {
 def render_header():
     st.markdown("""
 <div style="text-align:center; padding: 10px 0;">
-    <div class="hero-title-text">☁️ AI Cloud Advisor</div>
+    <div class="hero-title-text">NEXORA</div>
     <div class="hero-subtitle-text">Executive Cost & Savings Report — March 2026</div>
 </div>
     """, unsafe_allow_html=True)

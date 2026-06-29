@@ -1,0 +1,10 @@
+annual_cost,business_owner,category,cloud_provider,created_at,id,owner_department,source_system,status,technical_owner,technology_name,technology_type,updated_at,vendor_name
+59501,,Cloud Platform,,2026-06-19T07:56:51.200766,c29fa7d3-e19b-47c3-a842-2e96d72ea6f3,,Cloud Cost,ACTIVE,,AWS,Cloud,2026-06-19T07:56:51.200766,Amazon
+0,,Cloud Platform,,2026-06-19T07:56:51.200766,ba7a4326-554a-45b2-ae24-5478a27d4e5c,,Cloud Cost,ACTIVE,,Azure,Cloud,2026-06-19T07:56:51.200766,Microsoft
+0,,Cloud Platform,,2026-06-19T07:56:51.200766,06a0998f-a61d-4701-9133-213fa81310ed,,Cloud Cost,ACTIVE,,GCP,Cloud,2026-06-19T07:56:51.200766,Google
+6000,,MSP,,2026-06-19T07:56:51.200766,f8eb494c-1f90-479c-85a0-4e4b0bad4300,,MSP,ACTIVE,,Managed Services,Service,2026-06-19T07:56:51.200766,Minfy
+25000,,Productivity,,2026-06-19T07:56:51.200766,01f33c9b-d4bb-46a4-893e-98a858be12d1,Finance,SaaS,ACTIVE,,Microsoft 365,SaaS,2026-06-19T07:56:51.200766,Microsoft
+12000,,Collaboration,,2026-06-19T07:56:51.200766,fe17e1e5-c231-4b76-891a-e3dd7e1658ca,Operations,SaaS,ACTIVE,,Slack,SaaS,2026-06-19T07:56:51.200766,Salesforce
+18000,,Developer Tools,,2026-06-19T07:56:51.200766,9aeb070e-92d7-422c-9205-63560e8e52b0,Engineering,SaaS,ACTIVE,,GitHub,SaaS,2026-06-19T07:56:51.200766,Microsoft
+8000,,Collaboration,,2026-06-19T07:56:51.200766,d1091ab7-53d6-43ca-a8e5-fed239dbed30,HR,SaaS,ACTIVE,,Zoom,SaaS,2026-06-19T07:56:51.200766,Zoom
+3000,,Monitoring,,2026-06-19T07:56:51.200766,1859ea50-0f81-45de-94c0-b2f992b15365,CloudOps,SaaS,ACTIVE,,Datadog,SaaS,2026-06-19T07:56:51.200766,Datadog

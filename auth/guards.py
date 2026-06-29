@@ -19,11 +19,15 @@ def require_auth():
 	return st.session_state.get("user")
 
 
+def require_login():
+	return require_auth()
+
+
 def require_role(allowed_roles):
 	return _shared_auth.require_role(allowed_roles)
 
 
-__all__ = ["require_auth", "require_role", "normalize_role"]
+__all__ = ["require_auth", "require_login", "require_role", "normalize_role"]
 
 
 def normalize_role(role: object) -> str:

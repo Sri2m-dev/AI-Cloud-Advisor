@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "policies": [
+    {
+      "name": "Oracle Production Migration",
+      "keywords": ["oracle", "postgresql", "migration", "database"],
+      "required_approvals": ["Business Owner", "Application Owner", "Security", "Finance", "CAB", "CIO"],
+      "conditions": {
+        "rollback_required": true,
+        "simulation_required": true,
+        "validation_required": true,
+        "dr_readiness_min": 90
+      },
+      "execution_window": {
+        "allowed": ["Sunday 00:00-06:00"]
+      }
+    },
+    {
+      "name": "Cloud Cost Optimization",
+      "keywords": ["cloud", "aws", "azure", "spend", "cost", "savings"],
+      "required_approvals": ["Business Owner", "Technology Owner", "Finance", "CAB"],
+      "conditions": {
+        "rollback_required": true,
+        "simulation_required": true,
+        "validation_required": true,
+        "dr_readiness_min": 80
+      },
+      "execution_window": {
+        "allowed": ["Sunday 00:00-06:00", "Approved maintenance window"]
+      }
+    },
+    {
+      "name": "Security Remediation",
+      "keywords": ["security", "compliance", "pci", "encryption", "identity"],
+      "required_approvals": ["Business Owner", "Security", "CAB", "CIO"],
+      "conditions": {
+        "rollback_required": true,
+        "simulation_required": true,
+        "validation_required": true,
+        "dr_readiness_min": 85
+      },
+      "execution_window": {
+        "allowed": ["Emergency CAB", "Sunday 00:00-06:00"]
+      }
+    }
+  ]
+}

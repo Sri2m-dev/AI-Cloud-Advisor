@@ -2,7 +2,9 @@
 
 ROLES = [
     "super_admin",
+    "client_admin",
     "executive",
+    "cio",
     "finance",
     "operations",
     "security",
@@ -13,11 +15,18 @@ ROLES = [
 
 ROLE_ALIASES = {
     "ceo": "executive",
-    "cto": "technical",
+    "cio": "cio",
+    "cto": "cio",
     "cfo": "finance",
     "admin": "super_admin",
+    "administrator": "super_admin",
+    "executive": "executive",
     "global_admin": "super_admin",
-    "customer_admin": "super_admin",
+    "customer_admin": "client_admin",
+    "client_admin": "client_admin",
+    "customer_owner": "client_admin",
+    "org_admin": "client_admin",
+    "finance": "finance",
     "finops": "finance",
     "viewer": "viewer",
     "auditor": "auditor",
@@ -31,6 +40,15 @@ ROLE_ALIASES = {
     "engineering": "technical",
     "engineer": "technical",
     "governance": "security",
+}
+
+ALLOWED_ROLES = {
+    "super_admin",
+    "client_admin",
+    "executive",
+    "cio",
+    "technical",
+    "finance",
 }
 
 CANONICAL_ROLES = set(ROLES)

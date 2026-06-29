@@ -30,7 +30,7 @@ def generate_executive_summary(
         optimization_state = "limited immediate optimization gains"
 
     return f"""
-AI Cloud Advisor has analyzed your multi-cloud operating posture.
+Nexora has analyzed your multi-cloud operating posture.
 
 Current governance maturity is assessed as {governance_status} with a governance score of {governance_score}/100.
 

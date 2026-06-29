@@ -16,7 +16,7 @@ def print_section(title):
 
 
 def main():
-    print_section("AI Cloud Advisor - APScheduler Quick Start")
+    print_section("Nexora - APScheduler Quick Start")
 
     # Step 1: Environment check
     print("STEP 1: Check Environment Variables")

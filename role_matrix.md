@@ -1,4 +1,4 @@
-# Role Matrix for AI-Cloud-Advisor Platform
+# Role Matrix for Nexora Platform
 
 | Role         | Access Scope                |
 |--------------|----------------------------|
@@ -9,7 +9,7 @@
 | Governance   | Audit + SaaS               |
 
 ## Description
-- **Leadership**: Access to Executive Dashboard only.
+- **Leadership**: Access to Nexora Executive Command Center only.
 - **FinOps**: Access to approval workflows and all dashboards.
 - **CloudOps**: Access to Operations Workspace.
 - **Engineering**: Access to Technical Analytics.

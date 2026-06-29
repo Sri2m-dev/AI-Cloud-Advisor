@@ -1,0 +1,15 @@
+{
+  "created_at_utc": "2026-06-20T13:06:33.421865+00:00",
+  "tables": {
+    "technology_inventory": {
+      "rows": 9,
+      "json": "backups\\technology_tables_20260620_130633\\technology_inventory.json",
+      "csv": "backups\\technology_tables_20260620_130633\\technology_inventory.csv"
+    },
+    "technology_relationships": {
+      "rows": 16,
+      "json": "backups\\technology_tables_20260620_130633\\technology_relationships.json",
+      "csv": "backups\\technology_tables_20260620_130633\\technology_relationships.csv"
+    }
+  }
+}

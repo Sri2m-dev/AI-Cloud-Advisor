@@ -1,11 +1,8 @@
-"""
-Central Supabase client initialization for the entire app.
-"""
-from supabase import create_client
-import streamlit as st
+"""Backward-compatible Supabase client import.
 
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+Frontend Streamlit code should use services.supabase_client directly. This
+module remains so older imports continue to resolve to the same safe client.
+"""
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+from services.supabase_client import supabase
 

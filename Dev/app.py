@@ -3,7 +3,7 @@ import streamlit as st
 
 # --- Executive Layout: Full Width & Hard CSS Lock ---
 st.set_page_config(
-    page_title="AI Cloud Advisor",
+    page_title="NEXORA",
     layout="wide",
     initial_sidebar_state="expanded"
 )

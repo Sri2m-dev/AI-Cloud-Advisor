@@ -1,4 +1,4 @@
-# Entrypoint for AI Cloud Advisor: Login Page
+# Entrypoint for Nexora: Login Page
 
 # --- ENTERPRISE LOGIN PAGE: FULLY CENTERED, NO SIDEBAR, CARD UX ---
 import streamlit as st
@@ -9,7 +9,7 @@ from core.auth import login_user
 from auth.role_constants import normalize_role
 
 st.set_page_config(
-	page_title="AI Cloud Advisor",
+	page_title="NEXORA",
 	layout="wide",
 	initial_sidebar_state="collapsed"
 )
@@ -50,8 +50,8 @@ st.session_state["role"] = normalize_role("SuperAdmin")
 left, center, right = st.columns([2,3,2])
 with center:
 	with st.container(border=True):
-		st.markdown("# 🔐 AI Cloud Advisor Login")
-		st.markdown("### Enterprise Cloud Governance Platform")
+		st.markdown("# NEXORA")
+		st.markdown("### Next Generation Technology Intelligence")
 		st.write("")
 
 		email = st.text_input("Email")
@@ -84,7 +84,7 @@ with center:
 		# --- Registration (Sign Up) ---
 		if signup_btn or st.session_state.show_signup:
 			st.session_state.show_signup = True
-			st.subheader("Sign Up for AI Cloud Advisor")
+			st.subheader("Sign Up for NEXORA")
 			with st.form("signup_form"):
 				signup_email = st.text_input("Email", key="signup_email")
 				signup_password = st.text_input("Password", type="password", key="signup_password")

@@ -8,7 +8,7 @@ This document traces the full lineage for the "Total Cloud Spend" KPI, ensuring 
 
 | Layer             | Source/Component                        | File(s) / Table(s)                        | Notes                                      |
 |-------------------|-----------------------------------------|--------------------------------------------|--------------------------------------------|
-| Dashboard         | Executive Dashboard                     | pages/executive_dashboard.py             | Displays Total Cloud Spend KPI             |
+| Dashboard         | Nexora Executive Command Center                     | pages/executive_dashboard.py             | Displays Total Cloud Spend KPI             |
 | Mart/View         | kpi_total_cloud_spend                   | mart_kpi_table_schemas.md                  | Aggregated spend, daily/monthly granularity|
 | Warehouse Table   | unified_cloud_costs                     | unified_cloud_costs (Supabase/Postgres)    | Source of truth for all spend marts/KPIs   |
 | Ingestion Script  | AWS/Azure/GCP cost sync/ingest scripts  | aws_athena_ingest.py, azure_cost_sync.py, gcp_cost_sync.py | ETL from each cloud                        |

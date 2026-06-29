@@ -1,0 +1,146 @@
+[
+  {
+    "id": "d9177316-8dc8-4895-97fa-b1bc262275c9",
+    "source_type": "Technology",
+    "source_name": "AWS",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "Cloud Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "d1bad912-6af1-41d9-928c-7be3069fcebe",
+    "source_type": "Technology",
+    "source_name": "Microsoft 365",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "SaaS Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "14356c19-010a-4d7d-a4be-e357b74d7ca4",
+    "source_type": "Technology",
+    "source_name": "Slack",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "SaaS Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "793ee58a-bfdb-42fe-8fb7-67780b2ad8d4",
+    "source_type": "Technology",
+    "source_name": "GitHub",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "SaaS Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "8b0e3714-1ac3-41d9-a6dc-0879dba7f693",
+    "source_type": "Technology",
+    "source_name": "Datadog",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "SaaS Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "aeda4b0d-d352-4874-891d-521aaabc96b5",
+    "source_type": "Technology",
+    "source_name": "Zoom",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "SaaS Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "84c2fcf3-c54d-4d41-8b5b-5848d177f6ba",
+    "source_type": "Technology",
+    "source_name": "Managed Services",
+    "relationship_type": "SPEND_SOURCE_FOR",
+    "target_type": "Cost Domain",
+    "target_name": "MSP Spend",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "5a9dd9bc-a65a-4392-bec9-095a9f594b44",
+    "source_type": "Technology",
+    "source_name": "Microsoft 365",
+    "relationship_type": "USED_BY",
+    "target_type": "Department",
+    "target_name": "Finance",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "cabcab8d-bdd0-4564-80e5-1bacb2ff32e4",
+    "source_type": "Technology",
+    "source_name": "Slack",
+    "relationship_type": "USED_BY",
+    "target_type": "Department",
+    "target_name": "Operations",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "9b15d4e1-f0fc-4dee-8bf9-1023900f1b25",
+    "source_type": "Technology",
+    "source_name": "GitHub",
+    "relationship_type": "USED_BY",
+    "target_type": "Department",
+    "target_name": "Engineering",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "859a9ab5-927c-458d-91f3-05bff6082809",
+    "source_type": "Technology",
+    "source_name": "Zoom",
+    "relationship_type": "USED_BY",
+    "target_type": "Department",
+    "target_name": "HR",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "caceb4c0-c03c-4909-8260-7d530303a305",
+    "source_type": "Technology",
+    "source_name": "Datadog",
+    "relationship_type": "USED_BY",
+    "target_type": "Department",
+    "target_name": "CloudOps",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "f49a4e1e-33aa-42f0-93db-258e3331ddc4",
+    "source_type": "Technology",
+    "source_name": "Datadog",
+    "relationship_type": "MONITORS",
+    "target_type": "Technology",
+    "target_name": "AWS",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "4c195edf-58c1-4507-bfa9-822ca8b800ee",
+    "source_type": "Technology",
+    "source_name": "GitHub",
+    "relationship_type": "SUPPORTS",
+    "target_type": "Application",
+    "target_name": "Developer Platform",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "9a98dc81-527f-4170-b3a4-5b0f384fec28",
+    "source_type": "Technology",
+    "source_name": "Microsoft 365",
+    "relationship_type": "SUPPORTS",
+    "target_type": "Department",
+    "target_name": "Finance",
+    "created_at": "2026-06-20T09:09:51.165634"
+  },
+  {
+    "id": "8bad24c0-1f85-4e1d-b717-bcd6431960a6",
+    "source_type": "Technology",
+    "source_name": "Slack",
+    "relationship_type": "SUPPORTS",
+    "target_type": "Department",
+    "target_name": "Operations",
+    "created_at": "2026-06-20T09:09:51.165634"
+  }
+]

@@ -1,0 +1,17 @@
+created_at,id,relationship_type,source_name,source_type,target_name,target_type
+2026-06-20T09:09:51.165634,d9177316-8dc8-4895-97fa-b1bc262275c9,SPEND_SOURCE_FOR,AWS,Technology,Cloud Spend,Cost Domain
+2026-06-20T09:09:51.165634,d1bad912-6af1-41d9-928c-7be3069fcebe,SPEND_SOURCE_FOR,Microsoft 365,Technology,SaaS Spend,Cost Domain
+2026-06-20T09:09:51.165634,14356c19-010a-4d7d-a4be-e357b74d7ca4,SPEND_SOURCE_FOR,Slack,Technology,SaaS Spend,Cost Domain
+2026-06-20T09:09:51.165634,793ee58a-bfdb-42fe-8fb7-67780b2ad8d4,SPEND_SOURCE_FOR,GitHub,Technology,SaaS Spend,Cost Domain
+2026-06-20T09:09:51.165634,8b0e3714-1ac3-41d9-a6dc-0879dba7f693,SPEND_SOURCE_FOR,Datadog,Technology,SaaS Spend,Cost Domain
+2026-06-20T09:09:51.165634,aeda4b0d-d352-4874-891d-521aaabc96b5,SPEND_SOURCE_FOR,Zoom,Technology,SaaS Spend,Cost Domain
+2026-06-20T09:09:51.165634,84c2fcf3-c54d-4d41-8b5b-5848d177f6ba,SPEND_SOURCE_FOR,Managed Services,Technology,MSP Spend,Cost Domain
+2026-06-20T09:09:51.165634,5a9dd9bc-a65a-4392-bec9-095a9f594b44,USED_BY,Microsoft 365,Technology,Finance,Department
+2026-06-20T09:09:51.165634,cabcab8d-bdd0-4564-80e5-1bacb2ff32e4,USED_BY,Slack,Technology,Operations,Department
+2026-06-20T09:09:51.165634,9b15d4e1-f0fc-4dee-8bf9-1023900f1b25,USED_BY,GitHub,Technology,Engineering,Department
+2026-06-20T09:09:51.165634,859a9ab5-927c-458d-91f3-05bff6082809,USED_BY,Zoom,Technology,HR,Department
+2026-06-20T09:09:51.165634,caceb4c0-c03c-4909-8260-7d530303a305,USED_BY,Datadog,Technology,CloudOps,Department
+2026-06-20T09:09:51.165634,f49a4e1e-33aa-42f0-93db-258e3331ddc4,MONITORS,Datadog,Technology,AWS,Technology
+2026-06-20T09:09:51.165634,4c195edf-58c1-4507-bfa9-822ca8b800ee,SUPPORTS,GitHub,Technology,Developer Platform,Application
+2026-06-20T09:09:51.165634,9a98dc81-527f-4170-b3a4-5b0f384fec28,SUPPORTS,Microsoft 365,Technology,Finance,Department
+2026-06-20T09:09:51.165634,8bad24c0-1f85-4e1d-b717-bcd6431960a6,SUPPORTS,Slack,Technology,Operations,Department
