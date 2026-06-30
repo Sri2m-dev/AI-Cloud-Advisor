@@ -4,7 +4,14 @@ from core.digital_twin.twin_model import DigitalTwinModel, TwinRefreshPolicy, Tw
 from core.digital_twin.twin_snapshot import TwinSnapshot
 from core.digital_twin.twin_state import TwinLifecycle, TwinRefreshStatus, TwinState, TwinStateStatus
 from core.digital_twin.business_twin import BusinessTwin, BusinessTwinEdge, BusinessTwinLevel, BusinessTwinNode
+from core.digital_twin.composition import CompositionContext, CompositionPolicy, CompositionResult, TwinCompositionEngine
 from core.digital_twin.technology import (
+    CostCalculationResult,
+    CostCalculator,
+    CostHealthStatus,
+    CostPolicy,
+    CostSignal,
+    CostSignalType,
     InfrastructureLayer,
     InfrastructureMapping,
     InfrastructureResource,
@@ -27,6 +34,15 @@ __all__ = [
     "BusinessTwinEdge",
     "BusinessTwinLevel",
     "BusinessTwinNode",
+    "CompositionContext",
+    "CompositionPolicy",
+    "CompositionResult",
+    "CostCalculationResult",
+    "CostCalculator",
+    "CostHealthStatus",
+    "CostPolicy",
+    "CostSignal",
+    "CostSignalType",
     "DigitalTwinModel",
     "InfrastructureLayer",
     "InfrastructureMapping",
@@ -52,6 +68,7 @@ __all__ = [
     "TwinState",
     "TwinStateStatus",
     "TwinType",
+    "TwinCompositionEngine",
     "TechnologyHealth",
     "TechnologyNode",
     "TechnologyRelationship",
