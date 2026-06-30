@@ -4,6 +4,7 @@ from core.digital_twin.twin_model import DigitalTwinModel, TwinRefreshPolicy, Tw
 from core.digital_twin.twin_snapshot import TwinSnapshot
 from core.digital_twin.twin_state import TwinLifecycle, TwinRefreshStatus, TwinState, TwinStateStatus
 from core.digital_twin.business_twin import BusinessTwin, BusinessTwinEdge, BusinessTwinLevel, BusinessTwinNode
+from core.digital_twin.technology import TechnologyHealth, TechnologyNode, TechnologyRelationship, TechnologyState, TechnologyTwin
 
 __all__ = [
     "BusinessTwin",
@@ -25,4 +26,9 @@ __all__ = [
     "TwinState",
     "TwinStateStatus",
     "TwinType",
+    "TechnologyHealth",
+    "TechnologyNode",
+    "TechnologyRelationship",
+    "TechnologyState",
+    "TechnologyTwin",
 ]
