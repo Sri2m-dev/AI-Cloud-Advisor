@@ -1,3 +1,7 @@
+from core.digital_twin.technology.ai_calculator import AICalculationResult, AICalculator
+from core.digital_twin.technology.ai_insight import AIInsight
+from core.digital_twin.technology.ai_policy import AIPolicy
+from core.digital_twin.technology.ai_signal import AIInsightStatus, AIInsightType, AISignal, AISignalType
 from core.digital_twin.technology.cost_calculator import CostCalculationResult, CostCalculator
 from core.digital_twin.technology.cost_policy import CostPolicy
 from core.digital_twin.technology.cost_signal import CostHealthStatus, CostSignal, CostSignalType
@@ -25,6 +29,14 @@ from core.digital_twin.technology.technology_state import TechnologyState, Techn
 from core.digital_twin.technology.technology_twin import TechnologyTwin
 
 __all__ = [
+    "AICalculationResult",
+    "AICalculator",
+    "AIInsight",
+    "AIInsightStatus",
+    "AIInsightType",
+    "AIPolicy",
+    "AISignal",
+    "AISignalType",
     "TechnologyAssetType",
     "InfrastructureLayer",
     "CostCalculationResult",

@@ -6,6 +6,14 @@ from core.digital_twin.twin_state import TwinLifecycle, TwinRefreshStatus, TwinS
 from core.digital_twin.business_twin import BusinessTwin, BusinessTwinEdge, BusinessTwinLevel, BusinessTwinNode
 from core.digital_twin.composition import CompositionContext, CompositionPolicy, CompositionResult, TwinCompositionEngine
 from core.digital_twin.technology import (
+    AICalculationResult,
+    AICalculator,
+    AIInsight,
+    AIInsightStatus,
+    AIInsightType,
+    AIPolicy,
+    AISignal,
+    AISignalType,
     CostCalculationResult,
     CostCalculator,
     CostHealthStatus,
@@ -44,6 +52,14 @@ from core.digital_twin.technology import (
 )
 
 __all__ = [
+    "AICalculationResult",
+    "AICalculator",
+    "AIInsight",
+    "AIInsightStatus",
+    "AIInsightType",
+    "AIPolicy",
+    "AISignal",
+    "AISignalType",
     "BusinessTwin",
     "BusinessTwinEdge",
     "BusinessTwinLevel",
