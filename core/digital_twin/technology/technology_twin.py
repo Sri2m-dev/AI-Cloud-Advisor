@@ -145,6 +145,7 @@ class TechnologyTwin:
                 "optimization": node.metadata.get("optimization_opportunity", 0),
                 "budget": node.metadata.get("budget", 0),
                 "savings_opportunity": node.metadata.get("savings_opportunity", 0),
+                "breakdown": node.metadata.get("cost_breakdown", {}),
             },
             "risk": {
                 "risk_score": node.risk,

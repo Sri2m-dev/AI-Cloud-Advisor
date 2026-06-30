@@ -74,6 +74,49 @@ create table if not exists public.technology_health_breakdowns (
     calculated_at timestamptz not null default now()
 );
 
+create table if not exists public.technology_cost_signals (
+    id uuid primary key,
+    technology_id uuid not null,
+    provider text not null default '',
+    service text not null default '',
+    amount numeric(14,2) not null default 0,
+    signal_type text not null default 'Cloud Spend',
+    account text not null default '',
+    cost_center text not null default '',
+    business_unit text not null default '',
+    application text not null default '',
+    environment text not null default '',
+    usage numeric(14,4) not null default 0,
+    trend numeric(8,4) not null default 0,
+    confidence_score numeric(6,4) not null default 1,
+    observed_at timestamptz not null default now(),
+    metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.technology_cost_breakdowns (
+    id uuid primary key default gen_random_uuid(),
+    twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
+    technology_id uuid not null,
+    current_cost numeric(14,2) not null default 0,
+    monthly_cost numeric(14,2) not null default 0,
+    annual_cost numeric(14,2) not null default 0,
+    forecast numeric(14,2) not null default 0,
+    budget numeric(14,2) not null default 0,
+    budget_variance numeric(14,2) not null default 0,
+    budget_variance_percent numeric(8,2) not null default 0,
+    cost_health text not null default 'Healthy',
+    optimization_opportunity numeric(14,2) not null default 0,
+    potential_savings numeric(14,2) not null default 0,
+    chargeback jsonb not null default '{}'::jsonb,
+    showback jsonb not null default '{}'::jsonb,
+    roi numeric(10,2) not null default 0,
+    business_value numeric(14,2) not null default 0,
+    dimensions jsonb not null default '{}'::jsonb,
+    signals jsonb not null default '[]'::jsonb,
+    policy jsonb not null default '{}'::jsonb,
+    calculated_at timestamptz not null default now()
+);
+
 create table if not exists public.technology_twin_state (
     id uuid primary key,
     twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
@@ -155,6 +198,12 @@ create index if not exists idx_technology_health_signals_technology
 
 create index if not exists idx_technology_health_breakdowns_twin_technology
     on public.technology_health_breakdowns (twin_id, technology_id, calculated_at desc);
+
+create index if not exists idx_technology_cost_signals_technology
+    on public.technology_cost_signals (technology_id, observed_at desc);
+
+create index if not exists idx_technology_cost_breakdowns_twin_technology
+    on public.technology_cost_breakdowns (twin_id, technology_id, calculated_at desc);
 
 create index if not exists idx_technology_twin_relationships_source
     on public.technology_twin_relationships (twin_id, source_entity_id);

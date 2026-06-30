@@ -3,6 +3,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from core.digital_twin.technology import (
+    CostCalculator,
+    CostSignal,
     HealthCalculator,
     HealthSignal,
     HealthSignalType,
@@ -25,6 +27,7 @@ class TechnologyTwinService:
         self.entity_repository = entity_repository or EntityRepository()
         self.twin_repository = twin_repository or TechnologyTwinRepository()
         self.health_calculator = HealthCalculator()
+        self.cost_calculator = CostCalculator()
 
     def build_technology_twin(self, organization_id: UUID | str, persist: bool = True) -> TechnologyTwin:
         resolved_id = UUID(str(organization_id))
@@ -189,6 +192,83 @@ class TechnologyTwinService:
                     }
                 )
         return degraded
+
+    def record_cost_signal(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        provider: str,
+        service: str,
+        amount: float,
+        signal_type: str = "Cloud Spend",
+        account: str = "",
+        cost_center: str = "",
+        business_unit: str = "",
+        application: str = "",
+        environment: str = "",
+        usage: float = 0.0,
+        trend: float = 0.0,
+        confidence_score: float = 1.0,
+        metadata: dict | None = None,
+    ) -> CostSignal:
+        signal = CostSignal.create(
+            technology_id,
+            provider=provider,
+            service=service,
+            amount=amount,
+            signal_type=signal_type,
+            account=account,
+            cost_center=cost_center,
+            business_unit=business_unit,
+            application=application,
+            environment=environment,
+            usage=usage,
+            trend=trend,
+            confidence_score=confidence_score,
+            metadata=metadata,
+        )
+        self.twin_repository.save_cost_signal(signal)
+        self.get_cost_breakdown(organization_id, technology_id)
+        return signal
+
+    def calculate_current_cost(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_cost_breakdown(organization_id, technology_id)["current_cost"]
+
+    def calculate_monthly_cost(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_cost_breakdown(organization_id, technology_id)["monthly_cost"]
+
+    def calculate_forecast(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_cost_breakdown(organization_id, technology_id)["forecast"]
+
+    def calculate_budget_variance(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        breakdown = self.get_cost_breakdown(organization_id, technology_id)
+        return {
+            "budget": breakdown["budget"],
+            "budget_variance": breakdown["budget_variance"],
+            "budget_variance_percent": breakdown["budget_variance_percent"],
+            "cost_health": breakdown["cost_health"],
+        }
+
+    def calculate_roi(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_cost_breakdown(organization_id, technology_id)["roi"]
+
+    def calculate_optimization(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        breakdown = self.get_cost_breakdown(organization_id, technology_id)
+        return {
+            "optimization_opportunity": breakdown["optimization_opportunity"],
+            "potential_savings": breakdown["potential_savings"],
+        }
+
+    def get_cost_breakdown(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        signals = self.twin_repository.list_cost_signals(technology_id)
+        result = self.cost_calculator.apply_to_node(node, signals)
+        twin.refresh()
+        self.twin_repository.save(twin)
+        return result.to_dict()
 
     def _relationship_belongs_to_org(
         self,
