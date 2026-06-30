@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 from uuid import UUID, uuid4
 
+from core.digital_twin.technology.infrastructure_resource import InfrastructureResource
 from core.digital_twin.technology.technology_node import TechnologyNode
 from core.digital_twin.technology.technology_relationships import TechnologyRelationship
 from core.entities.entity import EnterpriseEntity, EntityRelationship, EntityType, utc_now_iso
@@ -16,6 +17,11 @@ TECHNOLOGY_ENTITY_TYPES = {
     EntityType.SAAS_APPLICATION.value,
     EntityType.CONTROL.value,
     EntityType.POLICY.value,
+}
+
+INFRASTRUCTURE_ENTITY_TYPES = {
+    EntityType.CLOUD_ACCOUNT.value,
+    EntityType.CLOUD_RESOURCE.value,
 }
 
 
@@ -52,11 +58,14 @@ class TechnologyTwin:
             and (relationship.source_entity_id in twin.nodes or relationship.target_entity_id in twin.nodes)
         ]
         twin._attach_business_context(entity_by_id, relationships)
+        twin._attach_infrastructure_layer(entity_by_id, relationships)
         twin.refresh()
         return twin
 
     def refresh(self) -> None:
         for node in self.nodes.values():
+            if node.infrastructure_layer:
+                node.infrastructure_layer.refresh()
             node.refresh_state()
         self.generated_at = utc_now_iso()
         self.metadata = self._summary()
@@ -76,7 +85,38 @@ class TechnologyTwin:
                 }
                 for node in self.nodes.values()
             ],
-            "edges": [relationship.to_dict() for relationship in self.relationships],
+            "infrastructure_nodes": [
+                {
+                    "id": str(resource.id),
+                    "entity_id": str(resource.entity_id) if resource.entity_id else "",
+                    "label": resource.name,
+                    "type": resource.resource_type,
+                    "provider": resource.provider,
+                    "health": resource.health,
+                    "cost": resource.cost,
+                    "risk": resource.risk,
+                    "technology_id": str(node.technology_id),
+                }
+                for node in self.nodes.values()
+                for resource in (node.infrastructure_layer.resources.values() if node.infrastructure_layer else [])
+            ],
+            "edges": [
+                *[relationship.to_dict() for relationship in self.relationships],
+                *[
+                    {
+                        "id": str(mapping.id),
+                        "source_entity_id": str(mapping.technology_id),
+                        "target_entity_id": str(mapping.resource_id),
+                        "relationship_type": mapping.relationship_type,
+                        "strength": "High",
+                        "confidence_score": mapping.confidence_score,
+                        "source_system": mapping.source_system,
+                        "metadata": mapping.metadata,
+                    }
+                    for node in self.nodes.values()
+                    for mapping in (node.infrastructure_layer.mappings if node.infrastructure_layer else [])
+                ],
+            ],
             "generated_at": self.generated_at,
         }
 
@@ -96,6 +136,7 @@ class TechnologyTwin:
             "business_services": [str(value) for value in node.business_service_ids],
             "health": node.health.to_dict() if node.health else None,
             "state": node.state.to_dict() if node.state else None,
+            "infrastructure_layer": node.infrastructure_layer.to_dict() if node.infrastructure_layer else None,
             "cost": {
                 "current": node.cost,
                 "monthly": node.monthly_cost,
@@ -191,15 +232,49 @@ class TechnologyTwin:
                 for service_id in app_to_services.get(target.id, set()):
                     node.attach_business_service(service_id)
 
+    def _attach_infrastructure_layer(
+        self,
+        entity_by_id: dict[UUID, EnterpriseEntity],
+        relationships: list[EntityRelationship],
+    ) -> None:
+        for relationship in relationships:
+            source = entity_by_id.get(relationship.source_entity_id)
+            target = entity_by_id.get(relationship.target_entity_id)
+            if not source or not target:
+                continue
+            if relationship.source_entity_id in self.nodes and target.entity_type in INFRASTRUCTURE_ENTITY_TYPES:
+                self.nodes[relationship.source_entity_id].attach_infrastructure_resource(
+                    InfrastructureResource.from_entity(target),
+                    relationship_type=relationship.relationship_type,
+                    confidence_score=relationship.confidence_score,
+                    source_system=relationship.source_system,
+                )
+            if relationship.target_entity_id in self.nodes and source.entity_type in INFRASTRUCTURE_ENTITY_TYPES:
+                self.nodes[relationship.target_entity_id].attach_infrastructure_resource(
+                    InfrastructureResource.from_entity(source),
+                    relationship_type=relationship.relationship_type,
+                    confidence_score=relationship.confidence_score,
+                    source_system=relationship.source_system,
+                )
+
     def _summary(self) -> dict[str, Any]:
         nodes = list(self.nodes.values())
+        infrastructure_layers = [node.infrastructure_layer for node in nodes if node.infrastructure_layer]
+        infrastructure_resources = [
+            resource
+            for layer in infrastructure_layers
+            for resource in layer.resources.values()
+        ]
         return {
             "node_count": len(nodes),
+            "infrastructure_resource_count": len(infrastructure_resources),
             "relationship_count": len(self.relationships),
             "average_health": _average([node.state.health_score for node in nodes if node.state], default=100.0),
             "average_risk": _average([node.risk for node in nodes], default=0.0),
             "monthly_cost": round(sum(node.monthly_cost for node in nodes), 2),
             "annual_cost": round(sum(node.annual_cost for node in nodes), 2),
+            "infrastructure_monthly_cost": round(sum(resource.cost for resource in infrastructure_resources), 2),
+            "infrastructure_health": _average([resource.health for resource in infrastructure_resources], default=100.0),
             "applications": len({app_id for node in nodes for app_id in node.application_ids}),
             "business_services": len({service_id for node in nodes for service_id in node.business_service_ids}),
             "generated_at": self.generated_at,

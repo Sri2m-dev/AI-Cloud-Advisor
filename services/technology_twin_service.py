@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from core.digital_twin.technology import TechnologyTwin
+from core.digital_twin.technology import InfrastructureLayer, InfrastructureResource, TechnologyTwin
 from core.digital_twin.technology.technology_twin import TECHNOLOGY_ENTITY_TYPES
 from core.entities.entity import EnterpriseEntity, EntityRelationship
 from repositories.entity_repository import EntityRepository
@@ -67,6 +67,61 @@ class TechnologyTwinService:
     def graph(self, organization_id: UUID | str) -> dict:
         twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
         return twin.graph()
+
+    def attach_infrastructure_resource(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        resource: InfrastructureResource,
+        relationship_type: str = "RUNS_ON",
+    ) -> TechnologyTwin:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        node.attach_infrastructure_resource(resource, relationship_type=relationship_type)
+        twin.refresh()
+        return self.twin_repository.save(twin)
+
+    def get_infrastructure_layer(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+    ) -> InfrastructureLayer:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        if node.infrastructure_layer is None:
+            node.infrastructure_layer = InfrastructureLayer(node.technology_id)
+        return node.infrastructure_layer
+
+    def map_resource_to_technology(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        resource_entity_id: UUID | str,
+        relationship_type: str = "RUNS_ON",
+    ) -> TechnologyTwin:
+        entity = self.entity_repository.get_entity(resource_entity_id)
+        if not entity:
+            raise KeyError(f"Infrastructure resource entity not found: {resource_entity_id}")
+        return self.attach_infrastructure_resource(
+            organization_id,
+            technology_id,
+            InfrastructureResource.from_entity(entity),
+            relationship_type=relationship_type,
+        )
+
+    def calculate_infrastructure_health(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        layer = self.get_infrastructure_layer(organization_id, technology_id)
+        layer.refresh()
+        return layer.health_score
+
+    def calculate_infrastructure_cost(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        layer = self.get_infrastructure_layer(organization_id, technology_id)
+        layer.refresh()
+        return layer.cost
 
     def _relationship_belongs_to_org(
         self,

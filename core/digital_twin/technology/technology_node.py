@@ -5,6 +5,8 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
+from core.digital_twin.technology.infrastructure_layer import InfrastructureLayer
+from core.digital_twin.technology.infrastructure_resource import InfrastructureResource
 from core.digital_twin.technology.technology_health import TechnologyHealth
 from core.digital_twin.technology.technology_state import TechnologyState
 from core.entities.entity import EnterpriseEntity, EntityType, utc_now_iso
@@ -47,6 +49,7 @@ class TechnologyNode:
     status: str = "Unknown"
     health: TechnologyHealth | None = None
     state: TechnologyState | None = None
+    infrastructure_layer: InfrastructureLayer | None = None
     risk: float = 0.0
     cost: float = 0.0
     monthly_cost: float = 0.0
@@ -86,6 +89,7 @@ class TechnologyNode:
             status=state.status,
             health=health,
             state=state,
+            infrastructure_layer=InfrastructureLayer(entity.id),
             risk=risk,
             cost=monthly_cost,
             monthly_cost=monthly_cost,
@@ -105,6 +109,29 @@ class TechnologyNode:
         if service_id not in self.business_service_ids:
             self.business_service_ids.append(service_id)
             self.business_service_ids.sort(key=str)
+
+    def attach_infrastructure_resource(
+        self,
+        resource: InfrastructureResource,
+        relationship_type: str = "RUNS_ON",
+        confidence_score: float = 1.0,
+        source_system: str = "technology_twin",
+    ) -> None:
+        if self.infrastructure_layer is None:
+            self.infrastructure_layer = InfrastructureLayer(self.technology_id)
+        self.infrastructure_layer.attach_resource(
+            resource,
+            relationship_type=relationship_type,
+            confidence_score=confidence_score,
+            source_system=source_system,
+        )
+        self.monthly_cost = max(self.monthly_cost, self.infrastructure_layer.cost)
+        self.annual_cost = max(self.annual_cost, self.infrastructure_layer.cost * 12)
+        self.cost = self.monthly_cost
+        if self.health:
+            self.health.operational_score = self.infrastructure_layer.health_score
+        self.risk = max(self.risk, self.infrastructure_layer.risk_score)
+        self.refresh_state()
 
     def refresh_state(self) -> TechnologyState:
         if self.health is None:
@@ -131,6 +158,7 @@ class TechnologyNode:
         payload["application_ids"] = [str(value) for value in self.application_ids]
         payload["health"] = self.health.to_dict() if self.health else None
         payload["state"] = self.state.to_dict() if self.state else None
+        payload["infrastructure_layer"] = self.infrastructure_layer.to_dict() if self.infrastructure_layer else None
         return payload
 
     @classmethod
@@ -142,6 +170,7 @@ class TechnologyNode:
         data["application_ids"] = [UUID(str(value)) for value in data.get("application_ids", [])]
         data["health"] = TechnologyHealth.from_dict(data["health"]) if data.get("health") else None
         data["state"] = TechnologyState.from_dict(data["state"]) if data.get("state") else None
+        data["infrastructure_layer"] = InfrastructureLayer.from_dict(data["infrastructure_layer"]) if data.get("infrastructure_layer") else None
         return cls(**data)
 
 
