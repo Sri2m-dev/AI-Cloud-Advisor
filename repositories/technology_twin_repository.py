@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from core.digital_twin.technology import TechnologyTwin
+from core.digital_twin.technology import InfrastructureLayer, TechnologyTwin
 
 
 DEFAULT_TECHNOLOGY_TWIN_STORE = Path("data/technology_digital_twins.json")
@@ -39,6 +39,33 @@ class TechnologyTwinRepository:
             key=lambda twin: twin.generated_at,
             reverse=True,
         )
+
+    def get_infrastructure_layer(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+    ) -> InfrastructureLayer | None:
+        twin = self.latest_for_organization(organization_id)
+        if not twin:
+            return None
+        node = twin.nodes.get(UUID(str(technology_id)))
+        return node.infrastructure_layer if node else None
+
+    def save_infrastructure_layer(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        layer: InfrastructureLayer,
+    ) -> TechnologyTwin:
+        twin = self.latest_for_organization(organization_id)
+        if not twin:
+            raise KeyError(f"Technology twin not found for organization: {organization_id}")
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology node not found: {technology_id}")
+        node.infrastructure_layer = layer
+        twin.refresh()
+        return self.save(twin)
 
     def _load(self) -> None:
         if not self.store_path.exists():
