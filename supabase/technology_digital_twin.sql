@@ -181,6 +181,45 @@ create table if not exists public.technology_operational_breakdowns (
     calculated_at timestamptz not null default now()
 );
 
+create table if not exists public.technology_ai_signals (
+    id uuid primary key,
+    technology_id uuid not null,
+    signal_type text not null,
+    insight_type text not null,
+    title text not null,
+    description text not null default '',
+    recommendation text not null default '',
+    predicted_impact numeric(14,2) not null default 0,
+    business_impact text not null default '',
+    confidence_score numeric(6,4) not null default 1,
+    model_name text not null default '',
+    source_context jsonb not null default '{}'::jsonb,
+    status text not null default 'New',
+    owner text not null default '',
+    created_at timestamptz not null default now(),
+    metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.technology_ai_breakdowns (
+    id uuid primary key default gen_random_uuid(),
+    twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
+    technology_id uuid not null,
+    ai_confidence numeric(6,4) not null default 0,
+    confidence_band text not null default 'Low',
+    dimensions jsonb not null default '{}'::jsonb,
+    recommendations jsonb not null default '[]'::jsonb,
+    predictions jsonb not null default '[]'::jsonb,
+    root_cause_summary text not null default '',
+    optimization jsonb not null default '[]'::jsonb,
+    forecasts jsonb not null default '[]'::jsonb,
+    business_impact jsonb not null default '[]'::jsonb,
+    automation_candidates jsonb not null default '[]'::jsonb,
+    insights jsonb not null default '[]'::jsonb,
+    signals jsonb not null default '[]'::jsonb,
+    policy jsonb not null default '{}'::jsonb,
+    calculated_at timestamptz not null default now()
+);
+
 create table if not exists public.technology_twin_state (
     id uuid primary key,
     twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
@@ -283,6 +322,15 @@ create index if not exists idx_technology_operational_signals_type_status
 
 create index if not exists idx_technology_operational_breakdowns_twin_technology
     on public.technology_operational_breakdowns (twin_id, technology_id, calculated_at desc);
+
+create index if not exists idx_technology_ai_signals_technology
+    on public.technology_ai_signals (technology_id, created_at desc);
+
+create index if not exists idx_technology_ai_signals_type_status
+    on public.technology_ai_signals (signal_type, status);
+
+create index if not exists idx_technology_ai_breakdowns_twin_technology
+    on public.technology_ai_breakdowns (twin_id, technology_id, calculated_at desc);
 
 create index if not exists idx_technology_twin_relationships_source
     on public.technology_twin_relationships (twin_id, source_entity_id);

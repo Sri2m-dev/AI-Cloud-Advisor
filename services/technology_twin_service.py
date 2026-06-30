@@ -3,6 +3,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from core.digital_twin.technology import (
+    AICalculator,
+    AISignal,
     CostCalculator,
     CostSignal,
     HealthCalculator,
@@ -34,6 +36,7 @@ class TechnologyTwinService:
         self.cost_calculator = CostCalculator()
         self.risk_calculator = RiskCalculator()
         self.operational_calculator = OperationalCalculator()
+        self.ai_calculator = AICalculator()
 
     def build_technology_twin(self, organization_id: UUID | str, persist: bool = True) -> TechnologyTwin:
         resolved_id = UUID(str(organization_id))
@@ -426,6 +429,83 @@ class TechnologyTwinService:
         twin.refresh()
         self.twin_repository.save(twin)
         return result.to_dict()
+
+    def record_ai_signal(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        signal_type: str,
+        insight_type: str,
+        title: str,
+        description: str,
+        recommendation: str = "",
+        predicted_impact: float = 0.0,
+        business_impact: str = "",
+        confidence_score: float = 1.0,
+        model_name: str = "",
+        source_context: dict | None = None,
+        status: str = "New",
+        owner: str = "",
+        metadata: dict | None = None,
+    ) -> AISignal:
+        signal = AISignal.create(
+            technology_id,
+            signal_type=signal_type,
+            insight_type=insight_type,
+            title=title,
+            description=description,
+            recommendation=recommendation,
+            predicted_impact=predicted_impact,
+            business_impact=business_impact,
+            confidence_score=confidence_score,
+            model_name=model_name,
+            source_context=source_context,
+            status=status,
+            owner=owner,
+            metadata=metadata,
+        )
+        self.twin_repository.save_ai_signal(signal)
+        self.get_ai_insights(organization_id, technology_id)
+        return signal
+
+    def get_ai_insights(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        signals = self.twin_repository.list_ai_signals(technology_id)
+        result = self.ai_calculator.apply_to_node(node, signals)
+        twin.refresh()
+        self.twin_repository.save(twin)
+        return result.to_dict()
+
+    def get_recommendations(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_ai_insights(organization_id, technology_id)["recommendations"]
+        return self._collect_ai_dimension(organization_id, "recommendations")
+
+    def get_predictions(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_ai_insights(organization_id, technology_id)["predictions"]
+        return self._collect_ai_dimension(organization_id, "predictions")
+
+    def get_root_cause_summary(self, organization_id: UUID | str, technology_id: UUID | str) -> str:
+        return self.get_ai_insights(organization_id, technology_id)["root_cause_summary"]
+
+    def calculate_ai_confidence(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_ai_insights(organization_id, technology_id)["ai_confidence"]
+
+    def get_automation_candidates(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_ai_insights(organization_id, technology_id)["automation_candidates"]
+        return self._collect_ai_dimension(organization_id, "automation_candidates")
+
+    def _collect_ai_dimension(self, organization_id: UUID | str, dimension: str) -> list[dict]:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        values = []
+        for node in twin.nodes.values():
+            values.extend(self.get_ai_insights(organization_id, node.technology_id)[dimension])
+        return values
 
     def _relationship_belongs_to_org(
         self,

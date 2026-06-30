@@ -169,11 +169,15 @@ class TechnologyTwin:
                 "breakdown": node.metadata.get("operational_breakdown", {}),
             },
             "ai": {
+                "insights": node.metadata.get("ai_breakdown", {}).get("insights", []),
                 "recommendations": node.metadata.get("recommendations", []),
                 "predictions": node.metadata.get("predictions", []),
                 "root_cause": node.metadata.get("root_cause", ""),
                 "business_impact": node.metadata.get("business_impact", ""),
                 "confidence": node.metadata.get("ai_confidence", 0),
+                "confidence_band": node.metadata.get("ai_confidence_band", ""),
+                "automation_candidates": node.metadata.get("automation_candidates", []),
+                "breakdown": node.metadata.get("ai_breakdown", {}),
             },
         }
 
