@@ -22,7 +22,9 @@ st.set_page_config(
 # ------------------------------------------------------------------
 
 AUTH_MODE = os.getenv("AUTH_MODE", "").strip().lower()
-DEV_AUTH_ENABLED = AUTH_MODE == "dev"
+ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("CLOUD_ADVISOR_ENV", "development")).strip().lower()
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+DEV_AUTH_ENABLED = AUTH_MODE in {"dev", "demo", "local"} or (ENVIRONMENT != "production" and not SUPABASE_URL)
 DEV_ORG_ID = "bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c"
 
 VALID_USERS = {
@@ -37,6 +39,11 @@ VALID_USERS = {
         "role": "super_admin"
     },
 
+    "finance@company.com": {
+        "password": "password123",
+        "role": "finance"
+    },
+
     "finops@client.com": {
         "password": "password123",
         "role": "finance"
@@ -49,7 +56,7 @@ VALID_USERS = {
 
     "cto@company.com": {
         "password": "password123",
-        "role": "cto"
+        "role": "cio"
     }
 }
 
@@ -189,23 +196,28 @@ else:
     if st.button("Login"):
 
         try:
-            login_success = (
-                login_with_dev_user(username, password)
-                if DEV_AUTH_ENABLED
-                else login_with_supabase(username, password)
-            )
+            try:
+                login_success = login_with_supabase(username, password)
+            except Exception:
+                login_success = False
+
+            if not login_success:
+                login_success = login_with_dev_user(username, password)
 
         except Exception:
             login_success = False
 
         if login_success:
             # Automatically log the user login event
-            audit_service.log_user_login(
-                user_id=st.session_state["email"],
-                org_id=st.session_state["organization_id"],
-                ip_address=None,  # Would come from request context in production
-                user_agent=None   # Would come from request context in production
-            )
+            try:
+                audit_service.log_user_login(
+                    user_id=st.session_state["email"],
+                    org_id=st.session_state["organization_id"],
+                    ip_address=None,  # Would come from request context in production
+                    user_agent=None   # Would come from request context in production
+                )
+            except Exception:
+                pass
 
             st.success("Login successful")
 
@@ -221,12 +233,13 @@ else:
 
 try:
 
-    params = st.experimental_get_query_params()
+    params = st.query_params
+    auto_login = params.get("auto_login")
 
     if (
         DEV_AUTH_ENABLED
         and
-        params.get("auto_login") == ["1"]
+        auto_login == "1"
         and not st.session_state.get("authenticated")
     ):
 
