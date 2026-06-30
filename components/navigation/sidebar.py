@@ -30,7 +30,7 @@ SECTION_KEYWORDS = {
     "Executive": ["Executive", "Leadership"],
     "Finance": ["FinOps", "Spend", "Cost", "Budget", "Forecasting", "Chargeback", "Savings", "Financial"],
     "Cloud": ["Cloud", "AWS", "Azure", "GCP"],
-    "Technology": ["Technology", "Application", "Business Service", "Service Explorer", "Operations Workspace", "Technical"],
+    "Technology": ["Technology", "Application", "Business Service", "Service Explorer", "Operations Workspace", "Technical", "Twin"],
     "Intelligence": ["AI", "Copilot", "Knowledge Graph", "Dependency", "Impact", "Simulation", "Prediction", "Capacity", "Goal", "Agent", "Workflow", "Learning"],
     "Observability": ["Observability", "Incident", "Scheduler", "Performance"],
     "Governance": ["Governance", "Risk", "Approval", "Audit", "Security", "Compliance", "Disaster Recovery", "Readiness", "Data Quality"],
@@ -42,6 +42,7 @@ SECTION_KEYWORDS = {
 
 SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
     "executive": [
+        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
         {"label": "Executive Overview", "page_label": "Executive Dashboard", "section": "Home", "icon": "home"},
         {"label": "Executive Dashboard", "page_label": "Executive Dashboard", "section": "Executive", "icon": "executive"},
         {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
@@ -50,6 +51,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
     ],
     "cio": [
+        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
         {"label": "Technology Health", "page_label": "Technology Health & Risk", "section": "Technology", "icon": "technology"},
         {"label": "Technology Inventory", "page_label": "Technology Portfolio", "section": "Technology", "icon": "technology"},
         {"label": "Knowledge Graph", "page_label": "Technology Knowledge Graph", "section": "Intelligence", "icon": "intelligence"},
@@ -59,6 +61,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
     ],
     "technical": [
+        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
         {"label": "Operations", "page_label": "Operations Workspace", "section": "Technology", "icon": "platform"},
         {"label": "Observability", "page_label": "Enterprise Observability", "section": "Observability", "icon": "observability"},
         {"label": "Incidents", "page_label": "Incident Timeline", "section": "Observability", "icon": "warning"},
@@ -67,6 +70,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Automation", "page_label": "Automation Center", "section": "Platform", "icon": "platform"},
     ],
     "finance": [
+        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
         {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
         {"label": "Forecasting", "page_label": "Forecasting", "section": "Finance", "icon": "trend_up"},
         {"label": "Savings", "page_label": "Savings Governance", "section": "Finance", "icon": "cost"},
