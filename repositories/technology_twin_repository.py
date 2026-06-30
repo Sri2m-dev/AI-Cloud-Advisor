@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from core.digital_twin.technology import CostSignal, HealthSignal, InfrastructureLayer, TechnologyTwin
+from core.digital_twin.technology import CostSignal, HealthSignal, InfrastructureLayer, RiskSignal, TechnologyTwin
 
 
 DEFAULT_TECHNOLOGY_TWIN_STORE = Path("data/technology_digital_twins.json")
@@ -17,6 +17,7 @@ class TechnologyTwinRepository:
         self._twins: dict[UUID, TechnologyTwin] = {}
         self._health_signals: dict[UUID, list[HealthSignal]] = {}
         self._cost_signals: dict[UUID, list[CostSignal]] = {}
+        self._risk_signals: dict[UUID, list[RiskSignal]] = {}
         self._load()
 
     def save(self, twin: TechnologyTwin) -> TechnologyTwin:
@@ -111,6 +112,19 @@ class TechnologyTwinRepository:
             signals.extend(entries)
         return sorted(signals, key=lambda signal: signal.observed_at, reverse=True)
 
+    def save_risk_signal(self, signal: RiskSignal) -> RiskSignal:
+        self._risk_signals.setdefault(signal.technology_id, []).append(signal)
+        self._persist()
+        return signal
+
+    def list_risk_signals(self, technology_id: UUID | str | None = None) -> list[RiskSignal]:
+        if technology_id is not None:
+            return list(self._risk_signals.get(UUID(str(technology_id)), []))
+        signals: list[RiskSignal] = []
+        for entries in self._risk_signals.values():
+            signals.extend(entries)
+        return sorted(signals, key=lambda signal: signal.last_observed, reverse=True)
+
     def _load(self) -> None:
         if not self.store_path.exists():
             return
@@ -127,6 +141,10 @@ class TechnologyTwinRepository:
         for item in payload.get("cost_signals", []):
             signal = CostSignal.from_dict(item)
             self._cost_signals.setdefault(signal.technology_id, []).append(signal)
+        self._risk_signals = {}
+        for item in payload.get("risk_signals", []):
+            signal = RiskSignal.from_dict(item)
+            self._risk_signals.setdefault(signal.technology_id, []).append(signal)
 
     def _persist(self) -> None:
         payload = {
@@ -136,5 +154,6 @@ class TechnologyTwinRepository:
             ],
             "health_signals": [signal.to_dict() for signal in self.list_health_signals()],
             "cost_signals": [signal.to_dict() for signal in self.list_cost_signals()],
+            "risk_signals": [signal.to_dict() for signal in self.list_risk_signals()],
         }
         self.store_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

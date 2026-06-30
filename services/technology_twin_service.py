@@ -10,6 +10,8 @@ from core.digital_twin.technology import (
     HealthSignalType,
     InfrastructureLayer,
     InfrastructureResource,
+    RiskCalculator,
+    RiskSignal,
     TechnologyTwin,
 )
 from core.digital_twin.technology.technology_twin import TECHNOLOGY_ENTITY_TYPES
@@ -28,6 +30,7 @@ class TechnologyTwinService:
         self.twin_repository = twin_repository or TechnologyTwinRepository()
         self.health_calculator = HealthCalculator()
         self.cost_calculator = CostCalculator()
+        self.risk_calculator = RiskCalculator()
 
     def build_technology_twin(self, organization_id: UUID | str, persist: bool = True) -> TechnologyTwin:
         resolved_id = UUID(str(organization_id))
@@ -269,6 +272,75 @@ class TechnologyTwinService:
         twin.refresh()
         self.twin_repository.save(twin)
         return result.to_dict()
+
+    def record_risk_signal(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        risk_type: str,
+        severity: str,
+        probability: float,
+        impact: float,
+        source_system: str = "manual",
+        affected_entity: str = "",
+        mitigation: str = "",
+        owner: str = "",
+        status: str = "Open",
+        confidence_score: float = 1.0,
+        metadata: dict | None = None,
+    ) -> RiskSignal:
+        signal = RiskSignal.create(
+            technology_id,
+            risk_type=risk_type,
+            severity=severity,
+            probability=probability,
+            impact=impact,
+            source_system=source_system,
+            affected_entity=affected_entity,
+            mitigation=mitigation,
+            owner=owner,
+            status=status,
+            confidence_score=confidence_score,
+            metadata=metadata,
+        )
+        self.twin_repository.save_risk_signal(signal)
+        self.get_risk_breakdown(organization_id, technology_id)
+        return signal
+
+    def calculate_risk_score(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_risk_breakdown(organization_id, technology_id)["risk_score"]
+
+    def calculate_risk_posture(self, organization_id: UUID | str, technology_id: UUID | str) -> str:
+        return self.get_risk_breakdown(organization_id, technology_id)["risk_posture"]
+
+    def get_risk_breakdown(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        signals = self.twin_repository.list_risk_signals(technology_id)
+        result = self.risk_calculator.apply_to_node(node, signals)
+        twin.refresh()
+        self.twin_repository.save(twin)
+        return result.to_dict()
+
+    def get_critical_risks(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_risk_breakdown(organization_id, technology_id)["critical_risks"]
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        critical = []
+        for node in twin.nodes.values():
+            critical.extend(self.get_risk_breakdown(organization_id, node.technology_id)["critical_risks"])
+        return critical
+
+    def get_risk_mitigations(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_risk_breakdown(organization_id, technology_id)["mitigations"]
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        mitigations = []
+        for node in twin.nodes.values():
+            mitigations.extend(self.get_risk_breakdown(organization_id, node.technology_id)["mitigations"])
+        return mitigations
 
     def _relationship_belongs_to_org(
         self,

@@ -7,6 +7,9 @@ from core.digital_twin.technology.infrastructure_resource import InfrastructureR
 from core.digital_twin.technology.health_calculator import HealthCalculationResult, HealthCalculator
 from core.digital_twin.technology.health_policy import HealthPolicy
 from core.digital_twin.technology.health_signal import HealthSignal, HealthSignalStatus, HealthSignalType
+from core.digital_twin.technology.risk_calculator import RiskCalculationResult, RiskCalculator
+from core.digital_twin.technology.risk_policy import RiskPolicy
+from core.digital_twin.technology.risk_signal import RiskSeverity, RiskSignal, RiskSignalType, RiskStatus
 from core.digital_twin.technology.technology_health import TechnologyHealth
 from core.digital_twin.technology.technology_node import TechnologyAssetType, TechnologyNode
 from core.digital_twin.technology.technology_relationships import TechnologyRelationship
@@ -31,6 +34,13 @@ __all__ = [
     "HealthSignal",
     "HealthSignalStatus",
     "HealthSignalType",
+    "RiskCalculationResult",
+    "RiskCalculator",
+    "RiskPolicy",
+    "RiskSeverity",
+    "RiskSignal",
+    "RiskSignalType",
+    "RiskStatus",
     "TechnologyHealth",
     "TechnologyNode",
     "TechnologyRelationship",
