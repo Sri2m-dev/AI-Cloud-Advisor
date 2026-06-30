@@ -52,6 +52,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
     ],
     "cio": [
         {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
+        {"label": "Technology Digital Twin", "page_label": "Technology Digital Twin", "section": "Technology", "icon": "technology"},
         {"label": "Technology Health", "page_label": "Technology Health & Risk", "section": "Technology", "icon": "technology"},
         {"label": "Technology Inventory", "page_label": "Technology Portfolio", "section": "Technology", "icon": "technology"},
         {"label": "Knowledge Graph", "page_label": "Technology Knowledge Graph", "section": "Intelligence", "icon": "intelligence"},
@@ -62,6 +63,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
     ],
     "technical": [
         {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
+        {"label": "Technology Digital Twin", "page_label": "Technology Digital Twin", "section": "Technology", "icon": "technology"},
         {"label": "Operations", "page_label": "Operations Workspace", "section": "Technology", "icon": "platform"},
         {"label": "Observability", "page_label": "Enterprise Observability", "section": "Observability", "icon": "observability"},
         {"label": "Incidents", "page_label": "Incident Timeline", "section": "Observability", "icon": "warning"},
