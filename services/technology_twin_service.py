@@ -10,6 +10,8 @@ from core.digital_twin.technology import (
     HealthSignalType,
     InfrastructureLayer,
     InfrastructureResource,
+    OperationalCalculator,
+    OperationalSignal,
     RiskCalculator,
     RiskSignal,
     TechnologyTwin,
@@ -31,6 +33,7 @@ class TechnologyTwinService:
         self.health_calculator = HealthCalculator()
         self.cost_calculator = CostCalculator()
         self.risk_calculator = RiskCalculator()
+        self.operational_calculator = OperationalCalculator()
 
     def build_technology_twin(self, organization_id: UUID | str, persist: bool = True) -> TechnologyTwin:
         resolved_id = UUID(str(organization_id))
@@ -341,6 +344,88 @@ class TechnologyTwinService:
         for node in twin.nodes.values():
             mitigations.extend(self.get_risk_breakdown(organization_id, node.technology_id)["mitigations"])
         return mitigations
+
+    def record_operational_signal(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        signal_type: str,
+        source_system: str,
+        severity: str = "Info",
+        status: str = "Open",
+        event_time: str | None = None,
+        duration: float = 0.0,
+        affected_component: str = "",
+        owner: str = "",
+        confidence_score: float = 1.0,
+        metadata: dict | None = None,
+    ) -> OperationalSignal:
+        signal = OperationalSignal.create(
+            technology_id,
+            signal_type=signal_type,
+            source_system=source_system,
+            severity=severity,
+            status=status,
+            event_time=event_time,
+            duration=duration,
+            affected_component=affected_component,
+            owner=owner,
+            confidence_score=confidence_score,
+            metadata=metadata,
+        )
+        self.twin_repository.save_operational_signal(signal)
+        self.get_operational_summary(organization_id, technology_id)
+        return signal
+
+    def calculate_operational_health(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        return self.get_operational_summary(organization_id, technology_id)["operational_health"]
+
+    def get_active_incidents(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_operational_summary(organization_id, technology_id)["active_incidents"]
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        incidents = []
+        for node in twin.nodes.values():
+            incidents.extend(self.get_operational_summary(organization_id, node.technology_id)["active_incidents"])
+        return incidents
+
+    def get_active_alerts(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_operational_summary(organization_id, technology_id)["active_alerts"]
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        alerts = []
+        for node in twin.nodes.values():
+            alerts.extend(self.get_operational_summary(organization_id, node.technology_id)["active_alerts"])
+        return alerts
+
+    def get_recent_changes(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_operational_summary(organization_id, technology_id)["open_changes"]
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        changes = []
+        for node in twin.nodes.values():
+            changes.extend(self.get_operational_summary(organization_id, node.technology_id)["open_changes"])
+        return changes
+
+    def get_deployment_history(self, organization_id: UUID | str, technology_id: UUID | str | None = None) -> list[dict]:
+        if technology_id is not None:
+            return self.get_operational_summary(organization_id, technology_id)["recent_deployments"]
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        deployments = []
+        for node in twin.nodes.values():
+            deployments.extend(self.get_operational_summary(organization_id, node.technology_id)["recent_deployments"])
+        return deployments
+
+    def get_operational_summary(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        signals = self.twin_repository.list_operational_signals(technology_id)
+        result = self.operational_calculator.apply_to_node(node, signals)
+        twin.refresh()
+        self.twin_repository.save(twin)
+        return result.to_dict()
 
     def _relationship_belongs_to_org(
         self,

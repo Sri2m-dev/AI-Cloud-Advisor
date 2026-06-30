@@ -149,6 +149,38 @@ create table if not exists public.technology_risk_breakdowns (
     calculated_at timestamptz not null default now()
 );
 
+create table if not exists public.technology_operational_signals (
+    id uuid primary key,
+    technology_id uuid not null,
+    signal_type text not null,
+    source_system text not null,
+    severity text not null default 'Info',
+    status text not null default 'Open',
+    event_time timestamptz not null default now(),
+    duration numeric(14,2) not null default 0,
+    affected_component text not null default '',
+    owner text not null default '',
+    confidence_score numeric(6,4) not null default 1,
+    metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.technology_operational_breakdowns (
+    id uuid primary key default gen_random_uuid(),
+    twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
+    technology_id uuid not null,
+    operational_health numeric(6,2) not null default 100,
+    status text not null default 'Healthy',
+    dimensions jsonb not null default '{}'::jsonb,
+    active_incidents jsonb not null default '[]'::jsonb,
+    active_alerts jsonb not null default '[]'::jsonb,
+    recent_deployments jsonb not null default '[]'::jsonb,
+    open_changes jsonb not null default '[]'::jsonb,
+    maintenance_windows jsonb not null default '[]'::jsonb,
+    signals jsonb not null default '[]'::jsonb,
+    policy jsonb not null default '{}'::jsonb,
+    calculated_at timestamptz not null default now()
+);
+
 create table if not exists public.technology_twin_state (
     id uuid primary key,
     twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
@@ -242,6 +274,15 @@ create index if not exists idx_technology_risk_signals_technology
 
 create index if not exists idx_technology_risk_breakdowns_twin_technology
     on public.technology_risk_breakdowns (twin_id, technology_id, calculated_at desc);
+
+create index if not exists idx_technology_operational_signals_technology
+    on public.technology_operational_signals (technology_id, event_time desc);
+
+create index if not exists idx_technology_operational_signals_type_status
+    on public.technology_operational_signals (signal_type, status);
+
+create index if not exists idx_technology_operational_breakdowns_twin_technology
+    on public.technology_operational_breakdowns (twin_id, technology_id, calculated_at desc);
 
 create index if not exists idx_technology_twin_relationships_source
     on public.technology_twin_relationships (twin_id, source_entity_id);
