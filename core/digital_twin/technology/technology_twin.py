@@ -159,11 +159,14 @@ class TechnologyTwin:
                 "breakdown": node.metadata.get("risk_breakdown", {}),
             },
             "operations": {
+                "operational_health": node.metadata.get("operational_health", node.health.operational_score if node.health else 100.0),
+                "operational_status": node.metadata.get("operational_status", ""),
                 "open_alerts": node.metadata.get("open_alerts", 0),
                 "incidents": node.metadata.get("incidents", 0),
                 "deployments": node.metadata.get("deployments", 0),
                 "changes": node.metadata.get("changes", 0),
                 "maintenance": node.metadata.get("maintenance", ""),
+                "breakdown": node.metadata.get("operational_breakdown", {}),
             },
             "ai": {
                 "recommendations": node.metadata.get("recommendations", []),

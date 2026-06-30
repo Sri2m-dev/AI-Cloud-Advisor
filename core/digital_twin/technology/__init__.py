@@ -7,6 +7,14 @@ from core.digital_twin.technology.infrastructure_resource import InfrastructureR
 from core.digital_twin.technology.health_calculator import HealthCalculationResult, HealthCalculator
 from core.digital_twin.technology.health_policy import HealthPolicy
 from core.digital_twin.technology.health_signal import HealthSignal, HealthSignalStatus, HealthSignalType
+from core.digital_twin.technology.operational_calculator import OperationalCalculationResult, OperationalCalculator
+from core.digital_twin.technology.operational_policy import OperationalPolicy
+from core.digital_twin.technology.operational_signal import (
+    OperationalSeverity,
+    OperationalSignal,
+    OperationalSignalType,
+    OperationalStatus,
+)
 from core.digital_twin.technology.risk_calculator import RiskCalculationResult, RiskCalculator
 from core.digital_twin.technology.risk_policy import RiskPolicy
 from core.digital_twin.technology.risk_signal import RiskSeverity, RiskSignal, RiskSignalType, RiskStatus
@@ -34,6 +42,13 @@ __all__ = [
     "HealthSignal",
     "HealthSignalStatus",
     "HealthSignalType",
+    "OperationalCalculationResult",
+    "OperationalCalculator",
+    "OperationalPolicy",
+    "OperationalSeverity",
+    "OperationalSignal",
+    "OperationalSignalType",
+    "OperationalStatus",
     "RiskCalculationResult",
     "RiskCalculator",
     "RiskPolicy",
