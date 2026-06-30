@@ -48,6 +48,32 @@ create table if not exists public.technology_twin_health (
     metadata jsonb not null default '{}'::jsonb
 );
 
+create table if not exists public.technology_health_signals (
+    id uuid primary key,
+    technology_id uuid not null,
+    signal_type text not null,
+    value numeric(6,2) not null,
+    weight numeric(8,4) not null default 1,
+    status text not null default 'Unknown',
+    source_system text not null default 'manual',
+    last_observed timestamptz not null default now(),
+    confidence_score numeric(6,4) not null default 1,
+    metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.technology_health_breakdowns (
+    id uuid primary key default gen_random_uuid(),
+    twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
+    technology_id uuid not null,
+    health_score numeric(6,2) not null,
+    status text not null,
+    dimensions jsonb not null default '{}'::jsonb,
+    signals jsonb not null default '[]'::jsonb,
+    policy jsonb not null default '{}'::jsonb,
+    issues jsonb not null default '[]'::jsonb,
+    calculated_at timestamptz not null default now()
+);
+
 create table if not exists public.technology_twin_state (
     id uuid primary key,
     twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
@@ -123,6 +149,12 @@ create index if not exists idx_technology_twin_nodes_technology
 
 create index if not exists idx_technology_twin_state_twin_status
     on public.technology_twin_state (twin_id, status);
+
+create index if not exists idx_technology_health_signals_technology
+    on public.technology_health_signals (technology_id, last_observed desc);
+
+create index if not exists idx_technology_health_breakdowns_twin_technology
+    on public.technology_health_breakdowns (twin_id, technology_id, calculated_at desc);
 
 create index if not exists idx_technology_twin_relationships_source
     on public.technology_twin_relationships (twin_id, source_entity_id);

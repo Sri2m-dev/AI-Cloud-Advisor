@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from core.digital_twin.technology import InfrastructureLayer, TechnologyTwin
+from core.digital_twin.technology import HealthSignal, InfrastructureLayer, TechnologyTwin
 
 
 DEFAULT_TECHNOLOGY_TWIN_STORE = Path("data/technology_digital_twins.json")
@@ -15,6 +15,7 @@ class TechnologyTwinRepository:
         self.store_path = Path(store_path)
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self._twins: dict[UUID, TechnologyTwin] = {}
+        self._health_signals: dict[UUID, list[HealthSignal]] = {}
         self._load()
 
     def save(self, twin: TechnologyTwin) -> TechnologyTwin:
@@ -67,6 +68,35 @@ class TechnologyTwinRepository:
         twin.refresh()
         return self.save(twin)
 
+    def save_health_signal(self, signal: HealthSignal) -> HealthSignal:
+        self._health_signals.setdefault(signal.technology_id, []).append(signal)
+        self._persist()
+        return signal
+
+    def list_health_signals(self, technology_id: UUID | str | None = None) -> list[HealthSignal]:
+        if technology_id is not None:
+            return list(self._health_signals.get(UUID(str(technology_id)), []))
+        signals: list[HealthSignal] = []
+        for entries in self._health_signals.values():
+            signals.extend(entries)
+        return sorted(signals, key=lambda signal: signal.last_observed, reverse=True)
+
+    def get_degraded_technologies(self, organization_id: UUID | str, threshold: float = 70.0) -> list[dict]:
+        twin = self.latest_for_organization(organization_id)
+        if not twin:
+            return []
+        return [
+            {
+                "technology_id": str(node.technology_id),
+                "name": node.name,
+                "status": node.status,
+                "health": node.state.health_score if node.state else 100.0,
+                "risk": node.risk,
+            }
+            for node in twin.nodes.values()
+            if node.state and node.state.health_score < threshold
+        ]
+
     def _load(self) -> None:
         if not self.store_path.exists():
             return
@@ -75,12 +105,17 @@ class TechnologyTwinRepository:
             UUID(item["id"]): TechnologyTwin.from_dict(item)
             for item in payload.get("technology_twins", [])
         }
+        self._health_signals = {}
+        for item in payload.get("health_signals", []):
+            signal = HealthSignal.from_dict(item)
+            self._health_signals.setdefault(signal.technology_id, []).append(signal)
 
     def _persist(self) -> None:
         payload = {
             "technology_twins": [
                 twin.to_dict()
                 for twin in sorted(self._twins.values(), key=lambda item: item.generated_at, reverse=True)
-            ]
+            ],
+            "health_signals": [signal.to_dict() for signal in self.list_health_signals()],
         }
         self.store_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

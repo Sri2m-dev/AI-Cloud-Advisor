@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from core.digital_twin.technology import InfrastructureLayer, InfrastructureResource, TechnologyTwin
+from core.digital_twin.technology import (
+    HealthCalculator,
+    HealthSignal,
+    HealthSignalType,
+    InfrastructureLayer,
+    InfrastructureResource,
+    TechnologyTwin,
+)
 from core.digital_twin.technology.technology_twin import TECHNOLOGY_ENTITY_TYPES
 from core.entities.entity import EnterpriseEntity, EntityRelationship
 from repositories.entity_repository import EntityRepository
@@ -17,6 +24,7 @@ class TechnologyTwinService:
     ):
         self.entity_repository = entity_repository or EntityRepository()
         self.twin_repository = twin_repository or TechnologyTwinRepository()
+        self.health_calculator = HealthCalculator()
 
     def build_technology_twin(self, organization_id: UUID | str, persist: bool = True) -> TechnologyTwin:
         resolved_id = UUID(str(organization_id))
@@ -122,6 +130,65 @@ class TechnologyTwinService:
         layer = self.get_infrastructure_layer(organization_id, technology_id)
         layer.refresh()
         return layer.cost
+
+    def record_health_signal(
+        self,
+        organization_id: UUID | str,
+        technology_id: UUID | str,
+        signal_type: str,
+        value: float,
+        weight: float | None = None,
+        source_system: str = "manual",
+        confidence_score: float = 1.0,
+        metadata: dict | None = None,
+    ) -> HealthSignal:
+        signal = HealthSignal.create(
+            technology_id,
+            signal_type,
+            value,
+            weight=self.health_calculator.policy.weight_for(signal_type) if weight is None else weight,
+            source_system=source_system,
+            confidence_score=confidence_score,
+            metadata=metadata,
+        )
+        self.twin_repository.save_health_signal(signal)
+        self.calculate_technology_health(organization_id, technology_id)
+        return signal
+
+    def calculate_technology_health(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        node = twin.nodes.get(UUID(str(technology_id)))
+        if not node:
+            raise KeyError(f"Technology twin node not found: {technology_id}")
+        signals = self.twin_repository.list_health_signals(technology_id)
+        result = self.health_calculator.apply_to_node(node, signals)
+        twin.refresh()
+        self.twin_repository.save(twin)
+        return result.to_dict()
+
+    def calculate_layer_health(self, organization_id: UUID | str, technology_id: UUID | str) -> float:
+        layer = self.get_infrastructure_layer(organization_id, technology_id)
+        return self.health_calculator.calculate_layer_health(layer)
+
+    def get_health_breakdown(self, organization_id: UUID | str, technology_id: UUID | str) -> dict:
+        return self.calculate_technology_health(organization_id, technology_id)
+
+    def get_degraded_technologies(self, organization_id: UUID | str, threshold: float = 70.0) -> list[dict]:
+        twin = self.get_latest_technology_twin(organization_id) or self.build_technology_twin(organization_id)
+        degraded = []
+        for node in twin.nodes.values():
+            breakdown = self.calculate_technology_health(organization_id, node.technology_id)
+            if breakdown["health_score"] < threshold:
+                degraded.append(
+                    {
+                        "technology_id": str(node.technology_id),
+                        "name": node.name,
+                        "status": breakdown["status"],
+                        "health": breakdown["health_score"],
+                        "issues": breakdown["issues"],
+                    }
+                )
+        return degraded
 
     def _relationship_belongs_to_org(
         self,
