@@ -117,6 +117,38 @@ create table if not exists public.technology_cost_breakdowns (
     calculated_at timestamptz not null default now()
 );
 
+create table if not exists public.technology_risk_signals (
+    id uuid primary key,
+    technology_id uuid not null,
+    risk_type text not null,
+    severity text not null,
+    probability numeric(6,2) not null default 0,
+    impact numeric(6,2) not null default 0,
+    score numeric(6,2) not null default 0,
+    source_system text not null default 'manual',
+    affected_entity text not null default '',
+    mitigation text not null default '',
+    owner text not null default '',
+    status text not null default 'Open',
+    last_observed timestamptz not null default now(),
+    confidence_score numeric(6,4) not null default 1,
+    metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.technology_risk_breakdowns (
+    id uuid primary key default gen_random_uuid(),
+    twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
+    technology_id uuid not null,
+    risk_score numeric(6,2) not null default 0,
+    risk_posture text not null default 'Low',
+    dimensions jsonb not null default '{}'::jsonb,
+    critical_risks jsonb not null default '[]'::jsonb,
+    mitigations jsonb not null default '[]'::jsonb,
+    signals jsonb not null default '[]'::jsonb,
+    policy jsonb not null default '{}'::jsonb,
+    calculated_at timestamptz not null default now()
+);
+
 create table if not exists public.technology_twin_state (
     id uuid primary key,
     twin_id uuid not null references public.technology_digital_twins(id) on delete cascade,
@@ -204,6 +236,12 @@ create index if not exists idx_technology_cost_signals_technology
 
 create index if not exists idx_technology_cost_breakdowns_twin_technology
     on public.technology_cost_breakdowns (twin_id, technology_id, calculated_at desc);
+
+create index if not exists idx_technology_risk_signals_technology
+    on public.technology_risk_signals (technology_id, last_observed desc);
+
+create index if not exists idx_technology_risk_breakdowns_twin_technology
+    on public.technology_risk_breakdowns (twin_id, technology_id, calculated_at desc);
 
 create index if not exists idx_technology_twin_relationships_source
     on public.technology_twin_relationships (twin_id, source_entity_id);

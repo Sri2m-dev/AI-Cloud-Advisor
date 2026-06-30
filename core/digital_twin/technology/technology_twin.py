@@ -149,12 +149,14 @@ class TechnologyTwin:
             },
             "risk": {
                 "risk_score": node.risk,
+                "risk_posture": node.metadata.get("risk_posture", ""),
                 "security_findings": node.metadata.get("security_findings", []),
                 "compliance": node.metadata.get("compliance", ""),
                 "technical_debt": node.metadata.get("technical_debt", ""),
                 "dr_readiness": node.metadata.get("dr_readiness", ""),
                 "patch_status": node.metadata.get("patch_status", ""),
                 "criticality": node.metadata.get("criticality", ""),
+                "breakdown": node.metadata.get("risk_breakdown", {}),
             },
             "operations": {
                 "open_alerts": node.metadata.get("open_alerts", 0),
