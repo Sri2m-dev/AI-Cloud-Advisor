@@ -190,6 +190,92 @@ The framework now exposes common operations:
 
 These stores are intentionally lightweight and in-memory. Future E8 phases can add persistent backing stores, tenant-aware enablement, execution workers, retries, and queue-based scheduling without changing the connector lifecycle contract.
 
+
+## E8.1.3 Connector Orchestration Engine
+
+E8.1.3 introduces the connector execution engine. The goal is to make the runtime, not individual connectors, responsible for the standard execution flow.
+
+### New Runtime Components
+
+- `ConnectorExecutionEngine`
+- `ConnectorExecutionResult`
+- `ConnectorExecutionPipeline`
+- `ConnectorExecutionPolicy`
+- `ConnectorExecutionHooks`
+- `ConnectorExecutionException` hierarchy
+
+### Standard Execution Flow
+
+```text
+Load Connector
+  -> Resolve Secret
+  -> Authenticate
+  -> Discover
+  -> Extract
+  -> Normalize
+  -> Validate
+  -> Publish
+  -> Update Sync State
+  -> Health Snapshot
+  -> Run Log
+```
+
+### Execution Modes
+
+- `FULL_SYNC`
+- `INCREMENTAL_SYNC`
+- `DISCOVERY_ONLY`
+- `VALIDATE_ONLY`
+- `DRY_RUN`
+
+### Lifecycle Hooks
+
+The runtime exposes no-op hooks that future observability, governance, AI reasoning, and notification layers can extend:
+
+- `before_authenticate()`
+- `after_authenticate()`
+- `before_extract()`
+- `after_extract()`
+- `before_publish()`
+- `after_publish()`
+- `on_success()`
+- `on_failure()`
+
+### Error Model
+
+The runtime defines a consistent exception hierarchy:
+
+```text
+ConnectorError
+  -> ConnectorAuthenticationError
+  -> ConnectorDiscoveryError
+  -> ConnectorExtractionError
+  -> ConnectorValidationError
+  -> ConnectorPublishError
+  -> ConnectorRuntimeError
+```
+
+### Observability Output
+
+Every execution produces:
+
+- Execution ID
+- Connector ID
+- Start time
+- End time
+- Duration
+- Execution mode
+- Sync state
+- Extracted record count
+- Normalized record count
+- Published record count
+- Warnings
+- Errors
+- Health status
+- Checkpoint
+
+This data will later feed Connector Operations, platform health, audit history, and enterprise automation.
+
 ## Expected E8.1 Flow
 
 ```text
@@ -225,5 +311,6 @@ Expected result:
 Universal connector contracts compile successfully.
 No new production-grade vendor connector implementation included.
 ```
+
 
 
