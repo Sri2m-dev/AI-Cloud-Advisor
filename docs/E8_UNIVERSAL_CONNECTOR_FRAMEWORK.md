@@ -344,6 +344,78 @@ The `CanonicalPublisher` interface is storage-agnostic. Future implementations c
 
 The `NormalizerRegistry` maps provider/source payloads to reusable canonical normalizers. Multiple providers can share the same normalizer when their target canonical model is equivalent.
 
+
+## E8.1.5 Data Fabric Publisher and Persistence Layer
+
+E8.1.5 introduces a persistence layer for canonical records. This still does not implement production vendor connectors; it defines the storage-agnostic persistence pipeline that connector output will use.
+
+### Package Structure
+
+```text
+connector_persistence/
+    __init__.py
+    repository.py
+    publisher.py
+    transaction.py
+    batch.py
+    deduplication.py
+    metadata.py
+    adapters/
+        __init__.py
+        memory.py
+        supabase.py
+```
+
+### Core Responsibilities
+
+- Save and upsert canonical records
+- Batch canonical record persistence
+- Detect duplicate records
+- Track persistence metadata and lineage
+- Support transaction lifecycle contracts
+- Bridge `CanonicalPublisher` to repository-backed persistence
+- Provide memory and Supabase adapter seams
+
+### Canonical Repository Operations
+
+- `save()`
+- `save_batch()`
+- `upsert()`
+- `exists()`
+- `delete()`
+- `find()`
+- `list_records()`
+
+### Deduplication Strategies
+
+- Primary key
+- Natural key
+- Hash
+- External ID
+- Composite key
+
+### Persistence Metadata
+
+Persistence metadata tracks:
+
+- Connector
+- Provider
+- Sync time
+- Batch ID
+- Correlation ID
+- Source system
+- Version
+- Schema version
+
+### Adapter Strategy
+
+The first adapters are:
+
+- `MemoryCanonicalRepository` for smoke tests and local validation
+- `SupabaseCanonicalRepository` as the future E8.2 Data Fabric seam
+
+Future adapters can target PostgreSQL, Kafka, Azure Event Hub, AWS Kinesis, Parquet, Iceberg, Delta Lake, or other enterprise data platforms.
+
 ## Expected E8.1 Flow
 
 ```text
@@ -379,6 +451,7 @@ Expected result:
 Universal connector contracts compile successfully.
 No new production-grade vendor connector implementation included.
 ```
+
 
 
 
