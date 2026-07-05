@@ -36,3 +36,14 @@ class ConnectorScheduler:
 
     def disable(self, schedule: ConnectorSchedule) -> ConnectorSchedule:
         return ConnectorSchedule(**{**schedule.__dict__, "enabled": False})
+
+# E8.1.7 orchestration scheduler exports.
+from connector_orchestration.scheduler import OrchestrationSchedule, OrchestrationScheduler, ScheduleType
+
+__all__ = [
+    "ConnectorSchedule",
+    "ConnectorScheduler",
+    "OrchestrationSchedule",
+    "OrchestrationScheduler",
+    "ScheduleType",
+]

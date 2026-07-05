@@ -474,6 +474,50 @@ Resolve Secret Reference
 
 The token cache is in-memory, expiration-aware, and thread-safe. It is intentionally provider-independent so future OAuth, cloud, and enterprise identity providers can share the same cache contract.
 
+
+## E8.1.7 Scheduling, Triggering, and Connector Orchestration
+
+E8.1.7 adds the operational orchestration layer that controls when and how connectors run.
+
+### Package Structure
+
+```text
+connector_orchestration/
+    __init__.py
+    scheduler.py
+    trigger.py
+    workflow.py
+    dependency.py
+    retry.py
+    queue.py
+    coordinator.py
+```
+
+### Core Capabilities
+
+- Manual, scheduled, webhook, API, dependency-complete, startup, event, and on-demand triggers
+- Workflow steps with dependencies
+- Dependency manager for prerequisite completion
+- Queue states: waiting, running, completed, failed, cancelled, retrying
+- Retry strategies: immediate, linear, exponential backoff, circuit breaker
+- Coordinator as a single orchestration entry point
+
+### Standard Operational Flow
+
+```text
+Trigger
+  -> Queue
+  -> Dependency Check
+  -> Coordinator
+  -> Execution Engine
+  -> Runtime State
+  -> Health Snapshot
+  -> Run Log
+  -> Retry or Complete
+```
+
+This keeps scheduling and orchestration concerns in the platform instead of inside provider-specific connectors.
+
 ## Expected E8.1 Flow
 
 ```text
@@ -509,6 +553,7 @@ Expected result:
 Universal connector contracts compile successfully.
 No new production-grade vendor connector implementation included.
 ```
+
 
 
 
