@@ -276,6 +276,74 @@ Every execution produces:
 
 This data will later feed Connector Operations, platform health, audit history, and enterprise automation.
 
+
+## E8.1.4 Connector Normalization Framework
+
+E8.1.4 introduces the canonical enterprise normalization layer. Vendor connectors should not publish provider-specific payloads directly to downstream intelligence systems. They should normalize into canonical enterprise records first.
+
+### Package Structure
+
+```text
+connector_normalization/
+    __init__.py
+    canonical_models.py
+    normalizer.py
+    registry.py
+    validation.py
+    publisher.py
+```
+
+### Canonical Enterprise Models
+
+The normalization layer defines canonical records for:
+
+- Cloud resources
+- Applications
+- Technologies
+- Business services
+- Business capabilities
+- Business units
+- Identities
+- Vendors
+- Cost records
+- Recommendations
+- Risks
+- Incidents
+- Changes
+- Licenses
+- Contracts
+
+### Normalization Flow
+
+```text
+Extract Raw Data
+  -> Normalize
+  -> Canonical Enterprise Record
+  -> Validate
+  -> Publish
+```
+
+### Validation Rules
+
+The first validation layer checks:
+
+- Required fields
+- Identifier uniqueness
+- Timestamp validity
+- Currency normalization
+- Tag normalization
+- Provider metadata presence
+
+Validation failures are standardized so they can later feed connector health, audit, and operations dashboards.
+
+### Publisher Abstraction
+
+The `CanonicalPublisher` interface is storage-agnostic. Future implementations can target Supabase, PostgreSQL, Kafka, Azure Event Hub, AWS Kinesis, files, or a data lake without changing connector normalization contracts.
+
+### Normalizer Registry
+
+The `NormalizerRegistry` maps provider/source payloads to reusable canonical normalizers. Multiple providers can share the same normalizer when their target canonical model is equivalent.
+
 ## Expected E8.1 Flow
 
 ```text
@@ -311,6 +379,7 @@ Expected result:
 Universal connector contracts compile successfully.
 No new production-grade vendor connector implementation included.
 ```
+
 
 
 
