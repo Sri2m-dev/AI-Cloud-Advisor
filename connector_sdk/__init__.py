@@ -6,6 +6,7 @@ from connector_sdk.models import (
     ConnectorHealthStatus,
     ConnectorMetadata,
     ConnectorRecord,
+    ConnectorRuntimeContext,
     ConnectorSyncResult,
     ConnectorSyncState,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "ConnectorHealthStatus",
     "ConnectorMetadata",
     "ConnectorRecord",
+    "ConnectorRuntimeContext",
     "ConnectorSyncResult",
     "ConnectorSyncState",
 ]

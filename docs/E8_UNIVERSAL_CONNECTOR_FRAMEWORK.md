@@ -154,6 +154,42 @@ Secret provider abstraction. The initial local provider resolves environment var
 
 Audit/event contract for connector execution events. Future releases can route this to a database, observability stack, or audit ledger.
 
+
+## E8.1.2 Runtime Foundation
+
+E8.1.2 adds the first runtime foundation around the connector SDK. These are still in-memory contracts and do not introduce production vendor connectors.
+
+### Runtime Contracts
+
+- `ConnectorRegistry`
+- `RegisteredConnector`
+- `ConnectorSyncStateStore`
+- `ConnectorRunLog`
+- `ConnectorHealthStore`
+- `ConnectorSecretReference`
+- `ConnectorSchedule`
+- `ConnectorRuntimeContext`
+
+### Runtime Capabilities
+
+The framework now exposes common operations:
+
+- `register_connector()`
+- `get_connector()`
+- `list_connectors()`
+- `enable_connector()`
+- `disable_connector()`
+- `record_sync_state()`
+- `get_sync_state()`
+- `record_run_log()`
+- `list_run_logs()`
+- `record_health_snapshot()`
+- `get_latest_health()`
+
+### Runtime Scope
+
+These stores are intentionally lightweight and in-memory. Future E8 phases can add persistent backing stores, tenant-aware enablement, execution workers, retries, and queue-based scheduling without changing the connector lifecycle contract.
+
 ## Expected E8.1 Flow
 
 ```text
@@ -189,4 +225,5 @@ Expected result:
 Universal connector contracts compile successfully.
 No new production-grade vendor connector implementation included.
 ```
+
 

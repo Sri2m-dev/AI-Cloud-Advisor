@@ -11,6 +11,7 @@ from connector_sdk.models import (
     ConnectorHealthStatus,
     ConnectorMetadata,
     ConnectorRecord,
+    ConnectorRuntimeContext,
     ConnectorSyncResult,
     ConnectorSyncState,
 )
@@ -30,8 +31,13 @@ class BaseConnector(ABC):
 
     metadata: ConnectorMetadata
 
-    def __init__(self, auth_config: ConnectorAuthConfig | None = None) -> None:
+    def __init__(
+        self,
+        auth_config: ConnectorAuthConfig | None = None,
+        runtime_context: ConnectorRuntimeContext | None = None,
+    ) -> None:
         self.auth_config = auth_config
+        self.runtime_context = runtime_context or ConnectorRuntimeContext()
 
     @abstractmethod
     def authenticate(self) -> bool:
@@ -125,4 +131,11 @@ class BaseConnector(ABC):
             errors=tuple(errors),
             warnings=tuple(warnings),
             checkpoint=checkpoint,
+            metadata={
+                "incremental": incremental,
+                "organization_id": self.runtime_context.organization_id,
+                "correlation_id": self.runtime_context.correlation_id,
+                "run_id": self.runtime_context.run_id,
+                "dry_run": self.runtime_context.dry_run,
+            },
         )

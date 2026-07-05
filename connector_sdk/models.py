@@ -54,6 +54,19 @@ class ConnectorAuthConfig:
 
 
 @dataclass(frozen=True)
+class ConnectorRuntimeContext:
+    """Execution context passed to connector runtime components."""
+
+    organization_id: str | None = None
+    environment: str = "development"
+    requested_by: str | None = None
+    correlation_id: str | None = None
+    run_id: str | None = None
+    dry_run: bool = False
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ConnectorRecord:
     """Canonical raw-to-normalized connector record envelope."""
 
