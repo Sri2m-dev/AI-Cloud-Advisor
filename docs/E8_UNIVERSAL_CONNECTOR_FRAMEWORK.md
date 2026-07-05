@@ -416,6 +416,64 @@ The first adapters are:
 
 Future adapters can target PostgreSQL, Kafka, Azure Event Hub, AWS Kinesis, Parquet, Iceberg, Delta Lake, or other enterprise data platforms.
 
+
+## E8.1.6 Authentication and Secret Management Framework
+
+E8.1.6 introduces a provider-agnostic authentication layer. Connectors should declare what authentication they require; the authentication framework resolves and validates credentials, acquires an auth context, and caches tokens when appropriate.
+
+### Package Structure
+
+```text
+connector_auth/
+    __init__.py
+    auth_manager.py
+    providers.py
+    credentials.py
+    token_cache.py
+    oauth.py
+    api_key.py
+    access_key.py
+    certificate.py
+    validator.py
+```
+
+### Supported Authentication Types
+
+- AWS Access Key
+- AWS Assume Role
+- Azure Service Principal
+- Azure Managed Identity
+- OAuth2 Client Credentials
+- OAuth2 Authorization Code
+- API Key
+- Bearer Token
+- Basic Authentication
+- Certificate Authentication
+- Anonymous Authentication for tests
+
+### Initial Secret Providers
+
+- Environment variables
+- In-memory provider
+- Local key/value configuration provider
+
+Future providers can support AWS Secrets Manager, Azure Key Vault, HashiCorp Vault, Google Secret Manager, Kubernetes Secrets, and other enterprise secret stores.
+
+### Authentication Flow
+
+```text
+Resolve Secret Reference
+  -> Load Credentials
+  -> Validate
+  -> Acquire Token or Auth Context
+  -> Cache Token
+  -> Return Auth Context
+```
+
+### Token Cache
+
+The token cache is in-memory, expiration-aware, and thread-safe. It is intentionally provider-independent so future OAuth, cloud, and enterprise identity providers can share the same cache contract.
+
 ## Expected E8.1 Flow
 
 ```text
@@ -451,6 +509,7 @@ Expected result:
 Universal connector contracts compile successfully.
 No new production-grade vendor connector implementation included.
 ```
+
 
 
 
