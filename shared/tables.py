@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from shared.streamlit_compat import dataframe
 from shared.styles import apply_enterprise_styles
 
 
@@ -35,7 +36,7 @@ def data_table(
         st.info(empty_message)
         return
 
-    st.dataframe(df, use_container_width=True, hide_index=True, height=height)
+    dataframe(df, hide_index=True, height=height)
     if caption:
         st.caption(caption)
 
@@ -63,7 +64,7 @@ def recommendation_table(
     if rename_columns:
         df = df.rename(columns=rename_columns)
 
-    st.dataframe(df, use_container_width=True, hide_index=True, height=height)
+    dataframe(df, hide_index=True, height=height)
     if caption:
         st.caption(caption)
 

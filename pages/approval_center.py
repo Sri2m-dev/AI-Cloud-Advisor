@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -27,6 +26,9 @@ from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 
 from services.approval_service import (
     ApprovalService
+)
+from services.approval_center_certification_service import (
+    ApprovalCenterCertificationService,
 )
 
 configure_page(
@@ -55,28 +57,9 @@ render_enterprise_sidebar(
 current_role = st.session_state.get("role", "").lower()
 is_ceo_view = current_role == "executive"
 
-APPROVAL_COLUMNS = [
-    "id",
-    "request_type",
-    "title",
-    "description",
-    "status",
-    "priority",
-    "workflow_stage",
-    "current_approver_role",
-    "workflow_status",
-    "created_at",
-]
-
-
 def approval_table(rows):
     df = pd.DataFrame(rows)
-
-    visible_columns = [
-        column
-        for column in APPROVAL_COLUMNS
-        if column in df.columns
-    ]
+    visible_columns = ApprovalCenterCertificationService.visible_columns(rows)
 
     return df[visible_columns]
 
@@ -101,31 +84,6 @@ def render_workflow_timeline(history_rows):
         if index < len(history_rows) - 1:
             st.markdown("↓")
 
-def count_due_today(approvals):
-    today = datetime.utcnow().date()
-    due_today = 0
-
-    for approval in approvals:
-        if str(approval.get("status", "")).upper() != "PENDING":
-            continue
-
-        due_date = approval.get("due_date")
-        if not due_date:
-            continue
-
-        try:
-            due_dt = datetime.fromisoformat(
-                str(due_date).replace("Z", "+00:00")
-            )
-        except Exception:
-            continue
-
-        if due_dt.date() == today:
-            due_today += 1
-
-    return due_today
-
-
 def render_approval_content():
     # --------------------------------------------------
     # KPI SECTION
@@ -142,14 +100,43 @@ def render_approval_content():
     )
     sla = ApprovalService.get_sla_metrics()
     approval_register = ApprovalService.get_all_approvals()
+    pending = (
+        ApprovalService
+        .get_pending_approvals(current_role)
+    )
 
-    overdue_count = len(overdue_approvals)
-    due_today_count = count_due_today(approval_register)
+    certification = ApprovalCenterCertificationService.get_dashboard(
+        metrics=metrics,
+        stage_metrics=stage_metrics,
+        overdue_approvals=overdue_approvals,
+        sla=sla,
+        approval_register=approval_register,
+        pending=pending,
+        current_role=current_role,
+    )
+
+    overdue_count = certification["overdue_count"]
+    due_today_count = certification["due_today_count"]
+    evidence = certification["evidence"]
+
+    render_section(
+        "Executive Summary",
+        "Approval posture, SLA health, and executive decision readiness.",
+        divider=False,
+    )
+
+    render_insight_card(
+        title="Executive Summary",
+        value="Approval Governance",
+        description=certification["executive_summary"],
+        icon="executive",
+        status="warning" if overdue_count else "healthy",
+    )
 
     render_section(
         "Approval Overview",
         "Decision queue status across pending, approved, rejected, and total approval requests.",
-        divider=False,
+        divider=True,
     )
 
     metric_columns = st.columns(4)
@@ -244,11 +231,6 @@ def render_approval_content():
         "Pending Approvals",
         "Approval requests awaiting action for the current role.",
         divider=True,
-    )
-
-    pending = (
-        ApprovalService
-        .get_pending_approvals(current_role)
     )
 
     if pending:
@@ -412,6 +394,39 @@ def render_approval_content():
         ),
         status="warning" if overdue_count else "healthy",
     )
+
+    render_section(
+        "Evidence",
+        "Source data, coverage, AI interpretation, and raw evidence supporting Approval Center.",
+        divider=True,
+    )
+
+    evidence_tabs = st.tabs([
+        "Source Data",
+        "Data Coverage",
+        "AI Interpretation",
+        "Raw Evidence",
+    ])
+
+    with evidence_tabs[0]:
+        st.dataframe(pd.DataFrame(evidence["source_data"]), use_container_width=True, hide_index=True)
+    with evidence_tabs[1]:
+        st.dataframe(pd.DataFrame(evidence["data_coverage"]), use_container_width=True, hide_index=True)
+    with evidence_tabs[2]:
+        st.write(evidence["ai_interpretation"])
+    with evidence_tabs[3]:
+        st.caption("Approval Metrics")
+        st.dataframe(
+            pd.DataFrame(evidence["raw_evidence"]["Approval Metrics"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Workflow Stages")
+        st.dataframe(
+            pd.DataFrame(evidence["raw_evidence"]["Workflow Stages"]),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 render_page(

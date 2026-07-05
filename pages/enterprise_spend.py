@@ -18,61 +18,7 @@ from components.cards import render_insight_card, render_kpi_card, render_metric
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
-from services.supabase_client import supabase
-
-
-def fetch_rows(table_name):
-    try:
-        response = (
-            supabase
-            .table(table_name)
-            .select("*")
-            .execute()
-        )
-        return response.data or []
-    except Exception:
-        return []
-
-
-def fetch_one(table_name):
-    rows = fetch_rows(table_name)
-    return rows[0] if rows else {}
-
-
-def numeric_total(df, columns):
-    for column in columns:
-        if column in df.columns:
-            return float(
-                pd.to_numeric(
-                    df[column],
-                    errors="coerce"
-                ).fillna(0).sum()
-            )
-    return 0.0
-
-
-def spend_value(row, new_key, old_key):
-    return float(
-        row.get(
-            new_key,
-            row.get(old_key, 0)
-        )
-        or 0
-    )
-
-
-def format_signed_currency(value):
-    sign = "+" if value >= 0 else "-"
-    return f"{sign}${abs(value):,.0f}"
-
-
-def format_compact_currency(value):
-    abs_value = abs(value)
-    if abs_value >= 1_000_000:
-        return f"${value / 1_000_000:.1f}M"
-    if abs_value >= 1_000:
-        return f"${value / 1_000:.1f}K"
-    return f"${value:,.0f}"
+from services.enterprise_spend_certification_service import EnterpriseSpendCertificationService
 
 
 configure_page(
@@ -101,151 +47,95 @@ current_role = st.session_state.get("role", "").lower()
 is_ceo_view = current_role == "executive"
 
 # Enterprise Spend uses global mart snapshots in the current data model.
-breakdown = fetch_one("mart_enterprise_spend_v2")
-forecast_df = pd.DataFrame(fetch_rows("mart_enterprise_forecast"))
-cost_df = pd.DataFrame(fetch_rows("unified_cloud_costs"))
-budget_df = pd.DataFrame(fetch_rows("mart_budget_vs_actual"))
-recommendations_df = pd.DataFrame(fetch_rows("recommendations"))
+dashboard = EnterpriseSpendCertificationService.get_dashboard()
+metrics = dashboard["metrics"]
+dataframes = dashboard["dataframes"]
+financial_model = dashboard["financial_model"]
+reconciliation = dashboard["reconciliation"]
+reconciliation_cards = dashboard["reconciliation_cards"]
+evidence = dashboard["evidence"]
+format_signed_currency = EnterpriseSpendCertificationService.format_signed_currency
+format_compact_currency = EnterpriseSpendCertificationService.format_compact_currency
 
-cloud_cost = spend_value(breakdown, "cloud_spend", "cloud_cost")
-saas_cost = spend_value(breakdown, "saas_spend", "saas_cost")
-msp_cost = spend_value(breakdown, "msp_spend", "msp_cost")
-license_cost = spend_value(breakdown, "license_spend", "license_cost")
+forecast_df = dataframes["forecast"]
+cost_df = dataframes["cost"]
+spend_mix_df = dataframes["spend_mix"]
+risk_summary_df = dataframes["risk_summary"]
 
-total_spend = cloud_cost + saas_cost + msp_cost + license_cost
-
-forecast_total = numeric_total(
-    forecast_df,
-    [
-        "projected_monthly_spend",
-        "forecast_spend",
-        "forecast_cost",
-        "amount",
-    ]
-)
-
-budget_total = numeric_total(
-    budget_df,
-    [
-        "budget",
-        "budget_amount",
-        "planned_cost",
-    ]
-)
-
-actual_total = numeric_total(
-    budget_df,
-    [
-        "actual",
-        "actual_cost",
-        "total_cost",
-        "cost",
-    ]
-)
-
-budget_variance = budget_total - actual_total
-current_run_rate = actual_total or total_spend
-
-savings_realized = 0.0
-savings_opportunity = 0.0
-if not recommendations_df.empty and "estimated_savings" in recommendations_df.columns:
-    statuses = (
-        recommendations_df.get("status", pd.Series(dtype="object"))
-        .fillna("")
-        .astype(str)
-        .str.upper()
-    )
-    savings = pd.to_numeric(
-        recommendations_df["estimated_savings"],
-        errors="coerce"
-    ).fillna(0)
-    savings_realized = float(
-        savings[
-            statuses.isin([
-                "APPROVED",
-                "IMPLEMENTED",
-                "COMPLETED",
-                "RESOLVED",
-            ])
-        ].sum()
-    )
-    savings_opportunity = float(
-        savings[
-            ~statuses.isin([
-                "APPROVED",
-                "IMPLEMENTED",
-                "COMPLETED",
-                "RESOLVED",
-            ])
-        ].sum()
-    )
-
-if not savings_opportunity:
-    savings_opportunity = 18_500.0
-
-forecast_growth = 12.0
-if not forecast_df.empty:
-    growth_column = next(
-        (
-            column
-            for column in [
-                "forecast_growth",
-                "growth_percent",
-                "growth_pct",
-            ]
-            if column in forecast_df.columns
-        ),
-        None,
-    )
-    if growth_column:
-        forecast_growth = float(
-            pd.to_numeric(
-                forecast_df[growth_column],
-                errors="coerce",
-            ).dropna().mean()
-            or forecast_growth
-        )
-
-cloud_optimization_opportunity = 12_000.0
-saas_waste = 1_800.0
-license_waste = 4_700.0
-contract_renewals_at_risk = 63_000.0
-
-spend_mix_df = pd.DataFrame(
-    [
-        {"category": "Cloud", "cost": cloud_cost},
-        {"category": "SaaS", "cost": saas_cost},
-        {"category": "Managed Services", "cost": msp_cost},
-        {"category": "Licenses", "cost": license_cost},
-    ]
-)
-
-risk_summary_df = pd.DataFrame(
-    [
-        {
-            "Risk Area": "Cloud Optimization Opportunity",
-            "Amount": f"${cloud_optimization_opportunity:,.0f}",
-        },
-        {
-            "Risk Area": "SaaS Waste",
-            "Amount": f"${saas_waste:,.0f}",
-        },
-        {
-            "Risk Area": "License Waste",
-            "Amount": f"${license_waste:,.0f}",
-        },
-        {
-            "Risk Area": "Contract Renewals at Risk",
-            "Amount": f"${contract_renewals_at_risk:,.0f}",
-        },
-    ]
-)
+cloud_cost = metrics["cloud_cost"]
+saas_cost = metrics["saas_cost"]
+msp_cost = metrics["msp_cost"]
+license_cost = metrics["license_cost"]
+total_spend = metrics["total_spend"]
+forecast_total = metrics["forecast_total"]
+budget_total = metrics["budget_total"]
+actual_total = metrics["actual_total"]
+budget_variance = metrics["budget_variance"]
+current_run_rate = metrics["current_run_rate"]
+savings_realized = metrics["savings_realized"]
+savings_opportunity = metrics["savings_opportunity"]
+forecast_growth = metrics["forecast_growth"]
+cloud_optimization_opportunity = metrics["cloud_optimization_opportunity"]
+saas_waste = metrics["saas_waste"]
+license_waste = metrics["license_waste"]
+contract_renewals_at_risk = metrics["contract_renewals_at_risk"]
 
 def render_spend_content():
     render_section(
+        "Executive Summary",
+        "Executive view of enterprise spend, allocation confidence, and optimization opportunity.",
+        divider=False,
+    )
+
+    render_insight_card(
+        "Executive Summary",
+        "Enterprise Spend",
+        description=dashboard["executive_summary"],
+        icon="executive",
+        status="warning" if reconciliation.get("status") == "Variance Detected" else "info",
+    )
+
+    render_section(
+        "Data Reconciliation Status",
+        "Canonical financial model status for enterprise spend reporting.",
+        divider=True,
+    )
+
+    r1, r2, r3, r4 = st.columns(4)
+    with r1:
+        render_insight_card(
+            "Reconciliation Status",
+            reconciliation_cards["status"],
+            subtitle="Enterprise Financial Model",
+            icon="governance",
+            status="warning" if reconciliation_cards["status"] == "Variance Detected" else "healthy",
+        )
+    with r2:
+        render_metric_card(
+            "Allocation Coverage",
+            reconciliation_cards["allocation_coverage_display"],
+            icon="finance",
+            status="healthy" if reconciliation_cards["allocation_coverage"] >= 90 else "warning",
+        )
+    with r3:
+        render_kpi_card(
+            "Allocated Spend",
+            format_compact_currency(financial_model.get("allocated_spend")),
+            icon="cost",
+            status="healthy",
+        )
+    with r4:
+        render_risk_card(
+            "Unallocated Spend",
+            format_compact_currency(financial_model.get("unallocated_spend")),
+            icon="risk",
+            status="warning" if reconciliation_cards["unallocated_spend"] else "healthy",
+        )
+
+    render_section(
         "Spend Overview",
         "Enterprise technology spend across Cloud, SaaS, MSP, and Licenses.",
-        divider=False,
+        divider=True,
     )
 
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -449,6 +339,42 @@ def render_spend_content():
 
         st.dataframe(
             spend_mix_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    render_section(
+        "Evidence",
+        "Source data, coverage, financial reconciliation, AI interpretation, and raw evidence supporting Enterprise Spend.",
+        divider=True,
+    )
+
+    evidence_tabs = st.tabs([
+        "Source Data",
+        "Data Coverage",
+        "Financial Reconciliation",
+        "AI Interpretation",
+        "Raw Evidence",
+    ])
+
+    with evidence_tabs[0]:
+        st.dataframe(pd.DataFrame(evidence["source_data"]), use_container_width=True, hide_index=True)
+    with evidence_tabs[1]:
+        st.dataframe(pd.DataFrame(evidence["data_coverage"]), use_container_width=True, hide_index=True)
+    with evidence_tabs[2]:
+        st.dataframe(pd.DataFrame(evidence["financial_reconciliation"]), use_container_width=True, hide_index=True)
+    with evidence_tabs[3]:
+        st.write(evidence["ai_interpretation"])
+    with evidence_tabs[4]:
+        st.caption("Financial Model")
+        st.dataframe(
+            pd.DataFrame(evidence["raw_evidence"]["Financial Model"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Fallback Risk Signals")
+        st.dataframe(
+            pd.DataFrame(evidence["raw_evidence"]["Fallback Risk Signals"]),
             use_container_width=True,
             hide_index=True,
         )

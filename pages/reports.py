@@ -20,14 +20,9 @@ from shared.session import init_session
 from shared.styles import configure_page
 from shared.auth import require_role
 from components.cards import render_insight_card, render_metric_card
-from components.layout import render_footer, render_page, render_section, render_status_badge
+from components.layout import render_page, render_section, render_status_badge
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
-from backend.services.report_service import (
-    build_report_pdf,
-    list_report_schedules,
-    save_report_schedule,
-)
 from services import audit_service
 
 from services.reporting_service import (
@@ -37,7 +32,42 @@ from services.reporting_service import (
     get_saas_summary,
     get_report_history,
 )
+from services.reports_certification_service import ReportsCertificationService
 from services.supabase_client import supabase
+
+
+def get_report_backend():
+    try:
+        from backend.services.report_service import (
+            build_report_pdf,
+            list_report_schedules,
+            save_report_schedule,
+        )
+
+        return {
+            "available": True,
+            "build_report_pdf": build_report_pdf,
+            "list_report_schedules": list_report_schedules,
+            "save_report_schedule": save_report_schedule,
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "available": False,
+            "build_report_pdf": None,
+            "list_report_schedules": None,
+            "save_report_schedule": None,
+            "error": str(exc),
+        }
+
+
+def report_backend_warning(action, error):
+    st.warning(
+        f"Report {action} is unavailable in this environment. "
+        "The Reports page remains available, but PDF and schedule actions require the report backend configuration."
+    )
+    if error:
+        st.caption(f"Backend detail: {error}")
 
 
 def format_currency(value):
@@ -83,6 +113,11 @@ def calculate_next_run(frequency):
 
 
 def log_report_request(report_name):
+    report_backend = get_report_backend()
+    if not report_backend["available"]:
+        report_backend_warning("generation", report_backend["error"])
+        return False
+
     org_id = st.session_state.get("organization_id")
     requested_by = (
         st.session_state.get("user")
@@ -120,7 +155,7 @@ def log_report_request(report_name):
     try:
         supabase.table("report_history").insert(payload).execute()
 
-        pdf_bytes = build_report_pdf(
+        pdf_bytes = report_backend["build_report_pdf"](
             report_name=report_name,
             tenant_id=org_id,
             requested_by=requested_by,
@@ -160,6 +195,56 @@ def log_report_request(report_name):
             pass
 
         return False
+
+
+report_data_freshness = ReportsCertificationService.report_data_freshness
+scheduled_indicator = ReportsCertificationService.scheduled_indicator
+report_coverage_label = ReportsCertificationService.report_coverage_label
+
+
+def get_report_schedule_rows(org_id):
+    if not org_id:
+        return []
+
+    report_backend = get_report_backend()
+    if not report_backend["available"]:
+        return []
+
+    try:
+        return report_backend["list_report_schedules"](org_id)
+    except Exception:
+        return []
+
+
+def save_report_schedule_safe(
+    tenant_id,
+    report_type,
+    frequency,
+    recipient,
+    active,
+    next_run,
+):
+    report_backend = get_report_backend()
+    if not report_backend["available"]:
+        return {
+            "saved": False,
+            "error": report_backend["error"] or "Report backend is unavailable.",
+        }
+
+    try:
+        return report_backend["save_report_schedule"](
+            tenant_id=tenant_id,
+            report_type=report_type,
+            frequency=frequency,
+            recipient=recipient,
+            active=active,
+            next_run=next_run,
+        )
+    except Exception as exc:
+        return {
+            "saved": False,
+            "error": str(exc),
+        }
 
 
 def get_enterprise_spend_breakdown():
@@ -208,7 +293,7 @@ def report_card(title, items, button_label, key):
         render_insight_card(
             title=title,
             value=button_label.replace("Generate ", ""),
-            description="Report package",
+            description=report_coverage_label(title),
             icon="intelligence",
             status="ready",
         )
@@ -219,6 +304,12 @@ def report_card(title, items, button_label, key):
                 icon="reports",
                 status="info",
             )
+
+        metadata_cols = st.columns(2)
+        metadata_cols[0].caption(f"Last Generated: {last_generated_for(title, report_history_all)}")
+        metadata_cols[1].caption(f"Delivery: {scheduled_indicator(title, schedule_rows)}")
+        st.caption(f"Data Freshness: {report_data_freshness()}")
+        st.caption("Export Format: PDF")
 
         if st.button(
             button_label,
@@ -241,13 +332,16 @@ def last_generated_for(report_name, rows):
     return "Not generated"
 
 
-def render_report_catalog_card(report_name, audience, purpose, frequency, last_generated, button_key):
+def render_report_catalog_card(report_name, audience, purpose, frequency, last_generated, button_key, schedule_rows, backend_report_name=None):
     safe_report_name = str(report_name)
+    generation_name = str(backend_report_name or report_name)
+    delivery_mode = scheduled_indicator(generation_name, schedule_rows)
+    coverage = report_coverage_label(safe_report_name)
     with st.container():
         st.markdown(
             f"""
             <div class="nexora-card" style="
-                min-height: 178px;
+                min-height: 238px;
                 padding: 1rem;
                 margin-bottom: 0.5rem;
             ">
@@ -257,8 +351,12 @@ def render_report_catalog_card(report_name, audience, purpose, frequency, last_g
                 <div style="display:grid;gap:0.35rem;font-size:0.9rem;color:var(--nexora-text-muted);">
                     <div><strong style="color:var(--nexora-text);">Audience:</strong> {audience}</div>
                     <div><strong style="color:var(--nexora-text);">Purpose:</strong> {purpose}</div>
+                    <div><strong style="color:var(--nexora-text);">Coverage:</strong> {coverage}</div>
                     <div><strong style="color:var(--nexora-text);">Frequency:</strong> {frequency}</div>
                     <div><strong style="color:var(--nexora-text);">Last Generated:</strong> {last_generated}</div>
+                    <div><strong style="color:var(--nexora-text);">Data Freshness:</strong> {report_data_freshness()}</div>
+                    <div><strong style="color:var(--nexora-text);">Export Format:</strong> PDF</div>
+                    <div><strong style="color:var(--nexora-text);">Delivery:</strong> {delivery_mode}</div>
                 </div>
             </div>
             """,
@@ -269,7 +367,7 @@ def render_report_catalog_card(report_name, audience, purpose, frequency, last_g
             key=button_key,
             use_container_width=True,
         ):
-            saved = log_report_request(safe_report_name)
+            saved = log_report_request(generation_name)
 
             if saved:
                 st.success(f"{safe_report_name} generated successfully.")
@@ -278,13 +376,16 @@ def render_report_catalog_card(report_name, audience, purpose, frequency, last_g
                 st.error(f"{safe_report_name} generation could not be queued.")
 
 
-def render_simple_report_catalog_card(report_name, description, last_generated, button_key):
+def render_simple_report_catalog_card(report_name, description, last_generated, button_key, schedule_rows, backend_report_name=None):
     safe_report_name = str(report_name)
+    generation_name = str(backend_report_name or report_name)
+    delivery_mode = scheduled_indicator(generation_name, schedule_rows)
+    coverage = report_coverage_label(safe_report_name)
     with st.container():
         st.markdown(
             f"""
             <div class="nexora-card" style="
-                min-height: 150px;
+                min-height: 220px;
                 padding: 1rem;
                 margin-bottom: 0.5rem;
             ">
@@ -297,6 +398,18 @@ def render_simple_report_catalog_card(report_name, description, last_generated, 
                 <div style="font-size:0.88rem;color:var(--nexora-text-muted);">
                     <strong style="color:var(--nexora-text);">Last Generated:</strong> {last_generated}
                 </div>
+                <div style="font-size:0.88rem;color:var(--nexora-text-muted);">
+                    <strong style="color:var(--nexora-text);">Coverage:</strong> {coverage}
+                </div>
+                <div style="font-size:0.88rem;color:var(--nexora-text-muted);">
+                    <strong style="color:var(--nexora-text);">Data Freshness:</strong> {report_data_freshness()}
+                </div>
+                <div style="font-size:0.88rem;color:var(--nexora-text-muted);">
+                    <strong style="color:var(--nexora-text);">Export Format:</strong> PDF
+                </div>
+                <div style="font-size:0.88rem;color:var(--nexora-text-muted);">
+                    <strong style="color:var(--nexora-text);">Delivery:</strong> {delivery_mode}
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -306,7 +419,7 @@ def render_simple_report_catalog_card(report_name, description, last_generated, 
             key=button_key,
             use_container_width=True,
         ):
-            saved = log_report_request(safe_report_name)
+            saved = log_report_request(generation_name)
 
             if saved:
                 st.success(f"{safe_report_name} generated successfully.")
@@ -318,6 +431,7 @@ def render_simple_report_catalog_card(report_name, description, last_generated, 
 configure_page(
     page_title="Executive Reports Center",
     page_icon=":bar_chart:",
+    layout="wide",
 )
 
 init_session()
@@ -346,8 +460,6 @@ render_page(
     show_footer=False,
 )
 
-st.markdown("<main class='nexora-page-shell'>", unsafe_allow_html=True)
-
 summary = get_executive_summary()
 recommendations = get_recommendation_summary()
 approvals = get_approval_summary()
@@ -358,6 +470,8 @@ forecast_total = get_enterprise_forecast_total()
 current_role = st.session_state.get("role", "").lower()
 org_id = st.session_state.get("organization_id")
 report_history_all = get_report_history()
+report_backend_status = get_report_backend()
+schedule_rows = get_report_schedule_rows(org_id)
 
 approved_recommendations = (
     recommendations.get("APPROVED", 0)
@@ -382,34 +496,102 @@ pending_approvals = (
     + approvals.get("pending", 0)
 )
 
+generated_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "generated")
+failed_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "failed")
+queued_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "queued")
+scheduled_count = len(schedule_rows)
+
+certification = ReportsCertificationService.get_dashboard(
+    report_history=report_history_all,
+    schedule_rows=schedule_rows,
+    backend_status=report_backend_status,
+    current_role=current_role,
+)
+reporting_health = certification["health"]
+evidence = certification["evidence"]
+
+render_section(
+    "Executive Summary",
+    "Reporting posture, export readiness, latest activity, and data freshness.",
+    divider=True,
+)
+
+render_insight_card(
+    "Executive Summary",
+    value="Executive Reports Center",
+    description=certification["executive_summary"],
+    icon="reports",
+    status=reporting_health["status"],
+)
+
+health_cols = st.columns(4)
+with health_cols[0]:
+    render_metric_card("Reporting Health", reporting_health["status"].title(), "Overall reporting posture", icon="reports", status=reporting_health["status"])
+with health_cols[1]:
+    render_metric_card("Report Domains", f"{reporting_health['domain_count']} Domains", "Executive reporting coverage", icon="reports", status="info")
+with health_cols[2]:
+    render_metric_card("Latest Activity", reporting_health["latest_activity"], "Most recent report event", icon="info", status="info")
+with health_cols[3]:
+    render_metric_card("PDF Backend", reporting_health["pdf_backend"], "Report export readiness", icon="download", status="healthy" if reporting_health["pdf_backend"] == "Available" else "warning")
+
+render_section(
+    "Executive Reporting Overview",
+    "Enterprise reporting portal for executive, cost, governance, technology, SaaS, operational, and AI intelligence exports.",
+    divider=True,
+)
+overview_cols = st.columns(4)
+with overview_cols[0]:
+    render_metric_card("Generated Reports", generated_count, "Completed report packages", icon="success", status="healthy")
+with overview_cols[1]:
+    render_metric_card("Scheduled Reports", scheduled_count, "Recurring delivery definitions", icon="reports", status="info")
+with overview_cols[2]:
+    render_metric_card("Report Coverage", "7 Domains", "Executive, cost, governance, technology, SaaS, digital twin, AI", icon="reports", status="info")
+with overview_cols[3]:
+    render_metric_card("Export Format", "PDF", report_data_freshness(), icon="download", status="info")
+
+render_insight_card(
+    "Executive Reporting Narrative",
+    description=(
+        "Reports are organized by decision domain so leaders can quickly generate board, financial, governance, "
+        "technology intelligence, SaaS, operational, digital twin, and AI insight packages. Generated reports are "
+        "tracked in history, while recurring delivery uses schedule metadata when the report backend is available."
+    ),
+    icon="reports",
+    status="warning" if failed_count else "healthy",
+)
+
 if current_role in ["executive", "super_admin"]:
 
-    render_section("Report Catalog", "Executive-ready report packages for board, finance, governance, and optimization review.", divider=True)
+    render_section("Executive Reports", "Board-ready reporting packages for financial performance, governance, risk, and optimization decisions.", divider=True)
 
     executive_reports = [
         {
-            "name": "Board Pack",
+            "name": "Executive Board Pack",
+            "backend_name": "Board Pack",
             "purpose": "Board Meeting",
             "audience": "Board / CEO",
             "frequency": "Monthly",
             "key": "generate_board_pack",
         },
         {
-            "name": "Financial Review",
+            "name": "Cost Optimization Report",
+            "backend_name": "Financial Review",
             "purpose": "CFO Review",
             "audience": "CEO / CFO",
             "frequency": "Monthly",
             "key": "generate_financial_review",
         },
         {
-            "name": "Governance Review",
+            "name": "Governance Report",
+            "backend_name": "Governance Review",
             "purpose": "Risk Committee",
             "audience": "CEO / Risk Committee",
             "frequency": "Quarterly",
             "key": "generate_governance_review",
         },
         {
-            "name": "Optimization Review",
+            "name": "Operational Optimization Report",
+            "backend_name": "Optimization Review",
             "purpose": "Cost Reduction",
             "audience": "CEO / CIO / CFO",
             "frequency": "Monthly",
@@ -419,7 +601,7 @@ if current_role in ["executive", "super_admin"]:
 
     catalog_rows = [executive_reports[:2], executive_reports[2:]]
     for catalog_row in catalog_rows:
-        cols = st.columns(2)
+        cols = st.columns([1, 1], gap="large")
         for index, report in enumerate(catalog_row):
             with cols[index]:
                 render_report_catalog_card(
@@ -427,51 +609,59 @@ if current_role in ["executive", "super_admin"]:
                     report["audience"],
                     report["purpose"],
                     report["frequency"],
-                    last_generated_for(report["name"], report_history_all),
+                    last_generated_for(report.get("backend_name", report["name"]), report_history_all),
                     report["key"],
+                    schedule_rows,
+                    report.get("backend_name"),
                 )
 
 if current_role in ["cio", "super_admin"]:
 
-    render_section("CIO Report Catalog", "Technology, cloud, risk, and SaaS report packages for CIO review.", divider=True)
+    render_section("Technology Intelligence Reports", "Technology, cloud, SaaS, governance, and risk reports for CIO decision-making.", divider=True)
 
     cio_reports = [
         {
-            "name": "Technology Spend Report",
-            "description": "Application, platform, SaaS, license, MSP, and cloud spend package for CIO financial review.",
+            "name": "Technology Intelligence Report",
+            "backend_name": "Technology Spend Report",
+            "description": "Application, platform, SaaS, license, MSP, cloud spend, and dependency package for CIO review.",
             "key": "generate_cio_technology_spend_report",
         },
         {
-            "name": "Cloud Strategy Report",
+            "name": "Cost Optimization Report",
+            "backend_name": "Cloud Strategy Report",
             "description": "Strategic view of enterprise cloud posture, forecast, savings opportunity, and active risk.",
             "key": "generate_cio_cloud_strategy_report",
         },
         {
-            "name": "Risk & Governance Report",
+            "name": "Governance Report",
+            "backend_name": "Risk & Governance Report",
             "description": "Governance, policy, approval, and technology risk package for CIO decision-making.",
             "key": "generate_cio_risk_governance_report",
         },
         {
-            "name": "SaaS Governance Report",
+            "name": "SaaS Intelligence Report",
+            "backend_name": "SaaS Governance Report",
             "description": "SaaS spend, license usage, renewal risk, vendor footprint, and optimization package.",
             "key": "generate_cio_saas_governance_report",
         },
     ]
 
     for report_row in [cio_reports[:2], cio_reports[2:]]:
-        cols = st.columns(2)
+        cols = st.columns([1, 1], gap="large")
         for index, report in enumerate(report_row):
             with cols[index]:
                 render_simple_report_catalog_card(
                     report["name"],
                     report["description"],
-                    last_generated_for(report["name"], report_history_all),
+                    last_generated_for(report.get("backend_name", report["name"]), report_history_all),
                     report["key"],
+                    schedule_rows,
+                    report.get("backend_name"),
                 )
 
 if current_role in ["finance", "super_admin"]:
 
-    render_section("Finance Reports", "Budget, forecast, SaaS, license, and savings reports.", divider=True)
+    render_section("Cost Optimization Reports", "Budget, forecast, SaaS, license, savings, and financial performance reports.", divider=True)
 
     col1, col2 = st.columns(2)
 
@@ -527,7 +717,7 @@ if current_role in ["finance", "super_admin"]:
 
 if current_role in ["technical", "super_admin"]:
 
-    render_section("Technical Reports", "Resource, cost intelligence, optimization, and audit reports.", divider=True)
+    render_section("Operational Reports", "Resource inventory, cost intelligence, optimization, risk, and audit reports.", divider=True)
 
     col1, col2 = st.columns(2)
 
@@ -581,8 +771,6 @@ if current_role in ["technical", "super_admin"]:
             "generate_technical_risk_report",
         )
 
-schedule_rows = list_report_schedules(org_id) if org_id else []
-
 st.divider()
 render_section("Generated Reports", "Generated report history and downloads.", divider=True)
 
@@ -596,9 +784,13 @@ report_history = sorted(
 if current_role == "executive":
     executive_report_names = {
         "Board Pack",
+        "Executive Board Pack",
         "Financial Review",
+        "Cost Optimization Report",
         "Governance Review",
+        "Governance Report",
         "Optimization Review",
+        "Operational Optimization Report",
     }
     report_history = [
         row for row in report_history
@@ -654,10 +846,13 @@ if report_history:
         else:
             row_cols[4].write("-")
 else:
-    st.info("No generated reports found yet.")
+    st.info("No generated reports are available for the selected status. Generate a report package or change the status filter.")
 
 st.divider()
 render_section("Scheduled Reports", "Recurring report schedules and delivery status.", divider=True)
+
+if not report_backend_status["available"]:
+    report_backend_warning("scheduling", report_backend_status["error"])
 
 schedule_header = st.columns([2, 1, 2, 2, 1])
 schedule_header[0].write("**Report**")
@@ -677,7 +872,7 @@ if schedule_rows:
             is_active = schedule.get("enabled", schedule.get("active"))
             render_status_badge("healthy" if is_active else "unknown", label="Active" if is_active else "Inactive")
 else:
-    st.info("No scheduled reports configured yet.")
+    st.info("No scheduled reports are configured yet. Manual report generation remains available from the catalog above.")
 
 if "show_report_schedule_form" not in st.session_state:
     st.session_state["show_report_schedule_form"] = False
@@ -685,19 +880,21 @@ if "show_report_schedule_form" not in st.session_state:
 if st.button(
     "Schedule Report",
     key="open_schedule_report_form",
+    disabled=not report_backend_status["available"],
 ):
     st.session_state["show_report_schedule_form"] = True
 
 if st.session_state.get("show_report_schedule_form"):
     with st.form("schedule_report_form"):
-        report_type = st.selectbox(
+        schedule_report_options = {
+            "Executive Board Pack": "Board Pack",
+            "Cost Optimization Report": "Financial Review",
+            "Governance Report": "Governance Review",
+            "Operational Optimization Report": "Optimization Review",
+        }
+        report_type_display = st.selectbox(
             "Report Type",
-            [
-                "Board Pack",
-                "Financial Review",
-                "Governance Review",
-                "Optimization Review",
-            ],
+            list(schedule_report_options),
         )
         frequency = st.selectbox(
             "Frequency",
@@ -721,7 +918,8 @@ if st.session_state.get("show_report_schedule_form"):
 
         if submitted:
             next_run = calculate_next_run(frequency)
-            result = save_report_schedule(
+            report_type = schedule_report_options[report_type_display]
+            result = save_report_schedule_safe(
                 tenant_id=org_id,
                 report_type=report_type,
                 frequency=frequency,
@@ -732,7 +930,7 @@ if st.session_state.get("show_report_schedule_form"):
 
             if result.get("saved"):
                 st.session_state["show_report_schedule_form"] = False
-                st.success(f"{report_type} scheduled.")
+                st.success(f"{report_type_display} scheduled.")
                 st.rerun()
             else:
                 st.error(
@@ -743,10 +941,11 @@ if st.session_state.get("show_report_schedule_form"):
 render_section("Report Definitions", "Plain-language guide to executive reporting packages.", divider=True)
 definition_cols = st.columns(2)
 definitions = [
-    ("Board Pack", "Board-ready package summarizing technology spend, risk, governance, optimization, and executive decisions."),
-    ("Financial Review", "Finance-focused view of spend, forecast, savings, budget posture, and cost movement."),
-    ("Governance Review", "Risk and governance package covering policy health, approvals, active risks, and controls."),
-    ("Optimization Review", "Savings and optimization package for cost reduction, realized savings, and remaining opportunities."),
+    ("Executive Reports", "Board-ready packages summarizing spend, risk, governance, optimization, and executive decisions."),
+    ("Cost Optimization Reports", "Finance-focused packages covering spend, forecast, savings, budget posture, and cost movement."),
+    ("Governance Reports", "Risk and governance packages covering policy health, approvals, active risks, controls, and audit evidence."),
+    ("Technology Intelligence Reports", "CIO packages covering applications, technologies, cloud, SaaS, dependencies, digital twin, and AI signals."),
+    ("Operational Reports", "Technical packages covering resource inventory, cost intelligence, optimization, risk, and audit posture."),
     ("Scheduled Reports", "Recurring report deliveries configured for a recipient, cadence, and next run date."),
     ("Generated Reports", "Historical report packages generated through Nexora and available for download when files exist."),
 ]
@@ -760,11 +959,6 @@ for index, (title, description) in enumerate(definitions):
         )
 
 render_section("Report Governance Insight", "Report generation, scheduling, and governance posture.", divider=True)
-
-generated_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "generated")
-failed_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "failed")
-queued_count = sum(1 for row in report_history_all if str(row.get("status", "")).lower() == "queued")
-scheduled_count = len(schedule_rows)
 
 governance_cols = st.columns(4)
 with governance_cols[0]:
@@ -787,5 +981,41 @@ render_insight_card(
     status="warning" if failed_count else "healthy",
 )
 
-render_footer()
-st.markdown("</main>", unsafe_allow_html=True)
+render_section(
+    "Evidence",
+    "Source data, coverage, AI interpretation, and raw evidence supporting Reports.",
+    divider=True,
+)
+
+evidence_tabs = st.tabs([
+    "Source Data",
+    "Data Coverage",
+    "AI Interpretation",
+    "Raw Evidence",
+])
+
+with evidence_tabs[0]:
+    import pandas as pd
+
+    st.dataframe(pd.DataFrame(evidence["source_data"]), use_container_width=True, hide_index=True)
+with evidence_tabs[1]:
+    import pandas as pd
+
+    st.dataframe(pd.DataFrame(evidence["data_coverage"]), use_container_width=True, hide_index=True)
+with evidence_tabs[2]:
+    st.write(evidence["ai_interpretation"])
+with evidence_tabs[3]:
+    import pandas as pd
+
+    st.caption("Reporting Health")
+    st.dataframe(
+        pd.DataFrame(evidence["raw_evidence"]["Reporting Health"]),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption("Backend Detail")
+    st.dataframe(
+        pd.DataFrame(evidence["raw_evidence"]["Backend Detail"]),
+        use_container_width=True,
+        hide_index=True,
+    )

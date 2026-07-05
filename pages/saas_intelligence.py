@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -15,56 +13,27 @@ from components.cards import (
 )
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
+from components.shared import (
+    render_ai_narrative,
+    render_business_context,
+    render_evidence_panel,
+    render_executive_summary,
+    render_reconciliation_panel,
+)
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from services.saas_intelligence_certification_service import SaaSIntelligenceCertificationService
 from services.saas_intelligence_service import SaaSIntelligenceService
 from shared.auth import require_role
 from shared.session import init_session
+from shared.streamlit_compat import dataframe, plotly_chart
 from shared.styles import configure_page
-
-
-def _money(value: Any) -> str:
-    try:
-        amount = float(value or 0)
-    except (TypeError, ValueError):
-        amount = 0.0
-
-    if amount >= 1_000_000:
-        return f"${amount / 1_000_000:.1f}M"
-    if amount >= 1_000:
-        value = amount / 1_000
-        return f"${value:,.0f}K" if value.is_integer() else f"${value:,.1f}K"
-    return f"${amount:,.0f}"
 
 
 def _show_dataframe(df: pd.DataFrame, empty_message: str) -> None:
     if df.empty:
         st.info(empty_message)
         return
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-
-def _format_money_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    formatted = df.copy()
-    for column in columns:
-        if column in formatted.columns:
-            formatted[column] = formatted[column].apply(_money)
-    return formatted
-
-
-def _format_percent_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    formatted = df.copy()
-    for column in columns:
-        if column in formatted.columns:
-            formatted[column] = formatted[column].apply(lambda value: f"{float(value or 0):.1f}%")
-    return formatted
-
-
-def _status_for_count(value: int) -> str:
-    return "critical" if value else "healthy"
-
-
-def _status_for_value(value: float) -> str:
-    return "warning" if value else "healthy"
+    dataframe(df, hide_index=True)
 
 
 configure_page(
@@ -86,30 +55,111 @@ render_enterprise_sidebar(
     active_page=PAGE_PATHS["SaaS + AI Intelligence"],
 )
 
-kpis = SaaSIntelligenceService.get_kpis()
-vendor_spend_df = SaaSIntelligenceService.vendor_spend_dataframe()
-renewal_heatmap_df = SaaSIntelligenceService.renewal_heatmap_dataframe()
-renewal_risks_df = SaaSIntelligenceService.renewal_risks_dataframe()
-license_waste_df = SaaSIntelligenceService.license_waste_dataframe()
-ai_governance_df = SaaSIntelligenceService.ai_license_governance_dataframe()
-ai_risk_df = SaaSIntelligenceService.ai_risk_summary_dataframe()
-ai_recommendations_df = SaaSIntelligenceService.ai_optimization_recommendations_dataframe()
-inactive_users_df = SaaSIntelligenceService.inactive_users_dataframe()
+dashboard = SaaSIntelligenceCertificationService.get_dashboard()
+kpis = dashboard["kpis"]
+metrics = dashboard["metrics"]
+dataframes = dashboard["dataframes"]
+reconciliation_cards = dashboard["reconciliation_cards"]
+business_context = dashboard["business_context"]
+evidence = dashboard["evidence"]
 
-total_saas_spend = kpis["total_saas_spend"]
-total_subscription_spend = kpis["total_saas_spend"] + kpis["ai_spend"]
-vendor_count = kpis["vendor_count"]
-ai_vendors = kpis.get("ai_vendors", [])
-ai_vendor_count = len(ai_vendors) if isinstance(ai_vendors, list) else int(ai_vendors or 0)
-license_count = int(license_waste_df["Purchased"].sum()) if not license_waste_df.empty and "Purchased" in license_waste_df.columns else kpis["saas_platforms"]
-inactive_users = kpis["inactive_users"]
-license_waste = int(license_waste_df["Unused"].sum()) if not license_waste_df.empty and "Unused" in license_waste_df.columns else inactive_users
-renewals_due = kpis["renewal_risks"]
-duplicate_tools = len(ai_recommendations_df)
-potential_savings = kpis["optimization_potential"]
+vendor_spend_df = dataframes["vendor_spend"]
+renewal_heatmap_df = dataframes["renewal_heatmap"]
+renewal_risks_df = dataframes["renewal_risks"]
+license_waste_df = dataframes["license_waste"]
+ai_governance_df = dataframes["ai_governance"]
+ai_risk_df = dataframes["ai_risk"]
+ai_recommendations_df = dataframes["ai_recommendations"]
+inactive_users_df = dataframes["inactive_users"]
+
+total_saas_spend = metrics["total_saas_spend"]
+vendor_count = metrics["vendor_count"]
+ai_vendor_count = metrics["ai_vendor_count"]
+license_count = metrics["license_count"]
+inactive_users = metrics["inactive_users"]
+license_waste = metrics["license_waste"]
+renewals_due = metrics["renewals_due"]
+duplicate_tools = metrics["duplicate_tools"]
+potential_savings = metrics["potential_savings"]
+
+
+def render_certification_summary() -> None:
+    render_executive_summary(
+        {
+            "title": "Executive Summary",
+            "description": "Estate-level SaaS and AI portfolio summary for CIO certification, financial reconciliation, and business architecture context.",
+            "narrative": dashboard.get("executive_summary") or "SaaS Intelligence certification summary is unavailable.",
+            "metrics": [
+                {
+                    "label": "Total SaaS Spend",
+                    "value": SaaSIntelligenceCertificationService.format_money(total_saas_spend),
+                    "description": "Annual SaaS subscription spend",
+                    "icon": "cost",
+                    "status": "info",
+                },
+                {
+                    "label": "AI Spend",
+                    "value": SaaSIntelligenceCertificationService.format_money(metrics.get("ai_spend")),
+                    "description": "AI tooling spend tracked separately",
+                    "icon": "ai",
+                    "status": "info",
+                },
+                {
+                    "label": "License Spend",
+                    "value": SaaSIntelligenceCertificationService.format_money(metrics.get("total_license_spend")),
+                    "description": "License and subscription spend",
+                    "icon": "technology",
+                    "status": "info",
+                },
+                {
+                    "label": "Optimization Potential",
+                    "value": SaaSIntelligenceCertificationService.format_money(potential_savings),
+                    "description": "Savings opportunity from cleanup and consolidation",
+                    "icon": "savings",
+                    "status": SaaSIntelligenceCertificationService.status_for_value(potential_savings),
+                },
+                {
+                    "label": "Renewal Risks",
+                    "value": f"{renewals_due:,}",
+                    "description": "Renewal events requiring review",
+                    "icon": "calendar",
+                    "status": SaaSIntelligenceCertificationService.status_for_count(renewals_due),
+                },
+                {
+                    "label": "Inactive Users",
+                    "value": f"{inactive_users:,}",
+                    "description": "Users eligible for license review",
+                    "icon": "warning",
+                    "status": SaaSIntelligenceCertificationService.status_for_count(inactive_users),
+                },
+                {
+                    "label": "Vendor Portfolio Health",
+                    "value": f"{metrics.get('vendor_portfolio_health', 0):.1f}%",
+                    "description": "Vendor concentration and cleanup posture",
+                    "icon": "health",
+                    "status": "warning" if metrics.get("vendor_portfolio_health", 0) < 90 else "healthy",
+                },
+                {
+                    "label": "AI Governance Summary",
+                    "value": f"{metrics.get('ai_tools', 0):,} tools / {ai_vendor_count:,} vendors",
+                    "description": "AI governance footprint",
+                    "icon": "governance",
+                    "status": "info",
+                },
+            ],
+        }
+    )
+    render_reconciliation_panel(reconciliation_cards)
+    render_business_context({**business_context, "technologies": business_context.get("saas_ai_platforms", 0)})
+
+
+def render_certification_evidence() -> None:
+    render_evidence_panel(evidence)
 
 
 def render_saas_content() -> None:
+    render_certification_summary()
+
     render_section(
         "SaaS Portfolio Summary",
         "CIO view of SaaS spend, vendors, licenses, renewals, waste, and optimization opportunity.",
@@ -119,8 +169,8 @@ def render_saas_content() -> None:
     with summary_cols[0]:
         render_kpi_card(
             "Total SaaS Spend",
-            _money(total_saas_spend),
-            f"{_money(kpis['ai_spend'])} AI spend tracked separately",
+            SaaSIntelligenceCertificationService.format_money(total_saas_spend),
+            f"{SaaSIntelligenceCertificationService.format_money(kpis['ai_spend'])} AI spend tracked separately",
             icon="cost",
             status="info",
         )
@@ -146,7 +196,7 @@ def render_saas_content() -> None:
             f"{inactive_users:,}",
             "Users eligible for license review",
             icon="warning",
-            status=_status_for_count(inactive_users),
+            status=SaaSIntelligenceCertificationService.status_for_count(inactive_users),
         )
 
     optimization_cols = st.columns(4)
@@ -156,7 +206,7 @@ def render_saas_content() -> None:
             f"{license_waste:,}",
             "Unused licenses and inactive seats",
             icon="risk",
-            status=_status_for_count(license_waste),
+            status=SaaSIntelligenceCertificationService.status_for_count(license_waste),
         )
     with optimization_cols[1]:
         render_risk_card(
@@ -164,7 +214,7 @@ def render_saas_content() -> None:
             f"{renewals_due:,}",
             "Renewal events requiring near-term review",
             icon="calendar",
-            status=_status_for_count(renewals_due),
+            status=SaaSIntelligenceCertificationService.status_for_count(renewals_due),
         )
     with optimization_cols[2]:
         render_risk_card(
@@ -172,15 +222,15 @@ def render_saas_content() -> None:
             f"{duplicate_tools:,}",
             "AI/SaaS consolidation recommendations",
             icon="governance",
-            status=_status_for_count(duplicate_tools),
+            status=SaaSIntelligenceCertificationService.status_for_count(duplicate_tools),
         )
     with optimization_cols[3]:
         render_health_card(
             "Potential Savings",
-            _money(potential_savings),
+            SaaSIntelligenceCertificationService.format_money(potential_savings),
             "Optimization potential from consolidation and license cleanup",
             icon="savings",
-            status=_status_for_value(potential_savings),
+            status=SaaSIntelligenceCertificationService.status_for_value(potential_savings),
         )
 
     render_section(
@@ -193,22 +243,22 @@ def render_saas_content() -> None:
             "Inactive Users",
             f"{inactive_users:,}",
             "Users with inactive SaaS usage signals",
-            status=_status_for_count(inactive_users),
+            status=SaaSIntelligenceCertificationService.status_for_count(inactive_users),
         )
     with waste_cols[1]:
         render_risk_card(
             "Unused Licenses",
             f"{license_waste:,}",
             "Purchased licenses not actively used",
-            status=_status_for_count(license_waste),
+            status=SaaSIntelligenceCertificationService.status_for_count(license_waste),
         )
     with waste_cols[2]:
         render_metric_card(
             "Optimization Potential",
-            _money(potential_savings),
+            SaaSIntelligenceCertificationService.format_money(potential_savings),
             "Savings opportunity across SaaS and AI tools",
             icon="savings",
-            status=_status_for_value(potential_savings),
+            status=SaaSIntelligenceCertificationService.status_for_value(potential_savings),
         )
 
     render_section(
@@ -229,7 +279,7 @@ def render_saas_content() -> None:
             height=210,
             coloraxis_showscale=False,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        plotly_chart(fig)
     else:
         st.info("No SaaS renewal heatmap data is available.")
 
@@ -250,7 +300,7 @@ def render_saas_content() -> None:
             margin={"l": 10, "r": 10, "t": 10, "b": 10},
             height=320,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        plotly_chart(fig)
     else:
         st.info("No vendor spend data is available.")
 
@@ -264,7 +314,7 @@ def render_saas_content() -> None:
             "Duplicate Tool Signals",
             f"{duplicate_tools:,}",
             "Recommendations indicating overlap or consolidation potential",
-            status=_status_for_count(duplicate_tools),
+            status=SaaSIntelligenceCertificationService.status_for_count(duplicate_tools),
         )
     with duplicate_cols[1]:
         render_metric_card(
@@ -283,14 +333,12 @@ def render_saas_content() -> None:
             status="info",
         )
 
-    render_section(
+    render_ai_narrative(
         "Executive SaaS Insight",
-        "CIO narrative from SaaS spend, renewal, inactive license, and consolidation signals.",
-    )
-    render_insight_card(
-        "SaaS Optimization Narrative",
-        description=SaaSIntelligenceService.get_executive_narrative(),
-        status="warning" if renewals_due or inactive_users or duplicate_tools else "healthy",
+        SaaSIntelligenceCertificationService.escape_markdown_currency(
+            SaaSIntelligenceCertificationService.executive_narrative(metrics)
+        ),
+        description="CIO narrative from SaaS spend, renewal, inactive license, and consolidation signals.",
     )
 
     render_section(
@@ -300,25 +348,25 @@ def render_saas_content() -> None:
     with st.expander("Detailed Evidence / Drilldown"):
         st.subheader("Vendor Spend")
         _show_dataframe(
-            _format_money_columns(vendor_spend_df, ["Annual Spend"]),
+            SaaSIntelligenceCertificationService.format_money_columns(vendor_spend_df, ["Annual Spend"]),
             "No vendor spend data is available.",
         )
 
         st.subheader("Renewal Risks")
         _show_dataframe(
-            _format_money_columns(renewal_risks_df, ["Annual Cost"]),
+            SaaSIntelligenceCertificationService.format_money_columns(renewal_risks_df, ["Annual Cost"]),
             "No SaaS renewals require immediate attention.",
         )
 
         st.subheader("License Waste")
         _show_dataframe(
-            _format_percent_columns(license_waste_df, ["Waste %"]),
+            SaaSIntelligenceCertificationService.format_percent_columns(license_waste_df, ["Waste %"]),
             "No license waste data is available.",
         )
 
         st.subheader("AI Governance Overview")
         _show_dataframe(
-            _format_money_columns(ai_governance_df, ["Cost"]),
+            SaaSIntelligenceCertificationService.format_money_columns(ai_governance_df, ["Cost"]),
             "No AI license governance data is available.",
         )
 
@@ -330,7 +378,7 @@ def render_saas_content() -> None:
 
         st.subheader("AI Optimization Recommendations")
         _show_dataframe(
-            _format_money_columns(
+            SaaSIntelligenceCertificationService.format_money_columns(
                 ai_recommendations_df.rename(
                     columns={
                         "title": "Recommendation",
@@ -350,6 +398,8 @@ def render_saas_content() -> None:
             inactive_users_df,
             "No inactive SaaS users are currently available.",
         )
+
+    render_certification_evidence()
 
 
 render_page(

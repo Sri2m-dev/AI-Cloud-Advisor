@@ -4,66 +4,35 @@ import plotly.express as px
 
 from components.cards import (
     render_health_card,
-    render_insight_card,
     render_kpi_card,
     render_metric_card,
     render_risk_card,
 )
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
+from components.shared import (
+    render_ai_narrative,
+    render_business_context,
+    render_evidence_panel,
+    render_executive_summary,
+    render_reconciliation_panel,
+)
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from auth.guards import require_login
 from auth.role_constants import normalize_role
-from services.supabase_client import supabase
+from services.technology_inventory_certification_service import TechnologyInventoryCertificationService
+from shared.streamlit_compat import dataframe, plotly_chart
 
 
 st.set_page_config(page_title="Technology Portfolio", layout="wide")
 
 
-def fetch_table(table_name):
-    try:
-        response = supabase.table(table_name).select("*").execute()
-        return response.data or []
-    except Exception:
-        return []
-
-
 def _money(value) -> str:
-    try:
-        return f"${float(value or 0):,.0f}"
-    except (TypeError, ValueError):
-        return "$0"
+    return TechnologyInventoryCertificationService.format_money(value)
 
 
 def _percent_status(value: float) -> str:
-    if value >= 90:
-        return "healthy"
-    if value >= 75:
-        return "warning"
-    return "critical"
-
-
-def _count_business_critical(inventory_df: pd.DataFrame) -> int:
-    if inventory_df.empty:
-        return 0
-
-    critical_columns = [
-        "business_criticality",
-        "criticality",
-        "tier",
-        "risk_tier",
-        "is_business_critical",
-        "is_critical",
-    ]
-    for column in critical_columns:
-        if column not in inventory_df.columns:
-            continue
-        values = inventory_df[column].astype(str).str.lower()
-        return int(
-            values.isin(["critical", "high", "tier 0", "tier 1", "true", "yes", "1"]).sum()
-        )
-
-    return 0
+    return TechnologyInventoryCertificationService.percent_status(value)
 
 
 def main():
@@ -82,68 +51,123 @@ def main():
         active_page=PAGE_PATHS["Technology Portfolio"],
     )
 
-    inventory_df = pd.DataFrame(fetch_table("technology_inventory"))
-    vendor_spend_df = pd.DataFrame(fetch_table("vw_vendor_spend"))
-    relationships_df = pd.DataFrame(fetch_table("technology_relationships"))
+    dashboard = TechnologyInventoryCertificationService.get_dashboard()
+    metrics = dashboard["metrics"]
+    dataframes = dashboard["dataframes"]
+    financial_model = dashboard["financial_model"]
+    reconciliation_cards = dashboard["reconciliation_cards"]
+    business_context = dashboard["business_context"]
+    evidence = dashboard["evidence"]
 
-    if not inventory_df.empty and "annual_cost" in inventory_df.columns:
-        inventory_df["annual_cost"] = pd.to_numeric(
-            inventory_df["annual_cost"],
-            errors="coerce",
-        ).fillna(0)
+    inventory_df = dataframes["inventory"]
+    vendor_spend_df = dataframes["vendor_spend"]
+    relationships_df = dataframes["relationships"]
 
-    total_technologies = len(inventory_df)
-    annual_spend = inventory_df["annual_cost"].sum() if not inventory_df.empty else 0
+    total_technologies = metrics["total_technologies"]
+    annual_spend = metrics["annual_spend"]
+    ownership_coverage = metrics["ownership_coverage"]
+    business_owner_coverage = metrics["business_owner_coverage"]
+    technical_owner_coverage = metrics["technical_owner_coverage"]
+    data_quality_score = metrics["data_quality_score"]
+    departments_covered = metrics["departments_covered"]
+    vendor_count = metrics["vendor_count"]
+    mapped_owners = metrics["mapped_owners"]
+    owner_gaps = metrics["owner_gaps"]
+    business_critical_technologies = metrics["business_critical_technologies"]
+    relationship_count = metrics["relationship_count"]
+    governance_status = metrics["governance_status"]
+    top_department = metrics["top_department"]
+    top_department_spend = metrics["top_department_spend"]
 
-    assigned_departments = inventory_df["owner_department"].notna().sum() if "owner_department" in inventory_df else 0
-    assigned_business_owners = inventory_df["business_owner"].notna().sum() if "business_owner" in inventory_df else 0
-    assigned_technical_owners = inventory_df["technical_owner"].notna().sum() if "technical_owner" in inventory_df else 0
-
-    ownership_coverage = round((assigned_departments / total_technologies) * 100, 1) if total_technologies else 0
-    business_owner_coverage = round((assigned_business_owners / total_technologies) * 100, 1) if total_technologies else 0
-    technical_owner_coverage = round((assigned_technical_owners / total_technologies) * 100, 1) if total_technologies else 0
-    data_quality_score = round(
-        (ownership_coverage + business_owner_coverage + technical_owner_coverage) / 3,
-        1,
-    ) if total_technologies else 0
-
-    departments_covered = inventory_df["owner_department"].nunique() if "owner_department" in inventory_df else 0
-    business_owners = inventory_df["business_owner"].nunique() if "business_owner" in inventory_df else 0
-    vendor_count = inventory_df["vendor_name"].nunique() if not inventory_df.empty and "vendor_name" in inventory_df else 0
-    mapped_owners = max(assigned_business_owners, assigned_technical_owners)
-    owner_gaps = max(total_technologies - mapped_owners, 0)
-    business_critical_technologies = _count_business_critical(inventory_df)
-    relationship_count = len(relationships_df)
-
-    if ownership_coverage == 100 and business_owner_coverage == 100 and technical_owner_coverage == 100:
-        governance_status = "Healthy"
-    elif ownership_coverage >= 80:
-        governance_status = "Needs Review"
-    else:
-        governance_status = "Critical"
-
-    top_department = None
-    top_department_spend = 0
-
-    if not inventory_df.empty and "owner_department" in inventory_df.columns:
-        dept_summary = (
-            inventory_df.groupby("owner_department")["annual_cost"]
-            .sum()
-            .sort_values(ascending=False)
+    def render_certification_summary():
+        render_executive_summary(
+            {
+                "title": "Executive Summary",
+                "description": "Certified CIO view of inventory ownership, financial reconciliation, and business architecture exposure.",
+                "narrative": dashboard["executive_summary"],
+                "metrics": [
+                    {
+                        "label": "Technologies",
+                        "value": f"{total_technologies:,}",
+                        "description": "Tracked technology portfolio records",
+                        "icon": "technology",
+                        "status": "info",
+                    },
+                    {
+                        "label": "Annual Spend",
+                        "value": _money(annual_spend),
+                        "description": "Spend represented in inventory",
+                        "icon": "cost",
+                        "status": "info",
+                    },
+                    {
+                        "label": "Owner Coverage",
+                        "value": f"{ownership_coverage:.1f}%",
+                        "description": "Department ownership coverage",
+                        "icon": "governance",
+                        "status": _percent_status(ownership_coverage),
+                    },
+                    {
+                        "label": "Data Quality",
+                        "value": f"{data_quality_score}%",
+                        "description": "Average owner and department coverage",
+                        "icon": "health",
+                        "status": _percent_status(data_quality_score),
+                    },
+                    {
+                        "label": "Owner Gaps",
+                        "value": f"{owner_gaps:,}",
+                        "description": "Records needing ownership cleanup",
+                        "icon": "risk",
+                        "status": "critical" if owner_gaps else "healthy",
+                    },
+                    {
+                        "label": "Relationships",
+                        "value": f"{relationship_count:,}",
+                        "description": "Dependency and relationship rows",
+                        "icon": "graph",
+                        "status": "info" if relationship_count else "warning",
+                    },
+                    {
+                        "label": "Vendors",
+                        "value": f"{vendor_count:,}",
+                        "description": "Distinct technology vendors",
+                        "icon": "enterprise",
+                        "status": "info",
+                    },
+                    {
+                        "label": "Business Critical",
+                        "value": f"{business_critical_technologies:,}",
+                        "description": "Criticality flags detected",
+                        "icon": "governance",
+                        "status": "warning" if business_critical_technologies else "info",
+                    },
+                ],
+            }
         )
-        if not dept_summary.empty:
-            top_department = dept_summary.index[0]
-            top_department_spend = dept_summary.iloc[0]
+
+        render_reconciliation_panel(
+            {
+                **reconciliation_cards,
+                "allocated_spend_display": _money(financial_model.get("allocated_spend")),
+                "variance_status": reconciliation_cards.get("status", "Unknown"),
+            }
+        )
+        render_business_context(business_context)
+
+    def render_certification_evidence():
+        render_evidence_panel(evidence)
 
     def render_inventory_content():
         if inventory_df.empty:
             st.info("No technology portfolio data available.")
             return
 
+        render_certification_summary()
+
         render_section(
             "CIO Inventory Summary",
             "Unified view of Cloud, SaaS, MSP, vendors, departments, and technology relationships.",
-            divider=False,
         )
         summary_cols = st.columns(4)
         with summary_cols[0]:
@@ -257,14 +281,14 @@ def main():
             if "technology_type" in inventory_df.columns:
                 type_df = inventory_df.groupby("technology_type", as_index=False)["annual_cost"].sum()
                 fig = px.pie(type_df, names="technology_type", values="annual_cost", hole=0.45)
-                st.plotly_chart(fig, width="stretch")
+                plotly_chart(fig)
             else:
                 st.info("No technology type distribution data available.")
 
         with landscape_cols[1]:
             if not vendor_spend_df.empty:
                 fig = px.bar(vendor_spend_df, x="vendor_name", y="annual_spend", text_auto=True)
-                st.plotly_chart(fig, width="stretch")
+                plotly_chart(fig)
             else:
                 st.info("No vendor spend data available.")
 
@@ -325,13 +349,9 @@ def main():
                 status="info",
             )
 
-        render_section(
+        render_ai_narrative(
             "Executive Inventory Insight",
-            "CIO narrative generated from current inventory, ownership, and relationship signals.",
-        )
-        render_insight_card(
-            "Technology Inventory Narrative",
-            description=(
+            (
                 f"Technology governance coverage is currently {ownership_coverage}%. "
                 f"The portfolio contains {total_technologies:,} tracked technologies across "
                 f"{departments_covered:,} departments and {vendor_count:,} vendors. "
@@ -342,7 +362,7 @@ def main():
                 "The portfolio is ready to support CIO governance, technology graph exploration, "
                 "SaaS governance, and enterprise governance scoring."
             ),
-            status=_percent_status(data_quality_score),
+            description="CIO narrative generated from current inventory, ownership, and relationship signals.",
         )
 
         render_section(
@@ -379,7 +399,7 @@ def main():
                         "status": "Status",
                     }
                 )
-                st.dataframe(ownership_df, use_container_width=True)
+                dataframe(ownership_df)
             else:
                 st.info("No technology ownership data available.")
 
@@ -401,7 +421,7 @@ def main():
                     )
                 )
 
-                st.dataframe(department_allocation_df, use_container_width=True)
+                dataframe(department_allocation_df)
             else:
                 st.info("No department allocation data available.")
 
@@ -419,13 +439,15 @@ def main():
                 "source_system",
             ]
             available_cols = [c for c in display_cols if c in inventory_df.columns]
-            st.dataframe(inventory_df[available_cols], width="stretch", hide_index=True)
+            dataframe(inventory_df[available_cols], hide_index=True)
 
             st.subheader("Technology Relationships")
             if not relationships_df.empty:
-                st.dataframe(relationships_df, width="stretch", hide_index=True)
+                dataframe(relationships_df, hide_index=True)
             else:
                 st.info("No technology relationships configured yet.")
+
+        render_certification_evidence()
 
     render_page(
         title="Technology Inventory",
