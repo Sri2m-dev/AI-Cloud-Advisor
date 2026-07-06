@@ -1,4 +1,4 @@
-﻿"""Connector runtime orchestration exports."""
+"""Connector runtime orchestration exports."""
 
 from connector_runtime.engine import ConnectorExecutionEngine
 from connector_runtime.exceptions import (
@@ -11,6 +11,7 @@ from connector_runtime.exceptions import (
     ConnectorValidationError,
 )
 from connector_runtime.hooks import ConnectorExecutionHooks
+from connector_runtime.observability import ConnectorObservabilityHooks
 from connector_runtime.pipeline import ConnectorExecutionPipeline
 from connector_runtime.policy import ConnectorExecutionMode, ConnectorExecutionPolicy
 from connector_runtime.result import ConnectorExecutionResult
@@ -22,6 +23,7 @@ __all__ = [
     "ConnectorExecutionEngine",
     "ConnectorExecutionHooks",
     "ConnectorExecutionMode",
+    "ConnectorObservabilityHooks",
     "ConnectorExecutionPipeline",
     "ConnectorExecutionPolicy",
     "ConnectorExecutionResult",
@@ -30,4 +32,3 @@ __all__ = [
     "ConnectorRuntimeError",
     "ConnectorValidationError",
 ]
-

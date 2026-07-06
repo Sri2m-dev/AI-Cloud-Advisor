@@ -1,4 +1,4 @@
-﻿"""Connector health monitoring contracts and in-memory health store."""
+"""Connector health monitoring contracts and in-memory health store."""
 
 from __future__ import annotations
 
@@ -51,3 +51,15 @@ def record_health_snapshot(status: ConnectorHealthStatus) -> ConnectorHealthStat
 
 def get_latest_health(connector_id: str) -> ConnectorHealthStatus | None:
     return health_store.get_latest_health(connector_id)
+
+
+def calculate_connector_health_score(status: ConnectorHealthStatus | None) -> float:
+    """Return a simple platform health score from a connector health status."""
+
+    if status is None:
+        return 0.0
+    score = 100.0 if status.status.lower() in {"healthy", "ok", "available"} else 65.0
+    score -= min(status.consecutive_failures * 10, 50)
+    if status.latency_ms and status.latency_ms > 30000:
+        score -= 10
+    return max(score, 0.0)

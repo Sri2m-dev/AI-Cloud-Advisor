@@ -560,3 +560,50 @@ No new production-grade vendor connector implementation included.
 
 
 
+
+## E8.1.8 Connector Observability and Telemetry
+
+E8.1.8 adds an observability layer for connector operations. This remains framework-only and does not depend on a production telemetry backend or vendor connector implementation.
+
+### Package Structure
+
+```text
+connector_observability/
+    __init__.py
+    metrics.py
+    telemetry.py
+    tracing.py
+    events.py
+    dashboard.py
+    alerts.py
+    audit.py
+```
+
+### Core Capabilities
+
+- Metrics collection for executions, success/failure rates, duration, record counts, retries, and queue depth.
+- Structured telemetry events for lifecycle milestones such as connector started, authentication completed, extraction completed, publish completed, succeeded, and failed.
+- Trace correlation with execution-level correlation IDs and lifecycle spans.
+- Audit events for connector registration, enablement, scheduling, manual execution, authentication failures, validation failures, publish failures, and execution outcomes.
+- Alert rule evaluation for consecutive failures, expired authentication, queue backlog, duration thresholds, low health score, and missing successful sync within SLA.
+- Dashboard-ready operations snapshots for future Connector Operations UI.
+
+### Runtime Integration
+
+The observability layer is optional and plugs into the existing runtime hook contract through `ConnectorObservabilityHooks`. Provider-specific connectors do not own telemetry flow. The runtime can attach hooks that emit metrics, telemetry, traces, lifecycle events, and audit records without changing connector implementations.
+
+### Operational Model
+
+```text
+Connector Execution
+  -> Metrics Collector
+  -> Telemetry Events
+  -> Trace Correlation
+  -> Audit Log
+  -> Alert Rules
+  -> Dashboard Snapshot
+```
+
+### Scope
+
+This phase intentionally avoids external telemetry systems. Future releases can route the same contracts to OpenTelemetry, Datadog, Azure Monitor, CloudWatch, Splunk, Kafka, or a persistent audit ledger without changing connector lifecycle contracts.

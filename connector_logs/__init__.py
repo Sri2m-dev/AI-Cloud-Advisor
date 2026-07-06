@@ -1,4 +1,4 @@
-﻿"""Connector audit and execution log contracts."""
+"""Connector audit and execution log contracts."""
 
 from __future__ import annotations
 
@@ -64,3 +64,9 @@ def record_run_log(event: ConnectorRunLog) -> ConnectorRunLog:
 
 def list_run_logs(connector_id: str | None = None, run_id: str | None = None) -> list[ConnectorRunLog]:
     return logger.list_run_logs(connector_id=connector_id, run_id=run_id)
+
+
+def list_run_logs_by_correlation(correlation_id: str) -> list[ConnectorRunLog]:
+    """Return run logs for a correlation ID."""
+
+    return [event for event in logger.events if event.correlation_id == correlation_id]
