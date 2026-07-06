@@ -607,3 +607,58 @@ Connector Execution
 ### Scope
 
 This phase intentionally avoids external telemetry systems. Future releases can route the same contracts to OpenTelemetry, Datadog, Azure Monitor, CloudWatch, Splunk, Kafka, or a persistent audit ledger without changing connector lifecycle contracts.
+
+## E8.1.9 AWS Reference Connector
+
+E8.1.9 introduces the first framework-native production-path connector: `AWSReferenceConnector`.
+
+### Scope
+
+The AWS reference connector is intentionally narrow and mock-safe. It validates the full connector platform path without calling AWS APIs or requiring provider SDK dependencies.
+
+### Package Location
+
+```text
+connectors/aws/reference_connector.py
+```
+
+### Supported Initial Datasets
+
+- AWS cost summary
+- EC2 inventory
+- S3 inventory
+
+### Canonical Output
+
+The connector normalizes AWS records into:
+
+- `CanonicalCloudResource`
+- `CanonicalCostRecord`
+
+### Runtime Path
+
+The connector is designed to execute through the standard runtime and orchestration engine only:
+
+```text
+ConnectorRegistry
+  -> ConnectorExecutionEngine
+  -> AWSReferenceConnector
+  -> AuthenticationManager
+  -> Normalize to Canonical Records
+  -> PersistenceCanonicalPublisher
+  -> ConnectorHealthStatus
+```
+
+### Authentication
+
+Configured AWS authentication is routed through the existing authentication framework. Supported reference auth paths include anonymous smoke mode, AWS access key, and AWS assume-role style requests. Secret values are resolved through the existing secret provider contract and are not logged.
+
+### Non-Goals
+
+- No boto3 dependency
+- No live AWS API calls
+- No dashboard changes
+- No broad AWS service coverage
+- No production account discovery worker
+
+This connector establishes the reference implementation pattern for future AWS, Azure, Microsoft 365, ServiceNow, Datadog, SAP, and other production connectors.
