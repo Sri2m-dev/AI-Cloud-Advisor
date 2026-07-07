@@ -1,7 +1,8 @@
 ﻿# E8 Universal Connector Framework
 
-Status: E8.1.1 architecture and core SDK skeleton
+Status: E8.1 Complete - Universal Connector Framework cloud foundation
 Release Base: v1.0.0-enterprise-foundation
+Target Release: v1.1.0-universal-connectors
 
 ## Vision
 
@@ -662,3 +663,111 @@ Configured AWS authentication is routed through the existing authentication fram
 - No production account discovery worker
 
 This connector establishes the reference implementation pattern for future AWS, Azure, Microsoft 365, ServiceNow, Datadog, SAP, and other production connectors.
+
+## E8.1.10 Existing Connector Reconciliation
+
+E8.1.10 reviewed existing cloud onboarding and connector work before adding
+more provider code.
+
+### Outcome
+
+- `cloud_connections` remains a legacy/staging onboarding source.
+- `connector_registry` is the canonical connector configuration store.
+- Existing AWS and Azure operational generation is preserved.
+- E8 framework becomes the future runtime generation.
+
+## E8.1.11 Cloud Connection Registry Bridge
+
+E8.1.11 added bridge components that convert legacy cloud connection records
+into registry-compatible runtime payloads.
+
+### Package
+
+```text
+connector_migration/
+    cloud_connection_bridge.py
+    registry_mapper.py
+    auth_config_mapper.py
+    aws_runtime_adapter.py
+```
+
+### Outcome
+
+- Legacy AWS cloud connection records can map into connector registry payloads.
+- AWS registry config can build `ConnectorAuthConfig`.
+- AWS registry config can build `ConnectorRuntimeContext`.
+- AWS reference connector can execute discovery-only and dry-run through the E8 runtime.
+
+## E8.1.12 AWS Production Runtime Adapter Seam
+
+E8.1.12 added `connector_adapters/aws_production_adapter.py`.
+
+### Outcome
+
+- Existing AWS production sync path remains untouched.
+- Discovery-only and dry-run execute through the E8 runtime.
+- Full sync is isolated behind `full_sync_enabled=False` by default.
+- Existing AWS onboarding and service logic are preserved.
+
+## E8.1.13 Azure Runtime Adapter and Secret Hardening
+
+E8.1.13 added `connector_adapters/azure_production_adapter.py` and hardened
+Azure auth mapping.
+
+### Outcome
+
+- Azure registry config maps `tenant_id`, `client_id`, and `subscription_id`.
+- Inline `client_secret` metadata is stripped from runtime auth metadata.
+- Legacy inline secret values are converted to deterministic `secret_ref` values.
+- Discovery-only and dry-run execute through the E8 runtime.
+- Full sync remains disabled by default.
+
+## E8.1.14 GCP Reference Connector and Runtime Adapter
+
+E8.1.14 added a framework-native GCP reference connector and production adapter
+foundation.
+
+### Package
+
+```text
+connectors/gcp/reference_connector.py
+connector_adapters/gcp_production_adapter.py
+```
+
+### Outcome
+
+- GCP supports `project_id`, `service_account_secret_ref`, and `regions`.
+- Discovery-only and dry-run execute through the E8 runtime.
+- Mock-safe cost, Compute Engine, and Cloud Storage records normalize to canonical cloud and cost records.
+- Full sync remains disabled by default.
+
+## E8.1.15 Cloud Connector Runtime Review
+
+E8.1.15 confirmed:
+
+- AWS, Azure, and GCP adapter seams are consistent.
+- `DISCOVERY_ONLY` and `DRY_RUN` paths execute successfully.
+- Dry-run paths normalize records and publish zero records.
+- `FULL_SYNC` is guarded and disabled by default.
+- Azure and GCP direct secret values are kept out of runtime metadata.
+
+## E8.1.16 Merge Preparation
+
+E8.1.16 closes E8.1 as the Universal Connector Framework baseline.
+
+### Release Readiness
+
+```text
+Compile validation: PASS
+Runtime validation: PASS
+Cloud adapter consistency: PASS
+Secret-reference hardening: PASS
+Full-sync guards: PASS
+Merge readiness: PASS
+```
+
+Recommended post-merge tag:
+
+```text
+v1.1.0-universal-connectors
+```

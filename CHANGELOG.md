@@ -1,5 +1,34 @@
 ﻿# Changelog
 
+## v1.1.0-universal-connectors - 2026-07-07
+
+### Added
+- Universal Connector Framework for standardized enterprise ingestion across cloud, SaaS, ITSM, DevOps, observability, finance, identity, ERP, and security systems.
+- Connector SDK, runtime registry, execution engine, authentication framework, secret management, canonical models, persistence seams, orchestration, scheduling, observability, telemetry, audit, and health foundations.
+- AWS reference connector, legacy cloud connection bridge, and AWS production runtime adapter seam.
+- Azure runtime adapter seam with service-principal auth mapping and `client_secret` to `secret_ref` hardening.
+- GCP framework-native reference connector and production runtime adapter foundation.
+
+### Changed
+- Cloud connector architecture now routes provider onboarding toward `connector_registry`, `ConnectorAuthConfig`, `ConnectorRuntimeContext`, and `ConnectorExecutionEngine`.
+- Existing AWS and Azure production paths remain preserved while new E8 runtime adapters provide discovery-only and dry-run execution seams.
+- GCP onboarding foundation starts natively on the Universal Connector Framework rather than extending legacy connector paths.
+
+### Security
+- Azure runtime auth mapping strips inline `client_secret` values from runtime metadata and converts legacy values to deterministic `secret_ref` references.
+- GCP runtime auth accepts `service_account_secret_ref` and strips direct service-account JSON/key/private-key values from runtime metadata.
+- `FULL_SYNC` remains guarded and disabled by default for AWS, Azure, and GCP production adapter seams.
+
+### Validation
+- Connector framework packages compile successfully.
+- AWS, Azure, and GCP runtime adapters pass discovery-only execution.
+- AWS, Azure, and GCP runtime adapters pass dry-run execution with canonical normalization and zero publishing.
+- AWS, Azure, and GCP production full sync paths remain disabled by default.
+
+### Notes
+- E8.1 is merge-ready as the Universal Connector Framework baseline.
+- Recommended post-merge release tag: `v1.1.0-universal-connectors`.
+
 ## v1.0.0-enterprise-foundation - 2026-07-05
 
 ### Added

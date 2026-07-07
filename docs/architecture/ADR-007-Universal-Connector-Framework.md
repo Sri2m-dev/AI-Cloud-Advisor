@@ -1,8 +1,9 @@
 ﻿# ADR-007: Universal Connector Framework
 
-Status: Accepted
+Status: Accepted - E8.1 Complete
 Date: 2026-07-05
-Program: E8.1.1 Universal Connector Framework Architecture and Core SDK
+Last Updated: 2026-07-07
+Program: E8.1 Universal Connector Framework
 
 ## Context
 
@@ -14,7 +15,9 @@ The next platform limitation is ingestion. Adding each source system directly to
 
 Introduce a Universal Connector Framework as the standard ingestion architecture for enterprise systems.
 
-The first E8.1.1 implementation defines contracts and skeleton layers only:
+The E8.1 implementation defines the connector control plane, runtime, canonical
+models, authentication and secret contracts, orchestration, observability, and
+cloud runtime adapter seams:
 
 - `connectors/`
 - `connector_sdk/`
@@ -23,8 +26,18 @@ The first E8.1.1 implementation defines contracts and skeleton layers only:
 - `connector_health/`
 - `connector_secrets/`
 - `connector_logs/`
+- `connector_runtime/`
+- `connector_auth/`
+- `connector_normalization/`
+- `connector_persistence/`
+- `connector_orchestration/`
+- `connector_observability/`
+- `connector_migration/`
+- `connector_adapters/`
 
-No new production-grade AWS, Azure, Microsoft 365, ServiceNow, or other vendor connector implementation is included in this ADR.
+The first cloud foundation includes AWS, Azure, and GCP runtime adapter seams.
+They support discovery-only and dry-run execution through the E8 runtime while
+keeping full production sync disabled by default.
 
 ## Core Contracts
 
@@ -74,9 +87,21 @@ This protects the platform from vendor-specific integration sprawl and creates a
 
 - Add persistent connector registry storage.
 - Add tenant-aware connector enablement.
-- Add OAuth, API key, and service-account auth managers.
-- Add retry, rate limit, and backoff policies.
 - Add scheduler persistence and execution workers.
-- Add first production-grade connectors: AWS, Azure, and Microsoft 365 or ServiceNow.
+- Add production cloud API extraction behind feature-gated full-sync adapters.
+- Add Microsoft 365, ServiceNow, Datadog, GitHub, Salesforce, SAP, and security connectors.
 - Publish normalized records into the Enterprise Data Fabric, Knowledge Graph, and Enterprise Financial Model.
+
+## E8.1 Cloud Foundation Completion
+
+E8.1 closes with:
+
+- AWS reference connector and production runtime adapter seam.
+- Azure runtime adapter seam with service-principal mapping and secret-reference hardening.
+- GCP reference connector and runtime adapter foundation.
+- Connector runtime validation for `DISCOVERY_ONLY` and `DRY_RUN`.
+- `FULL_SYNC` guarded and disabled by default for all cloud adapter seams.
+
+This creates the merge-ready Universal Connector Framework baseline for
+`v1.1.0-universal-connectors`.
 
