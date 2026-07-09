@@ -21,7 +21,14 @@ ADRs remain the source of truth for the detailed decision, context, consequences
 | ADR-005 | Certification Framework | Accepted | v1.0.0 Enterprise Foundation | `docs/architecture/ADR-005-Certification-Framework.md` |
 | ADR-006 | Caching Strategy | Accepted | v1.0.0 Enterprise Foundation | `docs/architecture/ADR-006-Caching-Strategy.md` |
 | ADR-007 | Universal Connector Framework | Accepted | v1.1.0 Universal Connectors | `docs/architecture/ADR-007-Universal-Connector-Framework.md` |
-| ADR-008 | Enterprise Data Fabric | Proposed | E8.2 Enterprise Data Fabric | Pending |
+| ADR-008 | Enterprise Data Fabric | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-008-Enterprise-Data-Fabric.md` |
+| ADR-009 | Canonical Entity Model | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-009-Canonical-Entity-Model.md` |
+| ADR-010 | Enterprise Semantic Layer | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-010-Enterprise-Semantic-Layer.md` |
+| ADR-011 | Identity Resolution | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-011-Identity-Resolution.md` |
+| ADR-012 | Data Lineage | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-012-Data-Lineage.md` |
+| ADR-013 | Provenance Framework | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-013-Provenance-Framework.md` |
+| ADR-014 | Versioning Strategy | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-014-Versioning-Strategy.md` |
+| ADR-015 | Data Quality Framework | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-015-Data-Quality-Framework.md` |
 
 ## Release Mapping
 
@@ -42,19 +49,18 @@ Integration platform decision:
 
 - Universal Connector Framework
 
-### E8.2 Enterprise Data Fabric
+### P3 Enterprise Data Fabric
 
-Future architecture-only decision package:
+Architecture-only decision package:
 
 - Enterprise Data Fabric
-- Enterprise Semantic Model
-- Enterprise Ontology
 - Canonical Entity Model
-- Canonical Relationship Model
-- Identity Resolution Strategy
-- Lineage and Provenance Strategy
+- Enterprise Semantic Layer
+- Identity Resolution
+- Data Lineage
+- Provenance Framework
 - Versioning Strategy
-- Data Quality Strategy
+- Data Quality Framework
 
 ## Governance Rules
 
@@ -76,16 +82,16 @@ Engineering: Frozen
 Tag: Pending post-merge E8.1.17 validation
 ```
 
-E8.2 remains blocked until `v1.1.0-universal-connectors` is merged, validated, tagged, and pushed.
+P3 implementation remains blocked until ADR-008 through ADR-015 are reviewed and accepted.
 
-## Next ADR
+## P3 Architecture Boundary
 
-The next expected ADR is:
+The P3 architecture package is:
 
 ```text
-ADR-008: Enterprise Data Fabric
+ADR-008 through ADR-015
 Status: Proposed
-Program: E8.2
+Program: P3 Enterprise Data Fabric
 Scope: Architecture only until reviewed and accepted
 ```
 
