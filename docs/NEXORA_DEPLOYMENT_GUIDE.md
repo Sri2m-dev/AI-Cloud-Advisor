@@ -84,3 +84,17 @@ Recommended rollback flow:
 - Do not commit screenshots or Streamlit runtime cache.
 - Keep approval actions uncached.
 - Verify Supabase values match the intended environment before production validation.
+
+## Optional Runtime Dependency Groups
+
+The base `requirements.txt` supports the primary Streamlit platform. Some runtime surfaces are optional and may require additional provider or worker dependencies depending on the deployment target.
+
+| Capability | Example Dependencies | Notes |
+| --- | --- | --- |
+| AWS live connector operations | `boto3` | Required only for live AWS API calls and legacy AWS sync scripts. |
+| Azure live connector operations | `azure-identity`, `azure-mgmt-resource`, `azure-mgmt-costmanagement`, `azure-core` | Required only for live Azure API calls. Runtime adapter dry-run/discovery scaffolding does not require exposing secrets. |
+| Backend/API services | `fastapi`, `uvicorn` | Included in the base dependency set for API surfaces. |
+| Worker/queue runtime | `celery`, `redis` | Required only when running asynchronous worker or token-store paths. |
+| Observability exports | `prometheus-client` | Required only when exporting backend metrics. |
+
+If a deployment enables live provider connectors or worker services, confirm these dependencies are installed and validated in that environment before release tagging.
