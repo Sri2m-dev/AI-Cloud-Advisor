@@ -15,25 +15,31 @@ from components.cards import (
 )
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
+from components.shared import (
+    render_ai_narrative,
+    render_business_context,
+    render_evidence_panel,
+    render_executive_summary,
+    render_reconciliation_panel,
+)
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from services.knowledge_graph_certification_service import KnowledgeGraphCertificationService
 from services.knowledge_graph_service import KnowledgeGraphService
+from shared.streamlit_compat import dataframe
 
 
 st.set_page_config(page_title="Technology Knowledge Graph", layout="wide")
 
 
 def _money(value: Any) -> str:
-    try:
-        return f"${float(value or 0):,.0f}"
-    except (TypeError, ValueError):
-        return "$0"
+    return KnowledgeGraphCertificationService.format_money(value)
 
 
 def _show_dataframe(df: pd.DataFrame, empty_message: str) -> None:
     if df.empty:
         st.info(empty_message)
         return
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    dataframe(df, hide_index=True)
 
 
 def _format_money_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
@@ -96,6 +102,16 @@ def main() -> None:
     technologies = kpis.get("Technologies", 0)
     relationships = kpis.get("Relationships", 0)
     critical_dependencies = kpis.get("Critical Dependencies", 0)
+    certification = KnowledgeGraphCertificationService.get_dashboard()
+    relationship_summary = certification["relationship_summary"]
+    reconciliation_cards = certification["reconciliation_cards"]
+    business_context = certification["business_context"]
+    dependency_summary = certification["dependency_summary"]
+    financial_model = certification.get("financial_model") or {}
+    evidence = certification["evidence"]
+    summary_relationships = int(relationship_summary["relationships"])
+    expected_relationships = int(relationship_summary["expected_relationships"])
+    relationship_coverage = relationship_summary["relationship_coverage"]
 
     connected_nodes: set[str] = set()
     if not rel_df.empty:
@@ -116,12 +132,116 @@ def main() -> None:
         ((total_entities - unmapped_nodes) / total_entities) * 100,
         1,
     ) if total_entities else 0
+    graph_confidence = int(relationship_summary["graph_confidence"])
+
+    def render_certification_summary() -> None:
+        render_executive_summary(
+            {
+                "title": "Executive Summary",
+                "description": "Certified enterprise dependency intelligence for business impact, financial reconciliation, and graph confidence.",
+                "narrative": certification["executive_summary"],
+                "metrics": [
+                    {
+                        "label": "Graph Confidence",
+                        "value": f"{graph_confidence}%",
+                        "description": "Certified graph confidence",
+                        "icon": "health",
+                        "status": _graph_health_status(graph_confidence),
+                    },
+                    {
+                        "label": "Relationships",
+                        "value": f"{summary_relationships:,} of {expected_relationships:,}",
+                        "description": "Mapped dependency relationships",
+                        "icon": "graph",
+                        "status": _graph_health_status(float(relationship_coverage or 0)),
+                    },
+                    {
+                        "label": "Relationship Coverage",
+                        "value": f"{float(relationship_coverage or 0):.1f}%",
+                        "description": "Expected graph relationships mapped",
+                        "icon": "governance",
+                        "status": _graph_health_status(float(relationship_coverage or 0)),
+                    },
+                    {
+                        "label": "Critical Dependencies",
+                        "value": f"{int(dependency_summary.get('critical_dependencies') or 0):,}",
+                        "description": "High-impact dependency signals",
+                        "icon": "risk",
+                        "status": "critical" if dependency_summary.get("critical_dependencies") else "healthy",
+                    },
+                    {
+                        "label": "Highest Blast Radius",
+                        "value": dependency_summary.get("highest_blast_radius") or "Unknown",
+                        "description": f"Impact: {_money(dependency_summary.get('estimated_impact'))}",
+                        "icon": "alert",
+                        "status": "critical" if dependency_summary.get("risk") == "Critical" else "warning",
+                    },
+                    {
+                        "label": "Applications",
+                        "value": f"{int(business_context.get('applications') or 0):,}",
+                        "description": "Application nodes in business context",
+                        "icon": "technology",
+                        "status": "info",
+                    },
+                    {
+                        "label": "Technologies",
+                        "value": f"{int(business_context.get('technologies') or 0):,}",
+                        "description": "Technology nodes in business context",
+                        "icon": "platform",
+                        "status": "info",
+                    },
+                    {
+                        "label": "Estimated Impact",
+                        "value": _money(dependency_summary.get("estimated_impact")),
+                        "description": "Highest blast-radius spend exposure",
+                        "icon": "cost",
+                        "status": "warning",
+                    },
+                ],
+            }
+        )
+
+        render_reconciliation_panel(
+            {
+                **reconciliation_cards,
+                "allocated_spend_display": _money(financial_model.get("allocated_spend")),
+                "variance_status": reconciliation_cards.get("status", "Unknown"),
+            }
+        )
+        render_business_context(business_context)
+        render_ai_narrative(
+            "AI Graph Interpretation",
+            evidence.get("ai_interpretation") or "Knowledge Graph AI interpretation is unavailable.",
+            description="AI-assisted interpretation of dependency coverage, blast radius, and graph maturity.",
+        )
+
+        render_section(
+            "Enterprise Dependency Summary",
+            "Certified rollup of business, application, technology, relationship, and blast-radius signals.",
+        )
+        dependency_cols = st.columns(4)
+        with dependency_cols[0]:
+            render_metric_card("Business Units", f"{int(business_context.get('business_units') or 0):,}", "Enterprise scope", icon="enterprise", status="info")
+            render_metric_card("Business Services", f"{int(business_context.get('business_services') or 0):,}", "Service layer", icon="enterprise", status="info")
+        with dependency_cols[1]:
+            render_metric_card("Applications", f"{int(business_context.get('applications') or 0):,}", "Application layer", icon="technology", status="info")
+            render_metric_card("Technologies", f"{int(business_context.get('technologies') or 0):,}", "Technology layer", icon="platform", status="info")
+        with dependency_cols[2]:
+            render_metric_card("Relationships", f"{int(business_context.get('relationships') or 0):,}", "Mapped edges", icon="graph", status="info")
+            render_risk_card("Critical Dependencies", f"{int(dependency_summary.get('critical_dependencies') or 0):,}", "High-impact dependencies", icon="risk", status="critical" if dependency_summary.get("critical_dependencies") else "healthy")
+        with dependency_cols[3]:
+            render_risk_card("Highest Blast Radius", dependency_summary.get("highest_blast_radius") or "Unknown", f"Impact: {_money(dependency_summary.get('estimated_impact'))}", icon="alert", status="critical" if dependency_summary.get("risk") == "Critical" else "warning")
+            render_metric_card("Governance Coverage", f"{float(business_context.get('mapping_coverage') or 0):.1f}%", "Relationship coverage", icon="governance", status=_graph_health_status(float(business_context.get("mapping_coverage") or 0)))
+
+    def render_certification_evidence() -> None:
+        render_evidence_panel(evidence)
 
     def render_graph_content() -> None:
+        render_certification_summary()
+
         render_section(
             "Graph Intelligence Summary",
             "CIO view of what is connected, what depends on what, and where mapping is incomplete.",
-            divider=False,
         )
         summary_cols = st.columns(4)
         with summary_cols[0]:
@@ -161,12 +281,20 @@ def main() -> None:
         with relationship_cols[0]:
             render_metric_card(
                 "Relationships",
-                f"{relationships:,}",
-                "Edges connecting entities across the graph",
+                f"{summary_relationships:,} of {expected_relationships:,}",
+                f"{relationship_coverage}% relationship coverage",
                 icon="graph",
-                status="info" if relationships else "warning",
+                status="info" if summary_relationships else "warning",
             )
         with relationship_cols[1]:
+            render_metric_card(
+                "Relationship Coverage",
+                f"{relationship_coverage}%",
+                f"{summary_relationships:,} mapped relationships; {max(expected_relationships - summary_relationships, 0):,} expected gaps",
+                icon="health",
+                status=_graph_health_status(relationship_coverage),
+            )
+        with relationship_cols[2]:
             render_risk_card(
                 "Critical Dependencies",
                 f"{critical_dependencies:,}",
@@ -174,21 +302,13 @@ def main() -> None:
                 icon="risk",
                 status="critical" if critical_dependencies else "healthy",
             )
-        with relationship_cols[2]:
-            render_risk_card(
-                "Unmapped Nodes",
-                f"{unmapped_nodes:,}",
-                "Entities without relationship coverage",
-                icon="warning",
-                status="critical" if unmapped_nodes else "healthy",
-            )
         with relationship_cols[3]:
             render_metric_card(
-                "Graph Health Score",
-                f"{graph_health_score}%",
-                "Share of entities with relationship coverage",
+                "Graph Confidence",
+                f"{graph_confidence}%",
+                "Confidence from entity coverage and expected relationship mapping",
                 icon="health",
-                status=_graph_health_status(graph_health_score),
+                status=_graph_health_status(graph_confidence),
             )
 
         render_section(
@@ -362,19 +482,19 @@ def main() -> None:
         health_cols = st.columns(3)
         with health_cols[0]:
             render_metric_card(
-                "Graph Health Score",
-                f"{graph_health_score}%",
-                "Connected entity coverage",
+                "Graph Confidence",
+                f"{graph_confidence}%",
+                f"{summary_relationships:,} of {expected_relationships:,} relationships mapped",
                 icon="health",
-                status=_graph_health_status(graph_health_score),
+                status=_graph_health_status(graph_confidence),
             )
         with health_cols[1]:
-            render_risk_card(
-                "Mapping Incomplete",
-                f"{unmapped_nodes:,}",
-                "Unmapped nodes requiring relationship cleanup",
-                icon="warning",
-                status="critical" if unmapped_nodes else "healthy",
+            render_metric_card(
+                "Relationship Coverage",
+                f"{relationship_coverage}%",
+                f"{max(expected_relationships - summary_relationships, 0):,} expected relationship gaps",
+                icon="graph",
+                status=_graph_health_status(relationship_coverage),
             )
         with health_cols[2]:
             render_risk_card(
@@ -392,8 +512,10 @@ def main() -> None:
         question = st.text_input("Ask a graph question", value="What breaks if AWS fails?")
         render_insight_card(
             "Graph Question Response",
-            description=KnowledgeGraphService.answer_question(question),
-            status=_graph_health_status(graph_health_score),
+            description=KnowledgeGraphCertificationService.escape_markdown_currency(
+                KnowledgeGraphService.answer_question(question)
+            ),
+            status=_graph_health_status(graph_confidence),
         )
         render_insight_card(
             "Knowledge Graph Value",
@@ -421,12 +543,14 @@ def main() -> None:
                 "No relationships are available.",
             )
 
+        render_certification_evidence()
+
     render_page(
         title="Knowledge Graph",
         description="CIO graph intelligence for connected services, applications, technologies, dependencies, and impact.",
         breadcrumbs=["Home", "CIO", "Knowledge Graph"],
         content=render_graph_content,
-        status=_graph_health_status(graph_health_score),
+        status=_graph_health_status(graph_confidence),
     )
 
 

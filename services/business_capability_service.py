@@ -1,477 +1,552 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-from connectors.common.tenant_guard import resolve_organization_id
-from services.enterprise_ownership_service import EnterpriseOwnershipService
-from services.supabase_client import supabase
+import pandas as pd
+
+from repositories.business_capability_repository import BusinessCapabilityRepository
+from services.business_unit_service import BusinessUnitService
+
+
+def _normalize(value: Any, default: str = "") -> str:
+    text = str(value or "").strip()
+    return text if text else default
+
+
+def _lower(value: Any) -> str:
+    return _normalize(value).lower()
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(float(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _first_existing(row: dict[str, Any], *keys: str, default: Any = None) -> Any:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return default
 
 
 class BusinessCapabilityService:
-    TABLE_NAME = "business_capability_registry"
+    """E7.1.2 service for the enterprise business capability foundation."""
 
     @staticmethod
-    def sync_business_capabilities(organization_id: str | None = None) -> dict[str, Any]:
-        context = BusinessCapabilityService._load_context(organization_id)
-        capability_rows = BusinessCapabilityService._build_capability_rows(context)
-        BusinessCapabilityService._persist_capabilities(capability_rows)
-        health_rows = BusinessCapabilityService._build_health_rows(capability_rows, context)
-        return {
-            "status": "SUCCESS",
-            "organization_id": context["organization_id"],
-            "total_capabilities": len(capability_rows),
-            "capabilities_synced": len(capability_rows),
-            "critical_capabilities": len([row for row in capability_rows if BusinessCapabilityService._is_critical(row)]),
-            "average_health": BusinessCapabilityService._average([row["Health Score"] for row in health_rows]),
-            "capabilities": capability_rows,
-            "health": health_rows,
-        }
+    def get_capabilities() -> list[dict[str, Any]]:
+        explicit = BusinessCapabilityRepository.get_business_capabilities()
+        services = BusinessCapabilityRepository.get_business_services()
+        applications = BusinessCapabilityRepository.get_application_registry()
+        spend = BusinessCapabilityRepository.get_application_spend()
+
+        capabilities: dict[str, dict[str, Any]] = {}
+
+        for row in explicit:
+            capability = BusinessCapabilityService._capability_name(row)
+            if not capability:
+                continue
+            item = BusinessCapabilityService._ensure_capability(
+                capabilities,
+                capability,
+                BusinessCapabilityService._business_unit_name(row),
+                source="business_capabilities",
+            )
+            item["id"] = _first_existing(row, "id", "capability_id", default=item["id"])
+            item["business_unit_id"] = _first_existing(row, "business_unit_id", default=item["business_unit_id"])
+            item["owner"] = _normalize(_first_existing(row, "owner", "capability_owner", default=item["owner"]), item["owner"])
+            item["criticality"] = BusinessCapabilityService._max_criticality(
+                item["criticality"],
+                _first_existing(row, "criticality", "tier"),
+            )
+            item["status"] = _normalize(_first_existing(row, "status", default=item["status"]), item["status"])
+
+        for row in services:
+            capability = BusinessCapabilityService._capability_name(row) or BusinessCapabilityService._derive_capability(row)
+            unit = BusinessCapabilityService._business_unit_name(row)
+            item = BusinessCapabilityService._ensure_capability(capabilities, capability, unit, source="business_services")
+            item["business_services"] += 1
+            item["owner"] = BusinessCapabilityService._prefer_assigned(
+                item["owner"],
+                _first_existing(row, "owner", "service_owner", "business_owner"),
+            )
+            item["criticality"] = BusinessCapabilityService._max_criticality(
+                item["criticality"],
+                _first_existing(row, "criticality", "service_criticality"),
+            )
+            item["monthly_cost"] += BusinessCapabilityService._monthly_value(row)
+
+        for row in applications:
+            capability = BusinessCapabilityService._capability_name(row) or BusinessCapabilityService._derive_capability(row)
+            unit = BusinessCapabilityService._business_unit_name(row)
+            item = BusinessCapabilityService._ensure_capability(capabilities, capability, unit, source="application_registry")
+            item["applications"] += 1
+            item["owner"] = BusinessCapabilityService._prefer_assigned(
+                item["owner"],
+                _first_existing(row, "owner", "owner_name", "application_owner", "business_owner"),
+            )
+            item["criticality"] = BusinessCapabilityService._max_criticality(
+                item["criticality"],
+                _first_existing(row, "criticality", "application_criticality"),
+            )
+
+        BusinessCapabilityService._apply_spend(capabilities, spend)
+
+        if not capabilities:
+            retail_unit = next(iter(BusinessUnitService.get_business_units()), {})
+            item = BusinessCapabilityService._ensure_capability(
+                capabilities,
+                "Checkout",
+                retail_unit.get("Business Unit") or "Retail",
+                source="fallback",
+            )
+            item["owner"] = retail_unit.get("Owner") or "Digital Commerce"
+            item["criticality"] = "Critical"
+            item["applications"] = 1
+            item["business_services"] = 1
+            item["monthly_cost"] = 10800.0
+
+        output = []
+        for item in capabilities.values():
+            item["monthly_cost"] = round(_safe_float(item["monthly_cost"]), 2)
+            item["mapping_coverage"] = BusinessCapabilityService._mapping_coverage(item)
+            item["risk_score"] = BusinessCapabilityService._risk_score(item)
+            item["health_score"] = BusinessCapabilityService._health_score(item)
+            output.append(item)
+
+        return sorted(output, key=lambda row: (row["business_unit"], row["name"]))
+
+    @staticmethod
+    def get_capabilities_by_business_unit() -> dict[str, list[dict[str, Any]]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in BusinessCapabilityService.get_capabilities():
+            grouped.setdefault(row["business_unit"], []).append(row)
+        return grouped
 
     @staticmethod
     def get_capability_summary(organization_id: str | None = None) -> dict[str, Any]:
-        sync = BusinessCapabilityService.sync_business_capabilities(organization_id)
-        health = sync["health"]
-        spend = BusinessCapabilityService.get_capability_spend(sync["organization_id"])
-        total_spend = sum(float(row.get("Monthly Spend") or 0) for row in spend)
-        optimization = sum(float(row.get("Optimization Opportunity") or 0) for row in health)
+        capabilities = BusinessCapabilityService.get_capabilities()
+        critical = [row for row in capabilities if row["criticality"] in {"Critical", "High"}]
+        total_spend = sum(_safe_float(row["monthly_cost"]) for row in capabilities)
+        avg_health = BusinessCapabilityService._average([row["health_score"] for row in capabilities])
+        avg_coverage = BusinessCapabilityService._average([row["mapping_coverage"] for row in capabilities])
+        governance_score = round((avg_health * 0.6) + (avg_coverage * 0.4), 1)
+
         return {
-            **sync,
+            "status": "SUCCESS",
+            "organization_id": organization_id,
+            "capabilities": capabilities,
+            "health": BusinessCapabilityService.get_capability_health(organization_id),
+            "total_capabilities": len(capabilities),
+            "capabilities_synced": len(capabilities),
+            "critical_capabilities": len(critical),
+            "average_health": avg_health,
+            "mapping_coverage": avg_coverage,
             "total_capability_spend": round(total_spend, 2),
-            "optimization_opportunity": round(optimization, 2),
-            "governance_score": BusinessCapabilityService._average([row["Governance Score"] for row in health]),
+            "optimization_opportunity": round(total_spend * 0.08, 2),
+            "governance_score": governance_score,
+            "business_units": len(BusinessCapabilityService.get_capabilities_by_business_unit()),
+            "applications": sum(_safe_int(row["applications"]) for row in capabilities),
+            "business_services": sum(_safe_int(row["business_services"]) for row in capabilities),
         }
 
     @staticmethod
-    def get_capability_health(organization_id: str | None = None) -> list[dict[str, Any]]:
-        context = BusinessCapabilityService._load_context(organization_id)
-        capabilities = BusinessCapabilityService._build_capability_rows(context)
-        return BusinessCapabilityService._build_health_rows(capabilities, context)
-
-    @staticmethod
-    def get_capability_spend(organization_id: str | None = None) -> list[dict[str, Any]]:
-        context = BusinessCapabilityService._load_context(organization_id)
-        capabilities = BusinessCapabilityService._build_capability_rows(context)
-        health = BusinessCapabilityService._build_health_rows(capabilities, context)
-        return [
-            {
-                "Business Capability": row["Business Capability"],
-                "Monthly Spend": row["Monthly Spend"],
-                "Optimization Opportunity": row["Optimization Opportunity"],
-            }
-            for row in health
-        ]
-
-    @staticmethod
-    def get_capability_assets(organization_id: str | None = None) -> list[dict[str, Any]]:
-        rows = BusinessCapabilityService._load_context(organization_id)["ownership"]
-        return [
-            {
-                "Business Capability": row.get("business_capability") or "Unmapped",
-                "Enterprise Asset ID": row.get("enterprise_asset_id"),
-                "Application": row.get("application"),
-                "Business Service": row.get("business_service"),
-                "Owner": row.get("technical_owner") or row.get("business_owner") or row.get("executive_owner"),
-                "Criticality": row.get("criticality"),
-            }
-            for row in rows
-        ]
-
-    @staticmethod
-    def get_capability_applications(organization_id: str | None = None) -> list[dict[str, Any]]:
-        rows = BusinessCapabilityService._load_context(organization_id)["ownership"]
-        grouped: dict[str, set[str]] = {}
-        for row in rows:
-            capability = row.get("business_capability") or "Unmapped"
-            application = row.get("application")
-            if application:
-                grouped.setdefault(capability, set()).add(application)
-        return [
-            {
-                "Business Capability": capability,
-                "Applications": len(applications),
-                "Application List": ", ".join(sorted(applications)),
-            }
-            for capability, applications in sorted(grouped.items())
-        ]
-
-    @staticmethod
-    def get_capability_risk(organization_id: str | None = None) -> list[dict[str, Any]]:
-        return [
-            {
-                "Business Capability": row["Business Capability"],
-                "Risk": row["Risk"],
-                "Health Score": row["Health Score"],
-                "Criticality": row["Criticality"],
-                "Missing Executive Owner": row["Missing Executive Owner"],
-                "Ownership Completeness": row["Ownership Completeness"],
-            }
-            for row in BusinessCapabilityService.get_capability_health(organization_id)
-        ]
-
-    @staticmethod
-    def get_capability_dependencies(organization_id: str | None = None) -> list[dict[str, Any]]:
-        context = BusinessCapabilityService._load_context(organization_id)
-        dependencies = []
-        for row in context["relationships"]:
-            source = row.get("source_name") or row.get("source")
-            target = row.get("target_name") or row.get("target")
-            relationship = row.get("relationship_type") or row.get("relationship")
-            if source and target:
-                dependencies.append(
-                    {
-                        "Source": source,
-                        "Relationship": relationship,
-                        "Target": target,
-                    }
-                )
-        for row in context["ownership"]:
-            dependencies.append(
-                {
-                    "Source": row.get("business_capability") or "Unmapped",
-                    "Relationship": "OWNS_SERVICE",
-                    "Target": row.get("business_service") or "Unmapped",
-                }
-            )
-            dependencies.append(
-                {
-                    "Source": row.get("business_service") or "Unmapped",
-                    "Relationship": "SUPPORTS_APPLICATION",
-                    "Target": row.get("application") or "Unmapped",
-                }
-            )
-        return BusinessCapabilityService._dedupe(dependencies, ("Source", "Relationship", "Target"))
-
-    @staticmethod
-    def get_dashboard(organization_id: str | None = None) -> dict[str, Any]:
+    def get_capability_dashboard(organization_id: str | None = None) -> dict[str, Any]:
+        capabilities = BusinessCapabilityService.get_capabilities()
         summary = BusinessCapabilityService.get_capability_summary(organization_id)
-        health = summary["health"]
-        spend = BusinessCapabilityService.get_capability_spend(summary["organization_id"])
-        assets = BusinessCapabilityService.get_capability_assets(summary["organization_id"])
-        applications = BusinessCapabilityService.get_capability_applications(summary["organization_id"])
+        health = BusinessCapabilityService.get_capability_health(organization_id)
+        spend = BusinessCapabilityService.get_capability_spend(organization_id)
+        applications = BusinessCapabilityService.get_capability_applications(organization_id)
+        assets = BusinessCapabilityService.get_capability_assets(organization_id)
+        risk = BusinessCapabilityService.get_capability_risk(organization_id)
+        dependencies = BusinessCapabilityService.get_capability_dependencies(organization_id)
+
         return {
             "summary": summary,
+            "capabilities": capabilities,
             "health": health,
             "spend": spend,
             "assets": assets,
             "applications": applications,
             "health_matrix": health,
             "spend_by_capability": spend,
-            "assets_by_capability": BusinessCapabilityService._distribution(
-                assets,
-                "Business Capability",
-                "Business Capability",
-            ),
+            "assets_by_capability": BusinessCapabilityService._distribution(assets, "Business Capability"),
             "applications_by_capability": applications,
-            "risk_heatmap": BusinessCapabilityService.get_capability_risk(summary["organization_id"]),
-            "dependency_graph": BusinessCapabilityService.get_capability_dependencies(summary["organization_id"]),
+            "risk_heatmap": risk,
+            "dependency_graph": dependencies,
             "critical_capabilities": [row for row in health if row["Criticality"] in {"Critical", "High"}],
             "lowest_health": sorted(health, key=lambda row: row["Health Score"])[:10],
             "highest_spend": sorted(health, key=lambda row: row["Monthly Spend"], reverse=True)[:10],
-            "missing_executive_owner": [row for row in health if row["Missing Executive Owner"]],
+            "missing_executive_owner": [row for row in health if row["Owner"] in {"Unassigned", "Unknown", ""}],
             "improvement_recommendations": BusinessCapabilityService._recommendations(health),
+            "capabilities_by_business_unit": BusinessCapabilityService.get_capabilities_by_business_unit(),
         }
 
     @staticmethod
-    def _load_context(organization_id: str | None = None) -> dict[str, Any]:
-        ownership_summary = EnterpriseOwnershipService.sync_asset_ownership(organization_id)
-        org_id = ownership_summary["organization_id"]
-        return {
-            "organization_id": org_id,
-            "ownership": ownership_summary.get("ownership", []),
-            "registry": BusinessCapabilityService._load_registry(org_id),
-            "applications": BusinessCapabilityService._fetch_rows("application_registry"),
-            "business_services": BusinessCapabilityService._fetch_rows("business_services"),
-            "relationships": BusinessCapabilityService._fetch_org_rows("relationship_graph", org_id)
-            + BusinessCapabilityService._fetch_rows("business_service_relationships"),
-            "costs": BusinessCapabilityService._fetch_rows("unified_cloud_costs"),
-            "recommendations": BusinessCapabilityService._fetch_org_rows("recommendations", org_id),
-        }
+    def get_dashboard(organization_id: str | None = None) -> dict[str, Any]:
+        return BusinessCapabilityService.get_capability_dashboard(organization_id)
 
     @staticmethod
-    def _build_capability_rows(context: dict[str, Any]) -> list[dict[str, Any]]:
-        by_name: dict[str, dict[str, Any]] = {}
-        registry_by_name = {
-            BusinessCapabilityService._norm(row.get("capability_name")): row
-            for row in context["registry"]
-            if row.get("capability_name")
-        }
-        now = datetime.now(timezone.utc).isoformat()
-
-        for ownership in context["ownership"]:
-            capability_name = ownership.get("business_capability") or "Unmapped Capability"
-            key = BusinessCapabilityService._norm(capability_name)
-            registry = registry_by_name.get(key, {})
-            row = by_name.setdefault(
-                key,
-                {
-                    "organization_id": context["organization_id"],
-                    "capability_code": registry.get("capability_code") or BusinessCapabilityService._capability_code(len(by_name) + 1),
-                    "capability_name": capability_name,
-                    "capability_description": registry.get("capability_description") or f"{capability_name} business capability",
-                    "business_domain": registry.get("business_domain") or ownership.get("department") or "Digital Commerce",
-                    "business_unit": registry.get("business_unit") or BusinessCapabilityService._business_unit(ownership, context),
-                    "executive_owner": registry.get("executive_owner") or ownership.get("executive_owner"),
-                    "department": registry.get("department") or ownership.get("department"),
-                    "criticality": registry.get("criticality") or ownership.get("criticality") or "Medium",
-                    "maturity": int(registry.get("maturity") or 3),
-                    "status": registry.get("status") or "Active",
-                    "created_at": registry.get("created_at") or now,
-                    "updated_at": now,
-                },
-            )
-            row["executive_owner"] = row.get("executive_owner") or ownership.get("executive_owner")
-            row["department"] = row.get("department") or ownership.get("department")
-            row["criticality"] = BusinessCapabilityService._max_criticality(
-                row.get("criticality"),
-                ownership.get("criticality"),
-            )
-
-        return sorted(by_name.values(), key=lambda row: row["capability_name"])
+    def sync_business_capabilities(organization_id: str | None = None) -> dict[str, Any]:
+        return BusinessCapabilityService.get_capability_summary(organization_id)
 
     @staticmethod
-    def _build_health_rows(capabilities: list[dict[str, Any]], context: dict[str, Any]) -> list[dict[str, Any]]:
+    def get_capability_health(organization_id: str | None = None) -> list[dict[str, Any]]:
+        return [
+            {
+                "Business Capability": row["name"],
+                "Business Unit": row["business_unit"],
+                "Health Score": row["health_score"],
+                "Risk Score": row["risk_score"],
+                "Risk": BusinessCapabilityService._risk_label(row["risk_score"]),
+                "Application Count": row["applications"],
+                "Asset Count": row["applications"] + row["business_services"],
+                "Business Services": row["business_services"],
+                "Monthly Spend": row["monthly_cost"],
+                "Optimization Opportunity": round(row["monthly_cost"] * 0.08, 2),
+                "Governance Score": row["mapping_coverage"],
+                "Ownership Completeness": 0 if row["owner"] in {"Unassigned", "Unknown", ""} else 100,
+                "Cost Trend": "Stable",
+                "Owner": row["owner"],
+                "Criticality": row["criticality"],
+                "Department": row["business_unit"],
+                "Missing Executive Owner": row["owner"] in {"Unassigned", "Unknown", ""},
+            }
+            for row in BusinessCapabilityService.get_capabilities()
+        ]
+
+    @staticmethod
+    def get_capability_spend(organization_id: str | None = None) -> list[dict[str, Any]]:
+        return [
+            {
+                "Business Capability": row["name"],
+                "Business Unit": row["business_unit"],
+                "Monthly Spend": row["monthly_cost"],
+                "Optimization Opportunity": round(row["monthly_cost"] * 0.08, 2),
+            }
+            for row in BusinessCapabilityService.get_capabilities()
+        ]
+
+    @staticmethod
+    def get_capability_assets(organization_id: str | None = None) -> list[dict[str, Any]]:
         rows = []
-        ownership = context["ownership"]
-        costs = context["costs"]
-        recommendations = context["recommendations"]
-        for capability in capabilities:
-            name = capability["capability_name"]
-            cap_assets = [
-                row for row in ownership if BusinessCapabilityService._norm(row.get("business_capability")) == BusinessCapabilityService._norm(name)
-            ]
-            applications = {row.get("application") for row in cap_assets if row.get("application")}
-            cloud_services = BusinessCapabilityService._cloud_services(cap_assets, costs)
-            saas_dependencies = BusinessCapabilityService._saas_dependencies(name, applications, context["relationships"])
-            monthly_spend = BusinessCapabilityService._monthly_spend(cap_assets, costs)
-            optimization = BusinessCapabilityService._optimization_opportunity(name, applications, recommendations, monthly_spend)
-            ownership_completeness = BusinessCapabilityService._average(
-                [float(row.get("ownership_score") or 0) for row in cap_assets]
-            )
-            governance_score = round((ownership_completeness * 0.7) + (BusinessCapabilityService._maturity_score(capability) * 0.3), 1)
-            cost_trend = "Stable"
-            risk = BusinessCapabilityService._risk(capability, governance_score, monthly_spend, optimization)
-            health = BusinessCapabilityService._health_score(governance_score, monthly_spend, optimization, capability)
+        for row in BusinessCapabilityService.get_capabilities():
             rows.append(
                 {
-                    "Business Capability": name,
-                    "Health Score": health,
-                    "Asset Count": len(cap_assets),
-                    "Application Count": len(applications),
-                    "Cloud Services Used": len(cloud_services),
-                    "SaaS Dependencies": len(saas_dependencies),
-                    "Active Incidents": 0,
-                    "Governance Score": governance_score,
-                    "Ownership Completeness": ownership_completeness,
-                    "Cost Trend": cost_trend,
-                    "Optimization Opportunity": round(optimization, 2),
-                    "Monthly Spend": round(monthly_spend, 2),
-                    "Risk": risk,
-                    "Owner": capability.get("executive_owner") or "Unassigned",
-                    "Criticality": capability.get("criticality") or "Medium",
-                    "Business Unit": capability.get("business_unit") or "Unassigned",
-                    "Department": capability.get("department") or "Unassigned",
-                    "Missing Executive Owner": not bool(capability.get("executive_owner")),
+                    "Business Capability": row["name"],
+                    "Business Unit": row["business_unit"],
+                    "Enterprise Asset ID": row["id"],
+                    "Application": row["applications"],
+                    "Business Service": row["business_services"],
+                    "Owner": row["owner"],
+                    "Criticality": row["criticality"],
                 }
             )
         return rows
 
     @staticmethod
-    def _persist_capabilities(rows: list[dict[str, Any]]) -> None:
-        if not rows:
+    def get_capability_applications(organization_id: str | None = None) -> list[dict[str, Any]]:
+        return [
+            {
+                "Business Capability": row["name"],
+                "Business Unit": row["business_unit"],
+                "Applications": row["applications"],
+                "Application List": f"{row['applications']} mapped application(s)",
+            }
+            for row in BusinessCapabilityService.get_capabilities()
+        ]
+
+    @staticmethod
+    def get_capability_risk(organization_id: str | None = None) -> list[dict[str, Any]]:
+        return [
+            {
+                "Business Capability": row["name"],
+                "Business Unit": row["business_unit"],
+                "Risk": BusinessCapabilityService._risk_label(row["risk_score"]),
+                "Risk Score": row["risk_score"],
+                "Health Score": row["health_score"],
+                "Criticality": row["criticality"],
+                "Mapping Coverage": row["mapping_coverage"],
+                "Missing Executive Owner": row["owner"] in {"Unassigned", "Unknown", ""},
+            }
+            for row in BusinessCapabilityService.get_capabilities()
+        ]
+
+    @staticmethod
+    def get_capability_dependencies(organization_id: str | None = None) -> list[dict[str, Any]]:
+        dependencies = []
+        for row in BusinessCapabilityRepository.get_business_service_relationships():
+            source = _first_existing(row, "source_name", "source")
+            target = _first_existing(row, "target_name", "target")
+            if source and target:
+                dependencies.append(
+                    {
+                        "Source": source,
+                        "Relationship": _first_existing(row, "relationship_type", "relationship", default="RELATES_TO"),
+                        "Target": target,
+                    }
+                )
+
+        for row in BusinessCapabilityService.get_capabilities():
+            dependencies.append(
+                {
+                    "Source": row["business_unit"],
+                    "Relationship": "OWNS_CAPABILITY",
+                    "Target": row["name"],
+                }
+            )
+        return BusinessCapabilityService._dedupe(dependencies, ("Source", "Relationship", "Target"))
+
+    @staticmethod
+    def capabilities_dataframe() -> pd.DataFrame:
+        return pd.DataFrame(BusinessCapabilityService.get_capabilities())
+
+    @staticmethod
+    def summary_dataframe() -> pd.DataFrame:
+        summary = BusinessCapabilityService.get_capability_summary()
+        return pd.DataFrame(
+            [
+                {"Metric": "Capabilities", "Value": summary["total_capabilities"]},
+                {"Metric": "Business Units", "Value": summary["business_units"]},
+                {"Metric": "Applications", "Value": summary["applications"]},
+                {"Metric": "Business Services", "Value": summary["business_services"]},
+                {"Metric": "Monthly Cost", "Value": summary["total_capability_spend"]},
+                {"Metric": "Average Health", "Value": summary["average_health"]},
+                {"Metric": "Mapping Coverage", "Value": summary["mapping_coverage"]},
+            ]
+        )
+
+    @staticmethod
+    def _ensure_capability(
+        capabilities: dict[str, dict[str, Any]],
+        name: str,
+        business_unit: str,
+        *,
+        source: str,
+    ) -> dict[str, Any]:
+        capability = _normalize(name, "Unmapped Capability")
+        unit = _normalize(business_unit, BusinessCapabilityService._default_business_unit())
+        key = f"{_lower(unit)}::{_lower(capability)}"
+        if key not in capabilities:
+            capabilities[key] = {
+                "id": BusinessCapabilityService._capability_id(unit, capability),
+                "business_unit_id": BusinessCapabilityService._business_unit_id(unit),
+                "business_unit": unit,
+                "name": capability,
+                "owner": "Unassigned",
+                "criticality": "Medium",
+                "applications": 0,
+                "business_services": 0,
+                "monthly_cost": 0.0,
+                "health_score": 0.0,
+                "risk_score": 0.0,
+                "mapping_coverage": 0.0,
+                "status": "Active",
+                "source": source,
+            }
+        elif capabilities[key].get("source") == "fallback":
+            capabilities[key]["source"] = source
+        return capabilities[key]
+
+    @staticmethod
+    def _capability_name(row: dict[str, Any]) -> str:
+        return _normalize(
+            _first_existing(
+                row,
+                "capability_name",
+                "business_capability",
+                "Business Capability",
+                "capability",
+                default="",
+            )
+        )
+
+    @staticmethod
+    def _derive_capability(row: dict[str, Any]) -> str:
+        service = _normalize(_first_existing(row, "service_name", "business_service_name", "service", default=""))
+        app = _normalize(_first_existing(row, "app_name", "application_name", "application", "name", default=""))
+        candidate = service or app or "Unmapped Capability"
+        for suffix in (" Service", " Application", " API", " Portal"):
+            if candidate.endswith(suffix):
+                candidate = candidate[: -len(suffix)]
+        return _normalize(candidate, "Unmapped Capability")
+
+    @staticmethod
+    def _business_unit_name(row: dict[str, Any]) -> str:
+        return _normalize(
+            _first_existing(
+                row,
+                "business_unit",
+                "business_unit_name",
+                "Business Unit",
+                "department",
+                default="",
+            )
+        )
+
+    @staticmethod
+    def _default_business_unit() -> str:
+        units = BusinessUnitService.get_business_units()
+        return _normalize(units[0].get("Business Unit") if units else "", "Retail")
+
+    @staticmethod
+    def _business_unit_id(unit: str) -> str:
+        return f"bu-{_lower(unit).replace(' ', '-') or 'unmapped'}"
+
+    @staticmethod
+    def _capability_id(unit: str, capability: str) -> str:
+        return f"cap-{_lower(unit).replace(' ', '-')}-{_lower(capability).replace(' ', '-')}"
+
+    @staticmethod
+    def _monthly_value(row: dict[str, Any]) -> float:
+        monthly = _safe_float(_first_existing(row, "monthly_cost", "monthly_spend", "total_spend", "total_cost", "cost", default=0))
+        if monthly:
+            return monthly
+        return _safe_float(_first_existing(row, "annual_cost", "annual_spend", default=0)) / 12
+
+    @staticmethod
+    def _apply_spend(capabilities: dict[str, dict[str, Any]], spend_rows: list[dict[str, Any]]) -> None:
+        if not spend_rows:
             return
-        try:
-            supabase.table(BusinessCapabilityService.TABLE_NAME).upsert(
-                rows,
-                on_conflict="organization_id,capability_name",
-            ).execute()
-        except Exception as exc:
-            print("BUSINESS CAPABILITY REGISTRY UPSERT FAILED:", exc)
+
+        app_index = BusinessCapabilityService._application_capability_index()
+        service_index = BusinessCapabilityService._service_capability_index()
+        for row in spend_rows:
+            capability = BusinessCapabilityService._capability_name(row)
+            unit = BusinessCapabilityService._business_unit_name(row)
+            application = _normalize(_first_existing(row, "application_name", "app_name", "application", "name", default=""))
+            if not capability:
+                indexed = app_index.get(_lower(application)) or service_index.get(_lower(application))
+                if indexed:
+                    unit, capability = indexed
+            if not capability:
+                continue
+            item = BusinessCapabilityService._ensure_capability(capabilities, capability, unit, source="mart_application_spend")
+            item["monthly_cost"] += BusinessCapabilityService._monthly_value(row)
 
     @staticmethod
-    def _load_registry(organization_id: str) -> list[dict[str, Any]]:
-        try:
-            return (
-                supabase.table(BusinessCapabilityService.TABLE_NAME)
-                .select("*")
-                .eq("organization_id", organization_id)
-                .execute()
-                .data
-                or []
-            )
-        except Exception as exc:
-            print("BUSINESS CAPABILITY REGISTRY LOAD FAILED:", exc)
-            return []
+    def _application_capability_index() -> dict[str, tuple[str, str]]:
+        index = {}
+        for row in BusinessCapabilityRepository.get_application_registry():
+            app = _normalize(_first_existing(row, "app_name", "application_name", "application", "name", default=""))
+            capability = BusinessCapabilityService._capability_name(row) or BusinessCapabilityService._derive_capability(row)
+            unit = BusinessCapabilityService._business_unit_name(row)
+            if app:
+                index[_lower(app)] = (unit, capability)
+        return index
 
     @staticmethod
-    def _fetch_org_rows(table_name: str, organization_id: str) -> list[dict[str, Any]]:
-        try:
-            rows = (
-                supabase.table(table_name)
-                .select("*")
-                .eq("organization_id", organization_id)
-                .execute()
-                .data
-                or []
-            )
-            if rows:
-                return rows
-            return (
-                supabase.table(table_name)
-                .select("*")
-                .is_("organization_id", "null")
-                .execute()
-                .data
-                or []
-            )
-        except Exception:
-            return []
+    def _service_capability_index() -> dict[str, tuple[str, str]]:
+        index = {}
+        for row in BusinessCapabilityRepository.get_business_services():
+            service = _normalize(_first_existing(row, "service_name", "business_service_name", "service", "name", default=""))
+            capability = BusinessCapabilityService._capability_name(row) or BusinessCapabilityService._derive_capability(row)
+            unit = BusinessCapabilityService._business_unit_name(row)
+            if service:
+                index[_lower(service)] = (unit, capability)
+        return index
 
     @staticmethod
-    def _fetch_rows(table_name: str) -> list[dict[str, Any]]:
-        try:
-            return supabase.table(table_name).select("*").execute().data or []
-        except Exception:
-            return []
+    def _mapping_coverage(row: dict[str, Any]) -> float:
+        dimensions = [
+            bool(row.get("business_unit")),
+            bool(row.get("applications")),
+            bool(row.get("business_services")),
+            _safe_float(row.get("monthly_cost")) > 0,
+            row.get("owner") not in {"", "Unassigned", "Unknown"},
+        ]
+        return round(sum(1 for item in dimensions if item) / len(dimensions) * 100, 1)
 
     @staticmethod
-    def _business_unit(ownership: dict[str, Any], context: dict[str, Any]) -> str | None:
-        app = BusinessCapabilityService._norm(ownership.get("application"))
-        for row in context["applications"]:
-            if BusinessCapabilityService._norm(row.get("app_name")) == app:
-                return row.get("business_unit")
-        return None
+    def _risk_score(row: dict[str, Any]) -> float:
+        score = 100 - _safe_float(row.get("mapping_coverage"))
+        if row.get("criticality") in {"Critical", "High"}:
+            score += 10
+        if _safe_float(row.get("monthly_cost")) >= 10000:
+            score += 5
+        return round(min(max(score, 0), 100), 1)
 
     @staticmethod
-    def _cloud_services(assets: list[dict[str, Any]], costs: list[dict[str, Any]]) -> set[str]:
-        services = set()
-        asset_apps = {BusinessCapabilityService._norm(row.get("application")) for row in assets if row.get("application")}
-        for row in costs:
-            if BusinessCapabilityService._norm(row.get("application")) in asset_apps:
-                services.add(str(row.get("service_name") or "Unknown"))
-        if not services:
-            services = {str(row.get("business_service") or row.get("application") or "Unknown") for row in assets}
-        return {service for service in services if service and service != "Unknown"}
+    def _health_score(row: dict[str, Any]) -> float:
+        coverage = _safe_float(row.get("mapping_coverage"))
+        risk = _safe_float(row.get("risk_score"))
+        return round(max(min((coverage * 0.75) + ((100 - risk) * 0.25), 100), 0), 1)
 
     @staticmethod
-    def _saas_dependencies(capability: str, applications: set[str], relationships: list[dict[str, Any]]) -> set[str]:
-        deps = set()
-        app_keys = {BusinessCapabilityService._norm(app) for app in applications}
-        cap_key = BusinessCapabilityService._norm(capability)
-        for row in relationships:
-            source = BusinessCapabilityService._norm(row.get("source_name") or row.get("source"))
-            target_type = BusinessCapabilityService._norm(row.get("target_type"))
-            target = str(row.get("target_name") or row.get("target") or "").strip()
-            if source in app_keys | {cap_key} and ("saas" in target_type or "ai" in target_type):
-                deps.add(target)
-        return deps
-
-    @staticmethod
-    def _monthly_spend(assets: list[dict[str, Any]], costs: list[dict[str, Any]]) -> float:
-        apps = {BusinessCapabilityService._norm(row.get("application")) for row in assets if row.get("application")}
-        providers = {BusinessCapabilityService._norm(row.get("vendor")) for row in assets if row.get("vendor")}
-        total = 0.0
-        for row in costs:
-            app_match = BusinessCapabilityService._norm(row.get("application")) in apps
-            provider_match = BusinessCapabilityService._norm(row.get("cloud")) in providers
-            if app_match or provider_match:
-                total += BusinessCapabilityService._float(row.get("cost"))
-        return total
-
-    @staticmethod
-    def _optimization_opportunity(
-        capability: str,
-        applications: set[str],
-        recommendations: list[dict[str, Any]],
-        monthly_spend: float,
-    ) -> float:
-        app_keys = {BusinessCapabilityService._norm(app) for app in applications}
-        total = 0.0
-        for row in recommendations:
-            text = BusinessCapabilityService._norm(" ".join(str(value or "") for value in row.values()))
-            if BusinessCapabilityService._norm(capability) in text or any(app in text for app in app_keys):
-                total += BusinessCapabilityService._float(row.get("estimated_savings"))
-        return total if total else round(monthly_spend * 0.05, 2)
-
-    @staticmethod
-    def _health_score(governance_score: float, spend: float, optimization: float, capability: dict[str, Any]) -> float:
-        maturity_score = BusinessCapabilityService._maturity_score(capability)
-        optimization_penalty = min((optimization / spend) * 20, 20) if spend else 0
-        criticality_penalty = 4 if BusinessCapabilityService._is_critical(capability) else 0
-        return round(max((governance_score * 0.55) + (maturity_score * 0.35) + 10 - optimization_penalty - criticality_penalty, 0), 1)
-
-    @staticmethod
-    def _risk(capability: dict[str, Any], governance_score: float, spend: float, optimization: float) -> str:
-        if governance_score < 70 or (spend and optimization / spend > 0.2):
+    def _risk_label(score: float) -> str:
+        if score >= 70:
             return "High"
-        if BusinessCapabilityService._is_critical(capability) and governance_score < 85:
+        if score >= 35:
             return "Medium"
         return "Low"
 
     @staticmethod
-    def _maturity_score(capability: dict[str, Any]) -> float:
-        return min(max(BusinessCapabilityService._float(capability.get("maturity")) * 20, 0), 100)
+    def _max_criticality(left: Any, right: Any) -> str:
+        order = {"low": 1, "standard": 1, "medium": 2, "high": 3, "critical": 4, "tier 1": 4, "tier1": 4}
+        left_text = _normalize(left, "Medium")
+        right_text = _normalize(right, "")
+        if not right_text:
+            return left_text
+        return right_text if order.get(_lower(right_text), 0) > order.get(_lower(left_text), 0) else left_text
+
+    @staticmethod
+    def _prefer_assigned(current: Any, candidate: Any) -> str:
+        current_text = _normalize(current, "Unassigned")
+        candidate_text = _normalize(candidate)
+        if _lower(current_text) in {"", "unassigned", "unknown"} and candidate_text:
+            return candidate_text
+        return current_text
+
+    @staticmethod
+    def _average(values: list[float]) -> float:
+        clean = [_safe_float(value) for value in values]
+        return round(sum(clean) / len(clean), 1) if clean else 0.0
+
+    @staticmethod
+    def _distribution(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+        counts: dict[str, int] = {}
+        for row in rows:
+            value = _normalize(row.get(key), "Unassigned")
+            counts[value] = counts.get(value, 0) + 1
+        return [{key: key_value, "Count": count} for key_value, count in sorted(counts.items())]
+
+    @staticmethod
+    def _dedupe(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> list[dict[str, Any]]:
+        seen = set()
+        deduped = []
+        for row in rows:
+            key = tuple(_lower(row.get(item)) for item in keys)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(row)
+        return deduped
 
     @staticmethod
     def _recommendations(health_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         recommendations = []
         for row in health_rows:
+            if row["Governance Score"] < 80:
+                recommendations.append(
+                    {
+                        "Business Capability": row["Business Capability"],
+                        "Recommendation": "Improve service, application, cost, and ownership mappings.",
+                    }
+                )
             if row["Missing Executive Owner"]:
-                recommendations.append({"Business Capability": row["Business Capability"], "Recommendation": "Assign executive owner"})
-            if row["Ownership Completeness"] < 100:
-                recommendations.append({"Business Capability": row["Business Capability"], "Recommendation": "Complete ownership metadata"})
-            if row["Optimization Opportunity"] > 0:
-                recommendations.append({"Business Capability": row["Business Capability"], "Recommendation": "Review optimization opportunities"})
-            if row["Health Score"] < 80:
-                recommendations.append({"Business Capability": row["Business Capability"], "Recommendation": "Prioritize capability health review"})
+                recommendations.append(
+                    {
+                        "Business Capability": row["Business Capability"],
+                        "Recommendation": "Assign an accountable business or executive owner.",
+                    }
+                )
         return recommendations
-
-    @staticmethod
-    def _distribution(rows: list[dict[str, Any]], field: str, label: str) -> list[dict[str, Any]]:
-        counts: dict[str, int] = {}
-        for row in rows:
-            value = row.get(field) or "Unmapped"
-            counts[str(value)] = counts.get(str(value), 0) + 1
-        return [{label: key, "Count": value} for key, value in sorted(counts.items(), key=lambda item: item[1], reverse=True)]
-
-    @staticmethod
-    def _dedupe(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> list[dict[str, Any]]:
-        seen = set()
-        output = []
-        for row in rows:
-            key = tuple(row.get(item) for item in keys)
-            if key in seen:
-                continue
-            seen.add(key)
-            output.append(row)
-        return output
-
-    @staticmethod
-    def _max_criticality(left: Any, right: Any) -> str:
-        order = {"critical": 4, "high": 3, "medium": 2, "standard": 1, "low": 1}
-        left_text = str(left or "Medium")
-        right_text = str(right or "")
-        return right_text if order.get(BusinessCapabilityService._norm(right_text), 0) > order.get(BusinessCapabilityService._norm(left_text), 0) else left_text
-
-    @staticmethod
-    def _is_critical(row: dict[str, Any]) -> bool:
-        return BusinessCapabilityService._norm(row.get("criticality")) in {"critical", "high", "tier 1", "tier1"}
-
-    @staticmethod
-    def _capability_code(sequence: int) -> str:
-        return f"BC-{sequence:03d}"
-
-    @staticmethod
-    def _average(values: list[float]) -> float:
-        return round(sum(values) / len(values), 1) if values else 0.0
-
-    @staticmethod
-    def _float(value: Any) -> float:
-        try:
-            return float(value or 0)
-        except (TypeError, ValueError):
-            return 0.0
-
-    @staticmethod
-    def _norm(value: Any) -> str:
-        return str(value or "").strip().lower()

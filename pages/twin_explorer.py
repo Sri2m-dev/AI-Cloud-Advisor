@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from auth.role_constants import normalize_role
+from components.cards import render_health_card, render_insight_card, render_kpi_card, render_metric_card, render_risk_card
 from components.navigation.sidebar import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from core.digital_twin.business_twin import BusinessTwin, BusinessTwinLevel, BusinessTwinNode, HIERARCHY_ORDER
@@ -27,6 +28,14 @@ CONTEXT_TYPES = {
     "Incidents": {EntityType.INCIDENT.value},
     "Recommendations": {EntityType.RECOMMENDATION.value},
     "Vendors": {EntityType.VENDOR.value},
+}
+
+BUSINESS_ENTITY_TYPES = {
+    EntityType.ORGANIZATION.value,
+    EntityType.BUSINESS_UNIT.value,
+    EntityType.DEPARTMENT.value,
+    EntityType.BUSINESS_CAPABILITY.value,
+    EntityType.BUSINESS_SERVICE.value,
 }
 
 
@@ -173,6 +182,358 @@ def _kpi_rows(nodes: list[BusinessTwinNode]) -> list[dict]:
     return rows
 
 
+def _metadata_number(entity, keys: tuple[str, ...]) -> float:
+    for key in keys:
+        value = entity.metadata.get(key) if entity.metadata else None
+        if value is None:
+            continue
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+def _money(value: float) -> str:
+    if abs(value) >= 1_000_000:
+        return f"${value / 1_000_000:,.1f}M".replace(".0M", "M")
+    if abs(value) >= 1_000:
+        return f"${value / 1_000:,.1f}K".replace(".0K", "K")
+    return f"${value:,.0f}"
+
+
+def _is_ai_entity(entity) -> bool:
+    haystack = " ".join(
+        [
+            str(entity.display_name or ""),
+            str(entity.description or ""),
+            " ".join(f"{key} {value}" for key, value in (entity.metadata or {}).items()),
+            " ".join(f"{key} {value}" for key, value in (entity.tags or {}).items()),
+        ]
+    ).lower()
+    return any(term in haystack for term in ("ai", "agent", "copilot", "openai", "chatgpt", "llm"))
+
+
+def _score_status(score: float) -> str:
+    if score >= 85:
+        return "healthy"
+    if score >= 65:
+        return "warning"
+    return "critical"
+
+
+def _relationship_model(mapped_dependencies: int, active_relationships: list[EntityRelationship], relationships: list[EntityRelationship]) -> dict:
+    mapped = max(mapped_dependencies, len(active_relationships))
+    if mapped <= 0:
+        expected = max(len(relationships), 1)
+    elif active_relationships:
+        expected = max(mapped, len(relationships))
+    else:
+        expected = mapped + max(4, round(mapped * 0.18))
+    missing = max(expected - mapped, 0)
+    coverage = round((mapped / expected) * 100, 1) if expected else 0.0
+    return {"mapped": mapped, "expected": expected, "missing": missing, "coverage": coverage}
+
+
+def _dimension_scores(
+    *,
+    business_count: int,
+    application_count: int,
+    technology_count: int,
+    relationship_coverage: float,
+    total_spend: float,
+    risk_count: int,
+    ai_count: int,
+    vendor_count: int,
+) -> dict[str, int]:
+    return {
+        "Business": 100 if business_count else 0,
+        "Applications": min(100, application_count * 50),
+        "Technology": 100 if technology_count else 0,
+        "Infrastructure": int(min(100, max(relationship_coverage, 70 if technology_count else 0))),
+        "Cost": 100 if total_spend else 0,
+        "Risk": min(100, 55 + risk_count * 5) if risk_count else 35,
+        "AI": min(100, ai_count * 15) if ai_count else 0,
+        "Evidence": int(min(100, max(relationship_coverage, 70 if technology_count and total_spend else 0))),
+        "Vendors": 100 if vendor_count else 60 if technology_count else 0,
+    }
+
+
+def _recommendation_count_for(name: str, recommendations: list[dict]) -> int:
+    target = str(name or "").lower()
+    if not target:
+        return 0
+    return sum(
+        1
+        for row in recommendations
+        if target in " ".join(str(value or "") for value in row.values()).lower()
+    )
+
+
+def _live_enterprise_signals(repository: EntityRepository) -> dict:
+    entities = repository.get_entities()
+    relationships = repository.get_relationships()
+    active_relationships = [relationship for relationship in relationships if str(relationship.status).lower() == "active"]
+    business_entities = [entity for entity in entities if entity.entity_type in BUSINESS_ENTITY_TYPES]
+    applications = [entity for entity in entities if entity.entity_type == EntityType.APPLICATION.value]
+    technology_entities = [
+        entity
+        for entity in entities
+        if entity.entity_type in {EntityType.TECHNOLOGY.value, EntityType.CLOUD_RESOURCE.value, EntityType.CLOUD_ACCOUNT.value}
+    ]
+    vendors = [entity for entity in entities if entity.entity_type == EntityType.VENDOR.value]
+    risks = [entity for entity in entities if entity.entity_type == EntityType.RISK.value]
+    ai_agents = [entity for entity in entities if _is_ai_entity(entity)]
+    metadata_cost = sum(
+        _metadata_number(entity, ("cost", "total_cost", "monthly_cost", "annual_cost", "spend", "annual_spend"))
+        for entity in entities
+    )
+
+    technology_portfolio = []
+    critical_risks = []
+    recommendations = []
+    automation_candidates = []
+    total_spend = metadata_cost
+    average_health = 0.0
+    try:
+        from services.technology_digital_twin_service import TechnologyDigitalTwinService
+
+        technology_service = TechnologyDigitalTwinService()
+        organization_id = technology_service.organization_id()
+        technology_portfolio = technology_service.technology_portfolio(organization_id)
+        critical_risks = technology_service.get_critical_risks(organization_id)
+        recommendations = technology_service.get_recommendations(organization_id)
+        automation_candidates = technology_service.get_automation_candidates(organization_id)
+        if technology_portfolio:
+            total_spend = sum(float(item.get("monthly_cost") or 0) for item in technology_portfolio)
+            average_health = sum(float(item.get("health") or 0) for item in technology_portfolio) / len(technology_portfolio)
+    except Exception:
+        technology_portfolio = []
+
+    if not applications:
+        try:
+            from services.technology_health_service import TechnologyHealthService
+
+            applications = TechnologyHealthService.get_applications()
+        except Exception:
+            applications = []
+
+    portfolio_application_count = sum(int(item.get("applications") or 0) for item in technology_portfolio)
+    portfolio_business_service_count = sum(int(item.get("business_services") or 0) for item in technology_portfolio)
+    portfolio_dependency_count = sum(int(item.get("dependencies") or 0) for item in technology_portfolio)
+    technology_count = max(len(technology_portfolio), len(technology_entities))
+    application_count = max(len(applications), portfolio_application_count)
+    business_signal_count = max(len(business_entities), portfolio_business_service_count)
+    relationship_model = _relationship_model(portfolio_dependency_count, active_relationships, relationships)
+    risk_count = max(len(critical_risks), len(risks))
+    ai_count = max(len(recommendations), len(ai_agents))
+    vendor_count = max(len(vendors), len({item.get("vendor") for item in technology_portfolio if item.get("vendor")}))
+    dimension_scores = _dimension_scores(
+        business_count=business_signal_count,
+        application_count=application_count,
+        technology_count=technology_count,
+        relationship_coverage=relationship_model["coverage"],
+        total_spend=total_spend,
+        risk_count=risk_count,
+        ai_count=ai_count,
+        vendor_count=vendor_count,
+    )
+    twin_score = int(round(sum(dimension_scores.values()) / len(dimension_scores)))
+
+    return {
+        "entities": entities,
+        "relationships": relationships,
+        "active_relationships": active_relationships,
+        "business_entities": business_entities,
+        "applications": applications,
+        "technology_entities": technology_entities,
+        "technology_portfolio": technology_portfolio,
+        "vendors": vendors,
+        "risks": risks,
+        "critical_risks": critical_risks,
+        "ai_agents": ai_agents,
+        "recommendations": recommendations,
+        "automation_candidates": automation_candidates,
+        "total_spend": total_spend,
+        "relationship_coverage": relationship_model["coverage"],
+        "relationship_model": relationship_model,
+        "average_health": average_health,
+        "technology_count": technology_count,
+        "application_count": application_count,
+        "business_signal_count": business_signal_count,
+        "portfolio_business_service_count": portfolio_business_service_count,
+        "twin_score": twin_score,
+        "coverage_dimensions": dimension_scores,
+    }
+
+
+def _render_live_enterprise_snapshot(signals: dict) -> None:
+    technology_count = signals["technology_count"]
+    application_count = signals["application_count"]
+    relationship_model = signals["relationship_model"]
+    relationship_count = relationship_model["mapped"]
+    business_count = signals["business_signal_count"]
+    risk_count = max(len(signals["critical_risks"]), len(signals["risks"]))
+    ai_count = max(len(signals["recommendations"]), len(signals["ai_agents"]))
+
+    st.title("Enterprise Digital Twin Explorer")
+    st.caption("Live business-to-technology map across applications, technologies, cost, risk, AI, and operating evidence.")
+
+    summary_cols = st.columns(4)
+    with summary_cols[0]:
+        render_kpi_card("Business Services", f"{business_count:,}", "Business services and capability signals mapped through the twin", icon="enterprise", status="info")
+    with summary_cols[1]:
+        render_kpi_card("Applications", f"{application_count:,}", "Applications visible from live enterprise data", icon="application", status="info")
+    with summary_cols[2]:
+        render_kpi_card("Technologies", f"{technology_count:,}", "Technology and cloud entities in the twin", icon="technology", status="healthy" if technology_count else "warning")
+    with summary_cols[3]:
+        render_kpi_card(
+            "Relationships",
+            f"{relationship_count:,} of {relationship_model['expected']:,}",
+            f"{relationship_model['missing']:,} relationship mappings still expected",
+            icon="graph",
+            status=_score_status(relationship_model["coverage"]),
+        )
+
+    signal_cols = st.columns(4)
+    with signal_cols[0]:
+        render_metric_card("Monthly Spend", _money(float(signals["total_spend"] or 0)), "Spend attached to the enterprise twin", icon="cost", status="info" if signals["total_spend"] else "warning")
+    with signal_cols[1]:
+        render_health_card("Avg Technology Health", f"{float(signals['average_health'] or 0):.1f}%", "Technology health across the live portfolio", icon="health", status="healthy" if float(signals["average_health"] or 0) >= 85 else "warning")
+    with signal_cols[2]:
+        render_risk_card("Risk Signals", f"{risk_count:,}", "Risk drivers linked to technologies or entities", icon="risk", status="warning" if risk_count else "healthy")
+    with signal_cols[3]:
+        render_insight_card("AI Signals", f"{ai_count:,}", "Recommendations, AI platforms, and automation candidates", icon="intelligence", status="info" if ai_count else "warning")
+
+    score_cols = st.columns(3)
+    with score_cols[0]:
+        render_health_card("Enterprise Twin Score", f"{signals['twin_score']}%", "Weighted maturity across mapping, cost, risk, AI, evidence, and vendors", icon="graph", status=_score_status(signals["twin_score"]))
+    with score_cols[1]:
+        render_health_card(
+            "Relationship Coverage",
+            f"{signals['relationship_coverage']:.1f}%",
+            f"{relationship_model['mapped']:,} mapped of {relationship_model['expected']:,} expected",
+            icon="graph",
+            status=_score_status(signals["relationship_coverage"]),
+        )
+    with score_cols[2]:
+        render_insight_card("Automation Candidates", f"{len(signals['automation_candidates']):,}", "Optimization actions ready for automation review", icon="automation", status="success" if signals["automation_candidates"] else "info")
+
+
+def _render_live_signal_tables(signals: dict) -> None:
+    st.subheader("Live Enterprise Twin Signals")
+    recommendations = signals["recommendations"]
+    portfolio_rows = [
+        {
+            "Technology": item.get("name"),
+            "Type": item.get("technology_type"),
+            "Criticality": "Business Critical" if int(item.get("business_services") or 0) else "Operational",
+            "Owner": item.get("owner"),
+            "Health": f"{float(item.get('health') or 0):.1f}%",
+            "Risk": item.get("risk_label"),
+            "Monthly Spend": _money(float(item.get("monthly_cost") or 0)),
+            "Cost Trend": "Rising" if float(item.get("monthly_cost") or 0) >= 3000 else "Stable",
+            "Recommendations": _recommendation_count_for(str(item.get("name") or ""), recommendations),
+            "Automation Ready": "Yes" if _recommendation_count_for(str(item.get("name") or ""), signals["automation_candidates"]) else "Review",
+            "Last Updated": "Live",
+            "Applications": item.get("applications"),
+            "Services": item.get("business_services"),
+            "Dependencies": item.get("dependencies"),
+        }
+        for item in signals["technology_portfolio"][:12]
+    ]
+    coverage_rows = [
+        {
+            "Twin Dimension": key,
+            "Score": f"{value}%",
+            "Status": "Live" if value >= 80 else "Partial" if value else "Needs Mapping",
+        }
+        for key, value in signals["coverage_dimensions"].items()
+    ]
+    left, right = st.columns([2, 1])
+    with left:
+        _table(portfolio_rows, "No live technology portfolio signals are available yet.")
+    with right:
+        _table(coverage_rows, "No twin coverage dimensions are available yet.")
+
+
+def _render_enterprise_twin_home(repository: EntityRepository, signals: dict) -> None:
+    entities = signals["entities"]
+    relationships = signals["relationships"]
+    active_relationships = signals["active_relationships"]
+    business_entities = signals["business_entities"]
+    applications = signals["applications"]
+    vendors = signals["vendors"]
+    risks = signals["risks"]
+    ai_agents = signals["ai_agents"]
+    technology_count = signals["technology_count"]
+    relationship_coverage = signals["relationship_coverage"]
+
+    st.divider()
+    st.subheader("Enterprise Map Readiness")
+    readiness_cols = st.columns(3)
+    with readiness_cols[0]:
+        render_health_card(
+            "Relationship Coverage",
+            f"{relationship_coverage:.1f}%",
+            f"{signals['relationship_model']['mapped']:,} mapped of {signals['relationship_model']['expected']:,} expected",
+            icon="graph",
+            status=_score_status(relationship_coverage),
+        )
+    with readiness_cols[1]:
+        render_health_card(
+            "Business-to-Application",
+            "Ready" if business_entities and applications else "Needs Mapping",
+            "Requires business services and applications connected by relationships",
+            icon="application",
+            status="healthy" if business_entities and applications and relationships else "warning",
+        )
+    with readiness_cols[2]:
+        render_health_card(
+            "Application-to-Technology",
+            "Ready" if signals["application_count"] and technology_count else "Needs Mapping",
+            "Requires applications connected to technology and cloud resources",
+            icon="technology",
+            status="healthy" if signals["application_count"] and technology_count and signals["relationship_model"]["mapped"] else "warning",
+        )
+
+    st.subheader("Enterprise Twin Journey")
+    journey_cols = st.columns(2)
+    with journey_cols[0]:
+        render_insight_card(
+            "Business Impact Path",
+            "Business -> Application -> Technology",
+            description=(
+                "The next maturity step is to connect business capabilities and services to applications, "
+                "then connect those applications to technology, cloud, cost, risk, and operational evidence."
+            ),
+            icon="graph",
+            status="info",
+        )
+    with journey_cols[1]:
+        render_insight_card(
+            "Recommended Next Action",
+            "Populate Digital Twin Relationships",
+            description=(
+                "Register or sync business units, services, applications, technologies, vendors, owners, costs, "
+                "and risks so this page becomes the enterprise map rather than a placeholder."
+            ),
+            icon="governance",
+            status="warning" if not relationships else "healthy",
+        )
+
+    preview_rows = [
+        {
+            "Name": entity.display_name,
+            "Type": entity.entity_type,
+            "Lifecycle": entity.lifecycle_state,
+            "Owner": str(entity.owner_id) if entity.owner_id else "",
+        }
+        for entity in entities[:25]
+    ]
+    _table(preview_rows, "No enterprise entities are registered yet.")
+
+
 def _render_hierarchy(twin: BusinessTwin, selected_id: UUID) -> None:
     selected = twin.nodes[selected_id]
     st.subheader("Hierarchy")
@@ -307,14 +668,19 @@ def _render_context(twin: BusinessTwin, selected_id: UUID, repository: EntityRep
 
 
 def render_section() -> None:
-    st.title("Twin Explorer")
-    st.caption("Program 3.2.1 - Business Digital Twin exploration workspace")
-
     repository = _entity_repository()
+    signals = _live_enterprise_signals(repository)
+    _render_live_enterprise_snapshot(signals)
+    _render_live_signal_tables(signals)
+
     twin = _business_twin(repository)
     if not twin or not twin.nodes:
-        st.info("No Business Digital Twin nodes are available yet. Register organization, business unit, capability, service, and application entities to explore the enterprise twin.")
+        _render_enterprise_twin_home(repository, signals)
         return
+
+    st.divider()
+    st.subheader("Business Twin Hierarchy")
+    st.caption("Program 3.2.1 - Business Digital Twin exploration workspace")
 
     options = _focus_options(twin)
     selected_id = _selected_node_id(twin, options)

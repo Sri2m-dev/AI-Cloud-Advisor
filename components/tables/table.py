@@ -1,8 +1,9 @@
-import streamlit as st
 import pandas as pd
+
+from shared.streamlit_compat import dataframe
 
 def data_table(data: pd.DataFrame, pagination=True, sortable=True, searchable=True, exportable=True):
     # Basic table rendering
-    st.dataframe(data, use_container_width=True)
+    dataframe(data)
     # TODO: Add pagination, sorting, search, export features
 

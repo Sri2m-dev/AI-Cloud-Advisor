@@ -1,7 +1,9 @@
 # Secrets
 .env
 .env.*
+!.env.example
 .streamlit/secrets.toml
+.streamlit/credential.key
 
 # Python
 .venv/
@@ -29,3 +31,9 @@ node_modules/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local development artifacts
+cio-dashboard-8513.png
+data/business_digital_twins.json
+data/technology_digital_twins.json
+.streamlit/cache/

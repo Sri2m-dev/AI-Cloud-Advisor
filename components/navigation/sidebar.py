@@ -51,15 +51,21 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
     ],
     "cio": [
-        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
-        {"label": "Technology Digital Twin", "page_label": "Technology Digital Twin", "section": "Technology", "icon": "technology"},
-        {"label": "Technology Health", "page_label": "Technology Health & Risk", "section": "Technology", "icon": "technology"},
-        {"label": "Technology Inventory", "page_label": "Technology Portfolio", "section": "Technology", "icon": "technology"},
-        {"label": "Knowledge Graph", "page_label": "Technology Knowledge Graph", "section": "Intelligence", "icon": "intelligence"},
-        {"label": "Applications", "page_label": "Application Portfolio", "section": "Technology", "icon": "technology"},
-        {"label": "SaaS Intelligence", "page_label": "SaaS + AI Intelligence", "section": "Technology", "icon": "marketplace"},
-        {"label": "Risk & Governance", "page_label": "Risk & Governance", "section": "Governance", "icon": "governance"},
-        {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
+        {"label": "Business Architecture", "page_label": "Business Architecture", "section": "Business Architecture", "icon": "enterprise"},
+        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Business Architecture", "icon": "technology"},
+        {"label": "Business Units", "page_label": "Business Units", "section": "Business Architecture", "icon": "enterprise"},
+        {"label": "Business Capabilities", "page_label": "Business Capabilities", "section": "Business Architecture", "icon": "governance"},
+        {"label": "Business Services", "page_label": "Business Services", "section": "Business Architecture", "icon": "service"},
+        {"label": "Business Processes", "page_label": "Business Processes", "section": "Business Architecture", "icon": "workflow"},
+        {"label": "Enterprise Capability Map", "page_label": "Enterprise Capability Map", "section": "Business Architecture", "icon": "governance"},
+        {"label": "Technology Digital Twin", "page_label": "Technology Digital Twin", "section": "Technology Architecture", "icon": "technology"},
+        {"label": "Technology Health", "page_label": "Technology Health & Risk", "section": "Technology Architecture", "icon": "technology"},
+        {"label": "Technology Inventory", "page_label": "Technology Portfolio", "section": "Technology Architecture", "icon": "technology"},
+        {"label": "Knowledge Graph", "page_label": "Technology Knowledge Graph", "section": "Technology Architecture", "icon": "intelligence"},
+        {"label": "Applications", "page_label": "Application Portfolio", "section": "Application Portfolio", "icon": "technology"},
+        {"label": "SaaS Intelligence", "page_label": "SaaS + AI Intelligence", "section": "Technology Governance", "icon": "marketplace"},
+        {"label": "Risk & Governance", "page_label": "Risk & Governance", "section": "Technology Governance", "icon": "governance"},
+        {"label": "Reports", "page_label": "Reports", "section": "Executive Reporting", "icon": "reports"},
     ],
     "technical": [
         {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
@@ -80,6 +86,34 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
     ],
 }
+
+PERSONA_PAGE_PATH_FALLBACKS = {
+    "Business Architecture": "pages/business_architecture.py",
+    "Business Units": "pages/business_units.py",
+    "Business Capabilities": "pages/business_capabilities.py",
+    "Business Services": "pages/business_services.py",
+    "Business Processes": "pages/business_processes.py",
+    "Enterprise Capability Map": "pages/enterprise_capability_map.py",
+}
+
+PERSONA_SECTION_ORDER = [
+    "Business Architecture",
+    "Technology Architecture",
+    "Application Portfolio",
+    "Technology Governance",
+    "Executive Reporting",
+    "Home",
+    "Executive",
+    "Finance",
+    "Technology",
+    "Intelligence",
+    "Governance",
+    "Administration",
+    "Platform",
+    "Observability",
+]
+
+SIDEBAR_WIDTH_PX = 276
 
 
 def _section_for_page(label: str) -> str:
@@ -150,7 +184,7 @@ def build_persona_navigation_items(
     for index, item in enumerate(persona_items):
         page_label = item["page_label"]
         section = item.get("section") or _section_for_page(page_label)
-        page = page_paths.get(page_label)
+        page = page_paths.get(page_label) or PERSONA_PAGE_PATH_FALLBACKS.get(page_label)
         if not page:
             continue
         children.append(
@@ -216,6 +250,116 @@ def _render_page_button(item: dict[str, Any], current_page: str) -> None:
         render_status_badge(status)
 
 
+def _render_navigation_group(
+    label: str,
+    children: Sequence[dict[str, Any]],
+    current_page: str,
+) -> None:
+    if not children:
+        return
+    st.markdown(
+        f"<div class='nexora-nav-section-title'>{label}</div>",
+        unsafe_allow_html=True,
+    )
+    for child in children:
+        _render_page_button(child, current_page)
+
+
+def _ordered_child_sections(children: Sequence[dict[str, Any]]) -> list[str]:
+    available_sections = []
+    for child in children:
+        section = child.get("section") or "Workspace"
+        if section not in available_sections:
+            available_sections.append(section)
+    ordered = [section for section in PERSONA_SECTION_ORDER if section in available_sections]
+    ordered.extend(section for section in available_sections if section not in ordered)
+    return ordered
+
+
+def _render_flat_navigation(
+    visible_items: Sequence[dict[str, Any]],
+    current_page: str,
+) -> None:
+    rendered_any = False
+    for section in visible_items:
+        children = section.get("children", [])
+        if not children:
+            continue
+
+        child_sections = _ordered_child_sections(children)
+        if len(child_sections) <= 1 and section["label"] not in {"Workspace"}:
+            if rendered_any:
+                st.divider()
+            _render_navigation_group(section["label"], children, current_page)
+            rendered_any = True
+            continue
+
+        for child_section in child_sections:
+            grouped_children = [
+                child for child in children
+                if (child.get("section") or "Workspace") == child_section
+            ]
+            if not grouped_children:
+                continue
+            if rendered_any:
+                st.markdown("<div class='nexora-nav-group-gap'></div>", unsafe_allow_html=True)
+            _render_navigation_group(child_section, grouped_children, current_page)
+            rendered_any = True
+
+
+def _render_sidebar_styles() -> None:
+    st.markdown(
+        f"""
+        <style>
+        [data-testid="stSidebar"] {{
+            min-width: {SIDEBAR_WIDTH_PX}px;
+            width: {SIDEBAR_WIDTH_PX}px;
+        }}
+
+        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+            width: {SIDEBAR_WIDTH_PX}px;
+            min-width: {SIDEBAR_WIDTH_PX}px;
+        }}
+
+        [data-testid="stSidebar"] .stButton > button {{
+            min-height: 36px;
+            height: 36px;
+            padding: 0 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+
+        [data-testid="stSidebar"] .stButton > button p {{
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.1;
+        }}
+
+        .nexora-nav-section-title {{
+            margin: 14px 0 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.16);
+            color: #0f172a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            white-space: nowrap;
+        }}
+
+        .nexora-nav-group-gap {{
+            height: 12px;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_enterprise_sidebar(
     role: str,
     *,
@@ -239,6 +383,7 @@ def render_enterprise_sidebar(
     current_page = active_page or st.session_state.get("current_page", "")
 
     with st.sidebar:
+        _render_sidebar_styles()
         st.title("NEXORA")
         st.caption("Next Generation Technology Intelligence")
         st.divider()
@@ -252,13 +397,7 @@ def render_enterprise_sidebar(
             unsafe_allow_html=True,
         )
 
-        for section in visible_items:
-            children = section.get("children", [])
-            if not children:
-                continue
-            with st.expander(section["label"], expanded=section["label"] in {"Workspace", "Home", "Executive", "Platform"}):
-                for child in children:
-                    _render_page_button(child, current_page)
+        _render_flat_navigation(visible_items, current_page)
 
         st.divider()
         if show_logout and st.button("Logout", key="sidebar_logout", use_container_width=True):

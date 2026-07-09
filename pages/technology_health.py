@@ -4,17 +4,25 @@ import streamlit as st
 
 from components.cards import (
     render_health_card,
-    render_insight_card,
     render_kpi_card,
     render_metric_card,
     render_risk_card,
 )
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
+from components.shared import (
+    render_ai_narrative,
+    render_business_context,
+    render_evidence_panel,
+    render_executive_summary,
+    render_reconciliation_panel,
+)
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from services.technology_health_certification_service import TechnologyHealthCertificationService
 from services.technology_health_service import TechnologyHealthService
 from shared.auth import require_role
 from shared.session import init_session
+from shared.streamlit_compat import dataframe, plotly_chart
 from shared.styles import configure_page
 
 
@@ -39,11 +47,7 @@ def _show_dataframe(df: pd.DataFrame, empty_message: str) -> None:
         st.info(empty_message)
         return
 
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-    )
+    dataframe(df, hide_index=True)
 
 
 def _risk_row_style(row):
@@ -80,11 +84,7 @@ def _show_health_matrix(df: pd.DataFrame) -> None:
         )
     )
 
-    st.dataframe(
-        styled_df,
-        use_container_width=True,
-        hide_index=True,
-    )
+    dataframe(styled_df, hide_index=True)
 
 
 def _health_status(score: float) -> str:
@@ -97,6 +97,41 @@ def _health_status(score: float) -> str:
 
 def _risk_status(count: int) -> str:
     return "critical" if count else "healthy"
+
+
+def _risk_tier_sentence(critical_count: int, elevated_count: int, watchlist_count: int) -> str:
+    if critical_count or elevated_count:
+        return (
+            f"{critical_count} technologies are in the Critical tier, "
+            f"{elevated_count} are in the Elevated tier, and "
+            f"{watchlist_count} are currently on the Watchlist."
+        )
+
+    return (
+        "There are no technologies in the Critical or Elevated tiers, "
+        f"while {watchlist_count} technologies are currently on the Watchlist "
+        "and require monitoring for renewal, dependency, or optimization changes."
+    )
+
+
+def _technology_health_narrative(kpis: dict) -> list[str]:
+    return [
+        (
+            f"The enterprise technology estate contains {kpis['total_technologies']} tracked technologies "
+            f"with an average health score of {kpis['average_health']:,.1f}."
+        ),
+        _risk_tier_sentence(
+            kpis["critical_technologies"],
+            kpis["high_risk_technologies"],
+            kpis["medium_risk_technologies"],
+        ),
+        f"Renewal obligation exposure totals {_money(kpis['renewal_exposure'])}.",
+        f"Estimated inactive license exposure is {_money(kpis['license_waste_exposure'])}.",
+        (
+            f"The dependency graph currently tracks {kpis['dependency_edges']} technology relationships "
+            "supporting enterprise operations."
+        ),
+    ]
 
 
 configure_page(
@@ -127,6 +162,56 @@ renewal_exposure = TechnologyHealthService.renewal_exposure_dataframe()
 license_waste = TechnologyHealthService.license_waste_dataframe()
 dependency_edges = TechnologyHealthService.dependency_edges_dataframe()
 
+certification = TechnologyHealthCertificationService.get_dashboard()
+reconciliation_cards = certification["reconciliation_cards"]
+business_context = certification["business_context"]
+evidence = certification["evidence"]
+
+
+def _render_certification_summary() -> None:
+    render_executive_summary(
+        {
+            "title": "Executive Summary",
+            "description": "Certified CIO view of technology health, financial reconciliation, and business architecture exposure.",
+            "narrative": certification["executive_summary"],
+            "metrics": [
+                {
+                    "label": "Data Reconciliation Status",
+                    "value": reconciliation_cards["status"],
+                    "description": "Canonical financial model",
+                    "icon": "governance",
+                    "status": "warning" if reconciliation_cards["status"] != "Reconciled" else "healthy",
+                },
+                {
+                    "label": "Allocation Coverage",
+                    "value": reconciliation_cards["allocation_coverage_display"],
+                    "description": "Spend mapped through model",
+                    "icon": "cost",
+                    "status": "warning" if float(reconciliation_cards["allocation_coverage"] or 0) < 90 else "healthy",
+                },
+                {
+                    "label": "Unallocated Spend",
+                    "value": reconciliation_cards["unallocated_spend_display"],
+                    "description": "Spend awaiting mapping",
+                    "icon": "risk",
+                    "status": "warning" if float(reconciliation_cards["unallocated_spend"] or 0) else "healthy",
+                },
+                {
+                    "label": "Business Services",
+                    "value": f"{int(business_context.get('business_services') or 0):,}",
+                    "description": "Business exposure context",
+                    "icon": "enterprise",
+                    "status": "info",
+                },
+            ],
+        }
+    )
+    render_reconciliation_panel(reconciliation_cards)
+    render_business_context({**business_context, "technologies": kpis["total_technologies"]})
+
+
+def _render_certification_evidence() -> None:
+    render_evidence_panel(evidence)
 
 
 def render_technology_health_content() -> None:
@@ -136,11 +221,13 @@ def render_technology_health_content() -> None:
         + kpis["medium_risk_technologies"]
     )
     healthy_technologies = max(kpis["total_technologies"] - at_risk_technologies, 0)
+    executive_narrative = _technology_health_narrative(kpis)
+
+    _render_certification_summary()
 
     render_section(
         "CIO Technology Health Summary",
-        "Portfolio-level health, risk concentration, renewal exposure, and license waste.",
-        divider=False,
+        "Portfolio-level view of technology health, risk concentration, renewal obligations, and license optimization exposure.",
     )
     summary_cols = st.columns(4)
     with summary_cols[0]:
@@ -155,7 +242,7 @@ def render_technology_health_content() -> None:
         render_health_card(
             "Healthy Technologies",
             f"{healthy_technologies:,}",
-            "Technologies outside medium, high, and critical tiers",
+            "Technologies outside watchlist, elevated, and critical tiers",
             icon="success",
             status="healthy" if healthy_technologies else "warning",
         )
@@ -163,7 +250,7 @@ def render_technology_health_content() -> None:
         render_risk_card(
             "At-Risk Technologies",
             f"{at_risk_technologies:,}",
-            "Medium, high, and critical risk technologies",
+            "Technologies in watchlist, elevated, or critical risk tiers",
             icon="risk",
             status="warning" if at_risk_technologies else "healthy",
         )
@@ -171,7 +258,7 @@ def render_technology_health_content() -> None:
         render_risk_card(
             "Critical Technologies",
             f"{kpis['critical_technologies']:,}",
-            "Technologies below critical health threshold",
+            "Technologies requiring immediate remediation or ownership review",
             icon="alert",
             status=_risk_status(kpis["critical_technologies"]),
         )
@@ -179,17 +266,17 @@ def render_technology_health_content() -> None:
     health_cols = st.columns(3)
     with health_cols[0]:
         render_metric_card(
-            "Renewal Exposure",
+            "Renewal Obligation Exposure",
             _money(kpis["renewal_exposure"]),
-            "Annual cost tied to renewal risk records",
+            "Annual spend tied to upcoming or risk-bearing renewals",
             icon="cost",
             status="warning" if kpis["renewal_exposure"] else "healthy",
         )
     with health_cols[1]:
         render_metric_card(
-            "License Waste Exposure",
+            "Inactive License Exposure",
             _money(kpis["license_waste_exposure"]),
-            "Estimated inactive SaaS license waste",
+            "Estimated spend tied to inactive or underused SaaS licenses",
             icon="savings",
             status="warning" if kpis["license_waste_exposure"] else "healthy",
         )
@@ -197,14 +284,14 @@ def render_technology_health_content() -> None:
         render_health_card(
             "Average Health Score",
             f"{kpis['average_health']:,.1f}",
-            "Composite score based on cost, dependencies, renewals, and inactive licenses",
+            "Composite health signal based on cost, dependencies, renewals, and utilization",
             icon="health",
             status=_health_status(kpis["average_health"]),
         )
 
     render_section(
         "Portfolio Health",
-        "Distribution of technology risk tiers across the CIO portfolio.",
+        "Distribution of technology risk tiers across the CIO portfolio: critical, elevated, watchlist, low, and healthy.",
     )
     if not risk_distribution.empty:
         fig = px.bar(
@@ -215,33 +302,30 @@ def render_technology_health_content() -> None:
             color="risk",
             color_discrete_map=RISK_COLORS,
         )
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-        )
+        plotly_chart(fig)
     else:
         st.info("No technology risk distribution is currently available.")
 
     render_section(
-        "Renewal & License Exposure",
-        "Commercial exposure from renewal risk records and inactive SaaS utilization.",
+        "Renewal & License Optimization Exposure",
+        "Commercial exposure from upcoming renewals, renewal risk records, and inactive SaaS utilization.",
     )
     exposure_cols = st.columns(2)
     with exposure_cols[0]:
         render_risk_card(
-            "Renewal Exposure",
+            "Renewal Obligation Exposure",
             _money(kpis["renewal_exposure"]),
             f"{len(renewal_exposure):,} renewal records in scope",
-            description="Upcoming renewals can create cost, negotiation, and continuity risk.",
+            description="Annualized spend attached to renewals that may require negotiation, funding, or continuity review.",
             icon="calendar",
             status="warning" if not renewal_exposure.empty else "healthy",
         )
     with exposure_cols[1]:
         render_risk_card(
-            "License Waste Exposure",
+            "Inactive License Exposure",
             _money(kpis["license_waste_exposure"]),
             f"{len(license_waste):,} inactive license records in scope",
-            description="Inactive licenses highlight savings and compliance cleanup opportunities.",
+            description="Estimated spend tied to inactive seats that may represent savings, cleanup, or compliance action.",
             icon="savings",
             status="warning" if not license_waste.empty else "healthy",
         )
@@ -261,9 +345,9 @@ def render_technology_health_content() -> None:
         )
     with dependency_cols[1]:
         render_risk_card(
-            "High Risk Technologies",
+            "Elevated-Risk Technologies",
             f"{kpis['high_risk_technologies']:,}",
-            "Technologies in the high risk tier",
+            "Technologies requiring active ownership and mitigation tracking",
             icon="risk",
             status=_risk_status(kpis["high_risk_technologies"]),
         )
@@ -278,20 +362,20 @@ def render_technology_health_content() -> None:
 
     render_section(
         "Critical Technology Matrix",
-        "Executive view of the technologies most likely to need CIO attention.",
+        "Executive view of the technologies most likely to require CIO attention, ownership, or remediation.",
     )
     matrix_cols = st.columns(3)
     with matrix_cols[0]:
         render_risk_card(
             "Critical Tier",
             f"{kpis['critical_technologies']:,}",
-            "Immediate remediation or decision attention",
+            "Immediate remediation or executive decision attention",
             icon="alert",
             status=_risk_status(kpis["critical_technologies"]),
         )
     with matrix_cols[1]:
         render_risk_card(
-            "High Tier",
+            "Elevated Tier",
             f"{kpis['high_risk_technologies']:,}",
             "Requires active ownership and mitigation tracking",
             icon="risk",
@@ -299,31 +383,17 @@ def render_technology_health_content() -> None:
         )
     with matrix_cols[2]:
         render_risk_card(
-            "Medium Tier",
+            "Watchlist Tier",
             f"{kpis['medium_risk_technologies']:,}",
             "Monitor for renewal, waste, and dependency movement",
             icon="governance",
             status="warning" if kpis["medium_risk_technologies"] else "healthy",
         )
 
-    render_section(
+    render_ai_narrative(
         "Executive Technology Insight",
-        "CIO narrative generated from the current technology health signals.",
-    )
-    render_insight_card(
-        "Technology Health Narrative",
-        description=(
-            f"The enterprise technology estate contains {kpis['total_technologies']} tracked technologies "
-            f"with an average health score of {kpis['average_health']:,.1f}. "
-            f"{kpis['critical_technologies']} critical, {kpis['high_risk_technologies']} high risk, "
-            f"and {kpis['medium_risk_technologies']} medium risk technologies require attention based on cost, "
-            f"renewal exposure, inactive license exposure, and dependency concentration. "
-            f"Renewal exposure totals {_money(kpis['renewal_exposure'])}, while license waste exposure "
-            f"is estimated at {_money(kpis['license_waste_exposure'])}. "
-            f"The dependency explorer is tracking {kpis['dependency_edges']} source-to-target relationships "
-            f"for future graph-based technology health analysis."
-        ),
-        status=_health_status(kpis["average_health"]),
+        " ".join(executive_narrative).replace("$", r"\$"),
+        description="CIO narrative generated from current health, exposure, and dependency signals.",
     )
 
     render_section(
@@ -334,16 +404,16 @@ def render_technology_health_content() -> None:
         st.subheader("Technology Health Matrix")
         _show_health_matrix(health_matrix)
 
-        st.subheader("Renewal Exposure")
+        st.subheader("Renewal Obligation Exposure")
         _show_dataframe(
             renewal_exposure,
-            "No renewal exposure data is currently available.",
+            "No renewal obligation exposure data is currently available.",
         )
 
-        st.subheader("License Waste Exposure")
+        st.subheader("Inactive License Exposure")
         _show_dataframe(
             license_waste,
-            "No license waste exposure data is currently available.",
+            "No inactive license exposure data is currently available.",
         )
 
         st.subheader("Dependency Explorer")
@@ -352,10 +422,12 @@ def render_technology_health_content() -> None:
             "No technology dependency relationships are currently available.",
         )
 
+    _render_certification_evidence()
+
 
 render_page(
     title="Technology Health",
-    description="CIO view of enterprise technology health, renewal exposure, license waste, and dependency risk.",
+    description="CIO view of enterprise technology health, renewal obligations, inactive license exposure, and dependency risk.",
     breadcrumbs=["Home", "CIO", "Technology Health"],
     content=render_technology_health_content,
     status=_health_status(kpis["average_health"]),

@@ -12,50 +12,11 @@ from components.cards import (
 from components.layout import render_empty_state, render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
-from services.supabase_client import supabase
+from services.executive_dashboard_certification_service import (
+    ExecutiveDashboardCertificationService,
+)
 from shared.auth import require_role
 from shared.session import init_session
-
-
-def fetch_rows(table_name, limit=None):
-    try:
-        query = supabase.table(table_name).select("*")
-        if limit:
-            query = query.limit(limit)
-        response = query.execute()
-        return response.data or []
-    except Exception:
-        return []
-
-
-def fetch_one(table_name):
-    rows = fetch_rows(table_name, limit=1)
-    return rows[0] if rows else {}
-
-
-def spend_value(row, new_key, old_key):
-    return float(row.get(new_key, row.get(old_key, 0)) or 0)
-
-
-def safe_float(value):
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def safe_int(value, fallback=0):
-    try:
-        return int(float(value if value is not None else fallback))
-    except (TypeError, ValueError):
-        return fallback
-
-
-def format_compact_currency(value):
-    value = safe_float(value)
-    if abs(value) >= 1000:
-        return f"${value / 1000:,.1f}K".replace(".0K", "K")
-    return f"${value:,.0f}"
 
 
 st.set_page_config(
@@ -79,54 +40,28 @@ render_enterprise_sidebar(
     active_page=PAGE_PATHS["Executive Dashboard"],
 )
 
-summary = fetch_one("mart_executive_summary")
-spend_breakdown = fetch_one("mart_enterprise_spend_v2")
-recommendations = fetch_rows("recommendations")
+certification = ExecutiveDashboardCertificationService.get_dashboard()
+legacy_metrics = certification["legacy_metrics"]
+reconciliation_cards = certification["reconciliation_cards"]
+financial_model = certification["financial_model"]
+reconciliation = certification["reconciliation"]
+evidence = certification["evidence"]
+format_compact_currency = ExecutiveDashboardCertificationService.format_compact_currency
 
-cloud_cost = spend_value(spend_breakdown, "cloud_spend", "cloud_cost")
-saas_cost = spend_value(spend_breakdown, "saas_spend", "saas_cost")
-msp_cost = spend_value(spend_breakdown, "msp_spend", "msp_cost")
-license_cost = spend_value(spend_breakdown, "license_spend", "license_cost")
-
-total_spend = safe_float(summary.get("total_spend"))
-if not total_spend:
-    total_spend = cloud_cost + saas_cost + msp_cost + license_cost
-
-potential_savings = safe_float(
-    summary.get("optimization_savings")
-    or summary.get("optimization")
-    or summary.get("potential_savings")
-)
-
-savings_realized = safe_float(
-    summary.get("savings_realized")
-    or summary.get("realized_savings")
-)
-
-if not savings_realized and recommendations:
-    rec_df = pd.DataFrame(recommendations)
-    if {"status", "estimated_savings"}.issubset(rec_df.columns):
-        statuses = rec_df["status"].fillna("").astype(str).str.upper()
-        savings = pd.to_numeric(rec_df["estimated_savings"], errors="coerce").fillna(0)
-        savings_realized = float(
-            savings[
-                statuses.isin(["IMPLEMENTED", "COMPLETED", "RESOLVED", "CLOSED"])
-            ].sum()
-        )
-
-governance_score = safe_int(summary.get("governance_score"), 0)
-critical_risks = safe_int(summary.get("critical_risks"), safe_int(summary.get("anomaly_count"), 0))
-pending_approvals = safe_int(summary.get("pending_approvals"), 0)
-budget_health = safe_int(summary.get("budget_adherence"), 85)
-optimization_health = safe_int(summary.get("optimization_adoption"), 85)
-risk_posture = safe_int(summary.get("risk_posture"), max(0, 100 - critical_risks * 5))
-
-opportunities_found = safe_int(
-    summary.get("optimization_count")
-    or summary.get("recommendation_count")
-    or summary.get("opportunities_found"),
-    len(recommendations),
-)
+cloud_cost = legacy_metrics["cloud_cost"]
+saas_cost = legacy_metrics["saas_cost"]
+msp_cost = legacy_metrics["msp_cost"]
+license_cost = legacy_metrics["license_cost"]
+total_spend = legacy_metrics["total_spend"]
+potential_savings = legacy_metrics["potential_savings"]
+savings_realized = legacy_metrics["savings_realized"]
+governance_score = legacy_metrics["governance_score"]
+critical_risks = legacy_metrics["critical_risks"]
+pending_approvals = legacy_metrics["pending_approvals"]
+budget_health = legacy_metrics["budget_health"]
+optimization_health = legacy_metrics["optimization_health"]
+risk_posture = legacy_metrics["risk_posture"]
+opportunities_found = legacy_metrics["opportunities_found"]
 
 
 def inject_executive_dashboard_styles():
@@ -165,9 +100,62 @@ def render_dashboard_content():
     inject_executive_dashboard_styles()
 
     render_section(
+        "Executive Summary",
+        "Board-level summary of enterprise technology posture, financial reconciliation, and recommended attention.",
+        divider=False,
+    )
+
+    render_insight_card(
+        "Executive Summary",
+        "Enterprise Business Health",
+        description=certification["executive_summary"],
+        icon="executive",
+        status="warning" if reconciliation.get("status") == "Variance Detected" else "info",
+    )
+
+    render_section(
+        "Data Reconciliation Status",
+        "Canonical financial model status for executive reporting and allocation confidence.",
+        divider=True,
+    )
+
+    reconciliation_cols = st.columns(4)
+    with reconciliation_cols[0]:
+        render_insight_card(
+            "Reconciliation Status",
+            reconciliation.get("status", "Unknown"),
+            subtitle="Enterprise Financial Model",
+            icon="governance",
+            status="warning" if reconciliation.get("status") == "Variance Detected" else "healthy",
+        )
+    with reconciliation_cols[1]:
+        render_health_card(
+            "Allocation Coverage",
+            reconciliation_cards["allocation_coverage_display"],
+            subtitle="Mapped to allocation model",
+            status="healthy" if reconciliation_cards["allocation_coverage"] >= 90 else "warning",
+        )
+    with reconciliation_cols[2]:
+        render_kpi_card(
+            "Allocated Spend",
+            format_compact_currency(financial_model.get("allocated_spend")),
+            subtitle="Canonical model spend",
+            icon="cost",
+            status="healthy",
+        )
+    with reconciliation_cols[3]:
+        render_kpi_card(
+            "Unallocated Spend",
+            format_compact_currency(financial_model.get("unallocated_spend")),
+            subtitle="Requires mapping review",
+            icon="risk",
+            status="warning" if reconciliation_cards["unallocated_spend"] else "healthy",
+        )
+
+    render_section(
         "Executive KPI Summary",
         "Enterprise spend, optimization value, governance health, executive actions, and active risk.",
-        divider=False,
+        divider=True,
     )
 
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -370,8 +358,8 @@ def render_dashboard_content():
         )
 
     render_section(
-        "Executive Narrative",
-        "Business health index and leadership summary.",
+        "Business Health Index",
+        "Leadership view of governance, budget, optimization, and risk posture.",
         divider=True,
     )
 
@@ -392,12 +380,72 @@ def render_dashboard_content():
         f"Governance health is {governance_score}% and {critical_risks} critical risks are currently flagged."
     )
     render_insight_card(
-        "Executive Summary",
+        "Leadership Interpretation",
         "Enterprise Business Health",
         description=narrative,
         icon="executive",
         status="info",
     )
+
+    render_section(
+        "Evidence",
+        "Source data, coverage, financial reconciliation, AI interpretation, and raw evidence supporting this dashboard.",
+        divider=True,
+    )
+
+    evidence_tabs = st.tabs([
+        "Source Data",
+        "Data Coverage",
+        "Financial Reconciliation",
+        "AI Interpretation",
+        "Raw Evidence",
+    ])
+
+    with evidence_tabs[0]:
+        st.dataframe(
+            pd.DataFrame(evidence["source_data"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with evidence_tabs[1]:
+        st.dataframe(
+            pd.DataFrame(evidence["data_coverage"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with evidence_tabs[2]:
+        st.dataframe(
+            pd.DataFrame(evidence["financial_reconciliation"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with evidence_tabs[3]:
+        st.write(evidence["ai_interpretation"])
+
+    with evidence_tabs[4]:
+        raw_financial = evidence["raw_evidence"].get("Financial Model", [])
+        raw_variance = evidence["raw_evidence"].get("Variance Layers", [])
+        st.caption("Financial Model")
+        st.dataframe(
+            pd.DataFrame(raw_financial),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Variance Layers")
+        if raw_variance:
+            st.dataframe(
+                pd.DataFrame(raw_variance),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            render_empty_state(
+                "No variance layers detected",
+                "The Enterprise Financial Model did not report layer-level variance for this run.",
+            )
 
 
 render_page(

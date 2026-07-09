@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -15,39 +13,27 @@ from components.cards import (
 )
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
+from components.shared import (
+    render_ai_narrative,
+    render_business_context,
+    render_evidence_panel,
+    render_executive_summary,
+    render_reconciliation_panel,
+)
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from services.application_inventory_certification_service import ApplicationInventoryCertificationService
 from services.application_portfolio_service import ApplicationPortfolioService
 from shared.auth import require_role
 from shared.session import init_session
+from shared.streamlit_compat import dataframe, plotly_chart
 from shared.styles import configure_page
-
-
-def _money(value: Any) -> str:
-    try:
-        amount = float(value or 0)
-    except (TypeError, ValueError):
-        amount = 0.0
-
-    if amount >= 1_000_000:
-        return f"${amount / 1_000_000:.1f}M"
-    if amount >= 1_000:
-        return f"${amount / 1_000:.1f}K"
-    return f"${amount:,.0f}"
 
 
 def _show_dataframe(df: pd.DataFrame, empty_message: str) -> None:
     if df.empty:
         st.info(empty_message)
         return
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-
-def _format_money_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    formatted = df.copy()
-    for column in columns:
-        if column in formatted.columns:
-            formatted[column] = formatted[column].apply(_money)
-    return formatted
+    dataframe(df, hide_index=True)
 
 
 def _dependency_graph(edges: pd.DataFrame) -> go.Figure | None:
@@ -86,133 +72,6 @@ def _dependency_graph(edges: pd.DataFrame) -> go.Figure | None:
     return figure
 
 
-def _health_status(score: float) -> str:
-    if score >= 90:
-        return "healthy"
-    if score >= 75:
-        return "warning"
-    return "critical"
-
-
-def _first_text(values: list[Any], default: str = "-") -> str:
-    for value in values:
-        text = str(value or "").strip()
-        if text and text.lower() not in {"nan", "none", "unassigned"}:
-            return text
-    return default
-
-
-def _application_dependency_map(
-    dependency_df: pd.DataFrame,
-    portfolio_df: pd.DataFrame,
-    cost_df: pd.DataFrame,
-) -> pd.DataFrame:
-    if dependency_df.empty:
-        return pd.DataFrame(columns=["Application", "Business Service", "Technology", "Type", "Owner", "Spend"])
-
-    owner_lookup = {}
-    if not portfolio_df.empty and {"Application", "Owner"}.issubset(portfolio_df.columns):
-        owner_lookup = {
-            str(row["Application"]).lower(): row["Owner"]
-            for _, row in portfolio_df.iterrows()
-        }
-
-    spend_lookup = {}
-    if not cost_df.empty and {"App", "Total"}.issubset(cost_df.columns):
-        spend_lookup = {
-            str(row["App"]).lower(): row["Total"]
-            for _, row in cost_df.iterrows()
-        }
-
-    rows = []
-    for _, row in dependency_df.iterrows():
-        target_type = str(row.get("Target Type") or "").lower()
-        if target_type != "technology":
-            continue
-
-        application = _first_text([row.get("Source")], "Unknown Application")
-        business_service = application if application != "Unknown Application" else _first_text(
-            portfolio_df["Application"].tolist() if not portfolio_df.empty and "Application" in portfolio_df.columns else [],
-            "Unknown Business Service",
-        )
-        owner = owner_lookup.get(application.lower(), "Unassigned")
-        spend = spend_lookup.get(application.lower(), 0)
-
-        rows.append(
-            {
-                "Application": application,
-                "Business Service": business_service,
-                "Technology": _first_text([row.get("Target")], "Unknown Technology"),
-                "Type": _first_text([row.get("Dependency Type")], "Technology"),
-                "Owner": owner,
-                "Spend": spend,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-def _application_cost_ownership_map(
-    portfolio_df: pd.DataFrame,
-    cost_df: pd.DataFrame,
-    unallocated_spend: float,
-) -> pd.DataFrame:
-    if portfolio_df.empty:
-        return pd.DataFrame(
-            columns=[
-                "Application",
-                "Business Owner",
-                "Technical Owner",
-                "Business Unit",
-                "Department",
-                "Allocated Spend",
-                "Unallocated Spend",
-                "Criticality",
-                "Health",
-            ]
-        )
-
-    spend_lookup = {}
-    if not cost_df.empty and {"App", "Total"}.issubset(cost_df.columns):
-        spend_lookup = {
-            str(row["App"]).lower(): row["Total"]
-            for _, row in cost_df.iterrows()
-        }
-
-    rows = []
-    for _, row in portfolio_df.iterrows():
-        application = _first_text([row.get("Application")], "Unknown Application")
-        owner = _first_text([row.get("Owner")], "Unassigned")
-        business_unit = _first_text([row.get("Business Unit")], "Unassigned")
-        allocated = float(spend_lookup.get(application.lower(), 0) or 0)
-        criticality = _first_text([row.get("Criticality")], "Standard")
-        has_owner = owner != "Unassigned"
-        has_spend = allocated > 0
-
-        if has_owner and has_spend:
-            health = "Healthy"
-        elif has_owner or has_spend:
-            health = "Needs Review"
-        else:
-            health = "Attention Required"
-
-        rows.append(
-            {
-                "Application": application,
-                "Business Owner": owner,
-                "Technical Owner": "Unassigned",
-                "Business Unit": business_unit,
-                "Department": business_unit,
-                "Allocated Spend": allocated,
-                "Unallocated Spend": 0 if has_spend or len(portfolio_df) != 1 else unallocated_spend,
-                "Criticality": criticality,
-                "Health": health,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
 configure_page(page_title="Application Portfolio", page_icon="A")
 init_session()
 require_role(["executive", "cio", "super_admin"])
@@ -225,41 +84,117 @@ render_enterprise_sidebar(
     active_page=PAGE_PATHS["Application Portfolio"],
 )
 
-summary = ApplicationPortfolioService.get_application_summary()
-portfolio_df = ApplicationPortfolioService.application_portfolio_dataframe()
-cost_df = ApplicationPortfolioService.cost_allocation_dataframe()
-dependency_df = ApplicationPortfolioService.dependency_graph_dataframe()
-dependency_summary_df = ApplicationPortfolioService.dependency_summary_dataframe()
-unallocated_df = ApplicationPortfolioService.unallocated_spend_dataframe()
-risk_df = ApplicationPortfolioService.risk_summary_dataframe()
-application_map_df = _application_dependency_map(dependency_df, portfolio_df, cost_df)
+dashboard = ApplicationInventoryCertificationService.get_dashboard()
+summary = dashboard["summary"]
+metrics = dashboard["metrics"]
+dataframes = dashboard["dataframes"]
+reconciliation_cards = dashboard["reconciliation_cards"]
+business_context = dashboard["business_context"]
+evidence = dashboard["evidence"]
 
-total_applications = summary["applications"]
-business_critical_apps = summary["critical_applications"]
-application_spend = summary["allocated_spend"]
-unmapped_spend = summary["unallocated_spend"]
-total_spend_scope = application_spend + unmapped_spend
-mapped_applications = int((cost_df["Total"] > 0).sum()) if not cost_df.empty and "Total" in cost_df.columns else 0
-unmapped_applications = max(total_applications - mapped_applications, 0)
-owner_gaps = (
-    int(portfolio_df["Owner"].astype(str).str.lower().isin(["", "unassigned", "none", "nan"]).sum())
-    if not portfolio_df.empty and "Owner" in portfolio_df.columns
-    else 0
-)
-high_risk_applications = len(risk_df)
-average_health_score = round(
-    (
-        (mapped_applications / total_applications * 45 if total_applications else 0)
-        + ((total_applications - owner_gaps) / total_applications * 35 if total_applications else 0)
-        + (20 if high_risk_applications == 0 else max(0, 20 - high_risk_applications * 5))
-    ),
-    1,
-)
-allocation_coverage = round((application_spend / total_spend_scope) * 100, 1) if total_spend_scope else 0
-cost_ownership_df = _application_cost_ownership_map(portfolio_df, cost_df, unmapped_spend)
+portfolio_df = dataframes["portfolio"]
+cost_df = dataframes["cost"]
+dependency_df = dataframes["dependency"]
+dependency_summary_df = dataframes["dependency_summary"]
+unallocated_df = dataframes["unallocated"]
+risk_df = dataframes["risk"]
+application_map_df = dataframes["application_map"]
+cost_ownership_df = dataframes["cost_ownership"]
+
+total_applications = metrics["total_applications"]
+business_critical_apps = metrics["business_critical_apps"]
+application_spend = metrics["application_spend"]
+unmapped_spend = metrics["unmapped_spend"]
+mapped_applications = metrics["mapped_applications"]
+unmapped_applications = metrics["unmapped_applications"]
+owner_gaps = metrics["owner_gaps"]
+high_risk_applications = metrics["high_risk_applications"]
+average_health_score = metrics["average_health_score"]
+allocation_coverage = metrics["allocation_coverage"]
+
+
+def render_certification_summary() -> None:
+    render_executive_summary(
+        {
+            "title": "Executive Summary",
+            "description": "Estate-level application portfolio summary for CIO certification, financial reconciliation, and business architecture context.",
+            "narrative": dashboard.get("executive_summary") or "Application Inventory certification summary is unavailable.",
+            "metrics": [
+                {
+                    "label": "Applications",
+                    "value": f"{total_applications:,}",
+                    "description": "Active registered applications",
+                    "icon": "technology",
+                    "status": "info",
+                },
+                {
+                    "label": "Critical Applications",
+                    "value": f"{business_critical_apps:,}",
+                    "description": "Business-critical portfolio scope",
+                    "icon": "risk",
+                    "status": "critical" if business_critical_apps else "healthy",
+                },
+                {
+                    "label": "Portfolio Health",
+                    "value": f"{average_health_score}%",
+                    "description": "Composite mapping, ownership, and risk score",
+                    "icon": "health",
+                    "status": ApplicationInventoryCertificationService.health_status(average_health_score),
+                },
+                {
+                    "label": "Technology Dependencies",
+                    "value": f"{summary['technology_dependencies']:,.0f}",
+                    "description": "Technology relationships supporting applications",
+                    "icon": "graph",
+                    "status": "info" if summary["technology_dependencies"] else "warning",
+                },
+                {
+                    "label": "Allocated Spend",
+                    "value": ApplicationInventoryCertificationService.format_money(application_spend),
+                    "description": "Spend mapped to registered applications",
+                    "icon": "cost",
+                    "status": "info",
+                },
+                {
+                    "label": "Unmapped Spend",
+                    "value": ApplicationInventoryCertificationService.format_money(unmapped_spend),
+                    "description": "Technology spend awaiting application mapping",
+                    "icon": "warning",
+                    "status": "critical" if unmapped_spend else "healthy",
+                },
+                {
+                    "label": "Risk Signals",
+                    "value": f"{high_risk_applications:,}",
+                    "description": "Application portfolio risks identified",
+                    "icon": "risk",
+                    "status": "critical" if high_risk_applications else "healthy",
+                },
+                {
+                    "label": "Owner Gaps",
+                    "value": f"{owner_gaps:,}",
+                    "description": "Applications needing business ownership",
+                    "icon": "governance",
+                    "status": "critical" if owner_gaps else "healthy",
+                },
+            ],
+        }
+    )
+    render_reconciliation_panel(
+        {
+            **reconciliation_cards,
+            "variance_status": reconciliation_cards.get("status", "Unknown"),
+        }
+    )
+    render_business_context(business_context)
+
+
+def render_certification_evidence() -> None:
+    render_evidence_panel(evidence)
 
 
 def render_application_content() -> None:
+    render_certification_summary()
+
     render_section(
         "Application Portfolio Summary",
         "Business view of critical applications, ownership, spend mapping, and operational risk.",
@@ -288,7 +223,7 @@ def render_application_content() -> None:
             f"{mapped_applications:,}",
             "Applications with allocated spend",
             icon="success",
-            status=_health_status(allocation_coverage),
+            status=ApplicationInventoryCertificationService.health_status(allocation_coverage),
         )
     with summary_cols[3]:
         render_risk_card(
@@ -302,11 +237,11 @@ def render_application_content() -> None:
     spend_cols = st.columns(4)
     with spend_cols[0]:
         render_metric_card(
-            "Application Spend",
-            _money(application_spend),
+            "Allocated Application Spend",
+            ApplicationInventoryCertificationService.format_money(application_spend),
             f"{allocation_coverage}% allocation coverage",
             icon="cost",
-            status=_health_status(allocation_coverage),
+            status=ApplicationInventoryCertificationService.health_status(allocation_coverage),
         )
     with spend_cols[1]:
         render_risk_card(
@@ -330,7 +265,7 @@ def render_application_content() -> None:
             f"{average_health_score}%",
             "Composite mapping, ownership, and risk score",
             icon="health",
-            status=_health_status(average_health_score),
+            status=ApplicationInventoryCertificationService.health_status(average_health_score),
         )
 
     render_section(
@@ -369,16 +304,16 @@ def render_application_content() -> None:
     ownership_cols = st.columns(3)
     with ownership_cols[0]:
         render_metric_card(
-            "Allocated Spend",
-            _money(application_spend),
+            "Allocated Application Spend",
+            ApplicationInventoryCertificationService.format_money(application_spend),
             "Spend mapped to registered applications",
             icon="cost",
             status="info",
         )
     with ownership_cols[1]:
         render_risk_card(
-            "Unallocated Spend",
-            _money(unmapped_spend),
+            "Unmapped Technology Spend",
+            ApplicationInventoryCertificationService.format_money(unmapped_spend),
             "Technology spend not mapped to applications",
             icon="warning",
             status="critical" if unmapped_spend else "healthy",
@@ -391,6 +326,16 @@ def render_application_content() -> None:
             icon="governance",
             status="critical" if owner_gaps else "healthy",
         )
+
+    render_insight_card(
+        "Application Spend Attribution",
+        description=(
+            "Only spend with a mapped application relationship is counted as allocated application spend. "
+            "Unmapped technology spend remains visible separately so CIOs can see how much cloud, SaaS, MSP, "
+            "license, or AI spend still needs application ownership mapping."
+        ),
+        status="warning" if unmapped_spend else "info",
+    )
 
     render_section(
         "Application Cost & Ownership",
@@ -407,11 +352,11 @@ def render_application_content() -> None:
         )
     with ownership_map_cols[1]:
         render_metric_card(
-            "Allocated Spend",
-            _money(application_spend),
+            "Allocated Application Spend",
+            ApplicationInventoryCertificationService.format_money(application_spend),
             "Spend mapped to registered applications",
             icon="cost",
-            status=_health_status(allocation_coverage),
+            status=ApplicationInventoryCertificationService.health_status(allocation_coverage),
         )
     with ownership_map_cols[2]:
         render_risk_card(
@@ -431,7 +376,7 @@ def render_application_content() -> None:
         status="info",
     )
     _show_dataframe(
-        _format_money_columns(cost_ownership_df, ["Allocated Spend", "Unallocated Spend"]),
+        ApplicationInventoryCertificationService.format_money_columns(cost_ownership_df, ["Allocated Spend", "Unallocated Spend"]),
         "No application cost and ownership data is available.",
     )
 
@@ -445,12 +390,12 @@ def render_application_content() -> None:
             "Allocation Coverage",
             f"{allocation_coverage}%",
             "Share of application spend mapped to registered apps",
-            status=_health_status(allocation_coverage),
+            status=ApplicationInventoryCertificationService.health_status(allocation_coverage),
         )
     with allocation_cols[1]:
         render_risk_card(
-            "Unallocated Spend",
-            _money(unmapped_spend),
+            "Unmapped Technology Spend",
+            ApplicationInventoryCertificationService.format_money(unmapped_spend),
             "Portfolio spend not mapped to applications",
             status="critical" if unmapped_spend else "healthy",
         )
@@ -472,7 +417,7 @@ def render_application_content() -> None:
             "Average Health Score",
             f"{average_health_score}%",
             "Portfolio health based on mapping, ownership, and risks",
-            status=_health_status(average_health_score),
+            status=ApplicationInventoryCertificationService.health_status(average_health_score),
         )
     with risk_cols[1]:
         render_risk_card(
@@ -489,14 +434,10 @@ def render_application_content() -> None:
             status="critical" if high_risk_applications else "healthy",
         )
 
-    render_section(
+    render_ai_narrative(
         "Executive Application Insight",
-        "CIO narrative generated from application registry, spend mapping, and dependency signals.",
-    )
-    render_insight_card(
-        "Application Portfolio Narrative",
-        description=ApplicationPortfolioService.get_executive_narrative(),
-        status=_health_status(average_health_score),
+        ApplicationPortfolioService.get_executive_narrative(),
+        description="CIO narrative generated from application registry, spend mapping, and dependency signals.",
     )
 
     render_section(
@@ -512,7 +453,7 @@ def render_application_content() -> None:
 
         st.subheader("Cost Allocation Summary")
         _show_dataframe(
-            _format_money_columns(cost_df, ["Cloud", "SaaS", "MSP", "License", "Total"]),
+            ApplicationInventoryCertificationService.format_money_columns(cost_df, ["Cloud", "SaaS", "MSP", "License", "Total"]),
             "No application cost allocation data is available.",
         )
 
@@ -524,14 +465,14 @@ def render_application_content() -> None:
 
         st.subheader("Technology Dependency Evidence")
         _show_dataframe(
-            _format_money_columns(application_map_df, ["Spend"]),
+            ApplicationInventoryCertificationService.format_money_columns(application_map_df, ["Spend"]),
             "No application dependency mapping data is available.",
         )
 
         st.subheader("Technical Mapping Visualization")
         graph = _dependency_graph(dependency_df)
         if graph:
-            st.plotly_chart(graph, use_container_width=True)
+            plotly_chart(graph)
         else:
             st.info("No application dependency graph data is available.")
 
@@ -540,7 +481,7 @@ def render_application_content() -> None:
         if not gap_table.empty:
             gap_table = gap_table[["Spend Source", "Amount", "Status"]]
         _show_dataframe(
-            _format_money_columns(gap_table, ["Amount"]),
+            ApplicationInventoryCertificationService.format_money_columns(gap_table, ["Amount"]),
             "No unallocated spend is currently identified.",
         )
 
@@ -550,11 +491,13 @@ def render_application_content() -> None:
             "No application portfolio risks are currently identified.",
         )
 
+    render_certification_evidence()
+
 
 render_page(
     title="Applications",
     description="CIO view of application ownership, spend mapping, dependencies, criticality, and risk.",
     breadcrumbs=["Home", "CIO", "Applications"],
     content=render_application_content,
-    status=_health_status(average_health_score),
+    status=ApplicationInventoryCertificationService.health_status(average_health_score),
 )
