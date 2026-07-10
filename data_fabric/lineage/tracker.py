@@ -27,6 +27,7 @@ class LineageEvent:
     source_system: str
     source_identifier: str
     organization_id: str
+    tenant_id: str | None = None
     entity_id: str | None = None
     relationship_id: str | None = None
     raw_record_id: str | None = None
@@ -149,3 +150,4 @@ class InMemoryLineageTracker(LineageTracker):
             key=lambda event: (self._ORDER[event.event_type], event.occurred_at),
         )
         return tuple(deepcopy(event) for event in ordered)
+
