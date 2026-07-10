@@ -29,6 +29,7 @@ ADRs remain the source of truth for the detailed decision, context, consequences
 | ADR-013 | Provenance Framework | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-013-Provenance-Framework.md` |
 | ADR-014 | Versioning Strategy | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-014-Versioning-Strategy.md` |
 | ADR-015 | Data Quality Framework | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-015-Data-Quality-Framework.md` |
+| ADR-016 | Data Fabric Persistence Architecture | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-016-Data-Fabric-Persistence-Architecture.md` |
 
 ## Release Mapping
 
@@ -61,6 +62,7 @@ Architecture-only decision package:
 - Provenance Framework
 - Versioning Strategy
 - Data Quality Framework
+- Data Fabric Persistence Architecture
 
 ## Governance Rules
 
@@ -82,14 +84,14 @@ Engineering: Frozen
 Tag: Pending post-merge E8.1.17 validation
 ```
 
-P3 implementation remains blocked until ADR-008 through ADR-015 are reviewed and accepted.
+P3 implementation remains blocked until ADR-008 through ADR-016 are reviewed and accepted.
 
 ## P3 Architecture Boundary
 
 The P3 architecture package is:
 
 ```text
-ADR-008 through ADR-015
+ADR-008 through ADR-016
 Status: Proposed
 Program: P3 Enterprise Data Fabric
 Scope: Architecture only until reviewed and accepted
@@ -102,3 +104,5 @@ Every enterprise concept should have exactly one canonical definition.
 ```
 
 This invariant should govern the Enterprise Semantic Model, Enterprise Ontology, Canonical Models, Enterprise Data Fabric, Knowledge Graph, Digital Twin, Enterprise Financial Model, AI Reasoning, APIs, dashboards, and future AI agents.
+
+
