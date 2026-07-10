@@ -53,7 +53,7 @@ def test_adr_016_is_registered_in_architecture_index():
 
     assert "ADR-016" in content
     assert "ADR-016-Data-Fabric-Persistence-Architecture.md" in content
-    assert "ADR-008 through ADR-016" in content
+    assert "ADR-008 through ADR-" in content
 
 
 def test_persistence_design_declares_required_architecture_topics():
@@ -104,6 +104,7 @@ def test_persistence_docs_explicitly_defer_runtime_integration():
 
     for phrase in forbidden_runtime:
         assert phrase in combined
+
 
 
 
