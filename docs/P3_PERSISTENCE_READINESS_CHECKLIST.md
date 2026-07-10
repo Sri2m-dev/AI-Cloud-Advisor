@@ -2,24 +2,25 @@
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Contract stability | PASS WITH CONDITIONS | P3.2-P3.8 contracts are coherent; orchestration ownership still needed. |
-| Tenant isolation | PASS WITH CONDITIONS | In-memory stores partition by organization and tenant; persistence must decide whether `tenant_id=None` is allowed. |
-| Identifier strategy | PASS WITH CONDITIONS | Core ids are clear; storage uniqueness constraints must be specified. |
-| Versioning semantics | PASS | Immutable snapshots and temporal records are well defined. |
-| Serialization | PASS WITH CONDITIONS | Deterministic versioning serializer exists; shared serializer contract should be created before persistence. |
-| Transaction boundaries | BLOCKED | Unit-of-work and cross-package write transaction boundaries are not defined. |
-| Idempotency | BLOCKED | Ingestion, registry, lineage, provenance, and version writes need idempotency contracts. |
-| Error model | PASS WITH CONDITIONS | Package exceptions are catchable; shared `DataFabricError` recommended before orchestration. |
-| Data quality gates | PASS WITH CONDITIONS | Quality scoring exists; gate policy and blocking behavior in write flows are not defined. |
-| Lineage/provenance writes | PASS WITH CONDITIONS | Interfaces exist; emission policy and transaction timing are undefined. |
-| Semantic mapping lifecycle | PASS WITH CONDITIONS | Mapping lifecycle exists; orchestration with identity/registry is not defined. |
-| Migration strategy | DEFERRED | No schema work yet. |
-| Rollback strategy | DEFERRED | Requires persistence architecture and transaction policy. |
-| Test coverage | PASS | Data Fabric focused tests pass and checkpoint compatibility tests cover architecture invariants. |
-| Operational observability | DEFERRED | No runtime integration yet; telemetry policy should follow orchestration contracts. |
+| Contract stability | PASS WITH CONDITIONS | P3.2-P3.8 contracts remain stable; P3.10B adds orchestration contracts without changing product paths. |
+| Tenant isolation | PASS WITH CONDITIONS | `TenantContext` now requires organization and tenant ids and enforces boundary checks; storage-level enforcement remains future work. |
+| Identifier strategy | PASS WITH CONDITIONS | Idempotency keys and source identifiers are modeled; database uniqueness constraints remain future work. |
+| Versioning semantics | PASS WITH CONDITIONS | Version creation policy now defines initial, changed, unchanged, forced, and rejected decisions; snapshot persistence remains future work. |
+| Serialization | PASS WITH CONDITIONS | Shared deterministic serializer exists for dataclasses, enums, UUIDs, aware datetimes, sets, tuples, mappings, and content hashes. Repository adapters must reuse it. |
+| Transaction boundaries | PASS WITH CONDITIONS | Unit-of-work and transaction-boundary interfaces exist with in-memory commit/rollback behavior; durable transactions remain future work. |
+| Idempotency | PASS WITH CONDITIONS | Tenant-isolated in-memory idempotency semantics exist; durable idempotency storage remains future work. |
+| Error model | PASS WITH CONDITIONS | Shared `DataFabricError` hierarchy exists; package-local exception inheritance can be aligned gradually. |
+| Data quality gates | PASS WITH CONDITIONS | Quality gate lifecycle is explicit and deterministic; production policy thresholds remain configurable architecture decisions. |
+| Lineage/provenance writes | PASS WITH CONDITIONS | Emission planning exists; durable event/provenance repositories remain future work. |
+| Semantic mapping lifecycle | PASS WITH CONDITIONS | Orchestration has a semantic mapping stage and port; persistence of mapping decisions remains future work. |
+| Batch processing | PASS WITH CONDITIONS | Batch contracts define ordering, fail-fast, continue-on-error, tenant isolation, and totals. |
+| Migration strategy | DEFERRED | No schema or migration work has started. |
+| Rollback strategy | PASS WITH CONDITIONS | In-memory rollback semantics are demonstrated; database rollback semantics remain future work. |
+| Test coverage | PASS | P3.10B adds focused tests for foundation utilities and orchestration contracts. |
+| Operational observability | DEFERRED | Correlation ids are carried; metrics/logging/tracing integrations remain future work. |
 
-## Persistence Readiness Decision
+## Decision
 
-Persistence is **not approved** as the immediate next phase. The foundation is ready for orchestration-contract design.
+Persistence is **not approved for immediate implementation**. P3.10B upgrades the readiness decision from hard NO-GO to **GO WITH LIMITED CONDITIONS for persistence architecture design only**.
 
-Recommended next phase: **P3.10B - Orchestration Contracts**.
+Next recommended phase: **P3.10C - Persistence Architecture**. That phase should design repository boundaries, schemas, migrations, concurrency controls, durable idempotency, and tenant enforcement before any runtime integration.
