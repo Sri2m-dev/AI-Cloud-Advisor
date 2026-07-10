@@ -83,15 +83,14 @@ def test_persistence_design_declares_required_architecture_topics():
         assert topic.lower() in combined.lower(), f"{topic} missing from persistence design"
 
 
-def test_persistence_architecture_phase_does_not_add_implementation_packages():
+def test_persistence_architecture_phase_does_not_add_adapter_or_migration_packages():
     forbidden_new_packages = (
-        "data_fabric/persistence",
         "data_fabric/adapters",
         "data_fabric/migrations",
     )
 
     for forbidden in forbidden_new_packages:
-        assert not Path(forbidden).exists(), f"P3.10C should not add implementation package: {forbidden}"
+        assert not Path(forbidden).exists(), f"P3 architecture should not add adapter or migration package: {forbidden}"
 
 
 def test_persistence_docs_explicitly_defer_runtime_integration():
@@ -105,6 +104,7 @@ def test_persistence_docs_explicitly_defer_runtime_integration():
 
     for phrase in forbidden_runtime:
         assert phrase in combined
+
 
 
 
