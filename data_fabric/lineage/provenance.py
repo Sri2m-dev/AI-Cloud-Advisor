@@ -20,6 +20,7 @@ class ProvenanceRecord:
     source_identifier: str
     organization_id: str
     collection_method: str
+    tenant_id: str | None = None
     entity_id: str | None = None
     relationship_id: str | None = None
     connector_version: str | None = None
@@ -95,3 +96,4 @@ class InMemoryProvenanceTracker(ProvenanceTracker):
             raise LineageValidationError(
                 "Provenance record requires entity_id or relationship_id"
             )
+
