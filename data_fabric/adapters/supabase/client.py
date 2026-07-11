@@ -20,6 +20,10 @@ class SupabaseTableOperation(Protocol):
     def execute(self) -> Any: ...
 
 
+class SupabaseRpcOperation(Protocol):
+    def execute(self) -> Any: ...
+
+
 class SupabaseDataFabricClient:
     """Server-side Supabase client wrapper with retry/error normalization."""
 

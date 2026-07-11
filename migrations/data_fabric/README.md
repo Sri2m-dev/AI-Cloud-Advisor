@@ -20,6 +20,8 @@ P3 migration files are reviewed SQL artifacts. They are not executed automatical
 14. `0014_create_ontology_update_rpcs.sql`
 15. `0015_create_semantic_mapping_update_rpc.sql`
 16. `0016_create_idempotency_state_rpcs.sql`
+17. `0017_create_atomic_entity_write_rpc.sql`
+18. `0018_create_atomic_relationship_write_rpc.sql`
 
 ## Manual Application
 
@@ -43,3 +45,5 @@ These migrations are additive and non-destructive. Rollback should be handled by
 - no automatic runtime execution
 - RLS enabled with no anonymous access policies in these foundation migrations
 - repositories still apply organization and tenant filters explicitly
+- P3.15B atomic write RPCs use reviewed `SECURITY DEFINER`, safe `search_path`, schema-qualified references, revoked `PUBLIC` execute, and `service_role` execute grants
+- atomic canonical write migrations are still manual deployment artifacts and are not wired to runtime startup
