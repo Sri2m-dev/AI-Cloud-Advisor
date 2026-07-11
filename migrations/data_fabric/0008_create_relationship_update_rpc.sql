@@ -12,6 +12,7 @@ create or replace function data_fabric.data_fabric_update_enterprise_relationshi
 returns setof data_fabric.enterprise_relationships
 language sql
 security definer
+set search_path = data_fabric, pg_temp
 as $$
     update data_fabric.enterprise_relationships
     set
@@ -39,3 +40,6 @@ as $$
 $$;
 
 comment on function data_fabric.data_fabric_update_enterprise_relationship(uuid, text, text, integer, jsonb) is 'Atomic P3 relationship update with tenant filter and optimistic revision check.';
+
+revoke all on function data_fabric.data_fabric_update_enterprise_relationship(uuid, text, text, integer, jsonb) from public;
+grant execute on function data_fabric.data_fabric_update_enterprise_relationship(uuid, text, text, integer, jsonb) to service_role;
