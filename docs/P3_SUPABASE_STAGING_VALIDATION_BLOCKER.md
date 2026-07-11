@@ -80,13 +80,23 @@ Pre-flight inspection confirmed:
 - migrations are not executed by integration tests and must already exist before tests run
 - no environment values were captured in this blocker document
 
-Pre-flight inspection also found P3.17 remains blocked by safety gaps:
+Safety defects identified during pre-flight:
 
-- only `tests/data_fabric/test_supabase_atomic_write_integration.py` rejects production-looking URLs in code
-- the other Supabase integration helpers do not contain equivalent production-looking URL rejection
-- write-based integration tests do not perform explicit row cleanup and rely on unique test-owned organization and tenant IDs
+- inconsistent URL rejection
+- missing explicit cleanup
 
-These gaps do not require a database connection to reproduce. Do not run live P3.17 integration tests until they are corrected or explicitly accepted for a disposable-only Supabase test project.
+Safety-hardening status:
+
+- corrected on branch, pending validation/commit
+- shared fail-closed helper added for all P3 Supabase integration tests
+- exact enable value remains `1`
+- application Supabase env vars are not used as fallback
+- layered unsafe-target rejection is applied before client construction
+- test-owned identifiers use the `p3test-` prefix plus UUID suffixes
+- cleanup is scoped by both `organization_id` and `tenant_id`
+- cleanup refuses non-test tenants
+
+These corrections do not change the overall P3.17 status. Live Supabase validation remains blocked until the disposable environment is approved and configured.
 
 ## Migration Assumption
 
@@ -105,8 +115,8 @@ Before P3.17 can continue:
 - [ ] Target confirmed non-customer
 - [ ] Migrations `0001` through `0018` applied through an approved manual test-environment process
 - [ ] RLS and privileged RPC grants verified
-- [ ] Production-looking URL safeguard gap corrected or explicitly accepted for disposable-only validation
-- [ ] Cleanup approach confirmed as test-owned-prefix cleanup or disposable project reset
+- [ ] P3.17A safety-hardening validation passed and committed
+- [ ] Cleanup approach confirmed as scoped test-owned-prefix cleanup or disposable project reset
 - [ ] Canonical clean workspace in use
 - [ ] Branch remains `feature/p3-supabase-staging-validation`
 
