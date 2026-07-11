@@ -12,6 +12,14 @@ P3 migration files are reviewed SQL artifacts. They are not executed automatical
 6. `0006_create_lineage_events.sql`
 7. `0007_create_provenance_records.sql`
 8. `0008_create_relationship_update_rpc.sql`
+9. `0009_create_quality_assessments.sql`
+10. `0010_create_ontology_concepts.sql`
+11. `0011_create_ontology_relationships.sql`
+12. `0012_create_semantic_mappings.sql`
+13. `0013_create_idempotency_records.sql`
+14. `0014_create_ontology_update_rpcs.sql`
+15. `0015_create_semantic_mapping_update_rpc.sql`
+16. `0016_create_idempotency_state_rpcs.sql`
 
 ## Manual Application
 

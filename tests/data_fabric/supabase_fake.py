@@ -17,6 +17,11 @@ PRIMARY_KEYS = {
     "data_fabric.entity_versions": "snapshot_id",
     "data_fabric.lineage_events": "event_id",
     "data_fabric.provenance_records": "provenance_id",
+    "data_fabric.quality_assessments": "assessment_id",
+    "data_fabric.ontology_concepts": "concept_id",
+    "data_fabric.ontology_relationships": "relationship_id",
+    "data_fabric.semantic_mappings": "mapping_id",
+    "data_fabric.idempotency_records": "idempotency_key",
     "data_fabric.enterprise_entities": "id",
 }
 
@@ -110,7 +115,53 @@ class FakeRpcOperation:
             )
         if self.function_name == "data_fabric_update_enterprise_entity":
             return self._update_mutable("data_fabric.enterprise_entities", "p_entity_id", "p_entity")
+        if self.function_name == "data_fabric_update_ontology_concept":
+            return self._update_mutable("data_fabric.ontology_concepts", "p_concept_id", "p_concept")
+        if self.function_name == "data_fabric_update_ontology_relationship":
+            return self._update_mutable("data_fabric.ontology_relationships", "p_relationship_id", "p_relationship")
+        if self.function_name == "data_fabric_update_semantic_mapping":
+            return self._update_mutable("data_fabric.semantic_mappings", "p_mapping_id", "p_mapping")
+        if self.function_name == "data_fabric_reserve_idempotency_key":
+            return self._reserve_idempotency()
+        if self.function_name == "data_fabric_complete_idempotency_key":
+            return self._transition_idempotency("completed", result_payload=self.params.get("p_result_payload"))
+        if self.function_name == "data_fabric_fail_idempotency_key":
+            return self._transition_idempotency("failed", failure_reason=self.params.get("p_failure_reason"))
+        if self.function_name == "data_fabric_expire_idempotency_key":
+            return self._transition_idempotency("expired")
         return FakeResponse(error="unknown rpc")
+
+    def _reserve_idempotency(self) -> FakeResponse:
+        table = self.raw_client.tables["data_fabric.idempotency_records"]
+        key = self.params["p_idempotency_key"]
+        for row in table:
+            if row["organization_id"] == self.params["p_organization_id"] and row["tenant_id"] == self.params["p_tenant_id"] and row["idempotency_key"] == key:
+                if row["payload_hash"] != self.params["p_payload_hash"]:
+                    return FakeResponse([])
+                if row["status"] in {"failed", "expired"}:
+                    row["status"] = "in_progress"
+                    row["revision"] += 1
+                return FakeResponse([deepcopy(row)])
+        row = {"record_id": f"record-{key}", "organization_id": self.params["p_organization_id"], "tenant_id": self.params["p_tenant_id"], "idempotency_key": key, "payload_hash": self.params["p_payload_hash"], "status": "in_progress", "result_payload": {}, "failure_reason": None, "reserved_at": "2026-01-01T00:00:00+00:00", "completed_at": None, "failed_at": None, "expires_at": self.params.get("p_expires_at"), "correlation_id": self.params.get("p_correlation_id"), "revision": 1, "metadata": {}, "schema_version": 1}
+        table.append(row)
+        return FakeResponse([deepcopy(row)])
+
+    def _transition_idempotency(self, status: str, result_payload=None, failure_reason=None) -> FakeResponse:
+        table = self.raw_client.tables["data_fabric.idempotency_records"]
+        for row in table:
+            if row["organization_id"] == self.params["p_organization_id"] and row["tenant_id"] == self.params["p_tenant_id"] and row["idempotency_key"] == self.params["p_idempotency_key"] and row["status"] == "in_progress":
+                row["status"] = status
+                row["revision"] += 1
+                if status == "completed":
+                    row["result_payload"] = result_payload or {}
+                    row["completed_at"] = "2026-01-01T00:01:00+00:00"
+                elif status == "failed":
+                    row["failure_reason"] = failure_reason
+                    row["failed_at"] = "2026-01-01T00:01:00+00:00"
+                elif status == "expired":
+                    row["expires_at"] = row.get("expires_at") or "2026-01-01T00:01:00+00:00"
+                return FakeResponse([deepcopy(row)])
+        return FakeResponse([])
 
     def _update_mutable(self, table_name: str, id_param: str, payload_param: str) -> FakeResponse:
         table = self.raw_client.tables[table_name]
@@ -136,6 +187,11 @@ class FakeRawSupabaseClient:
             "data_fabric.entity_versions": [],
             "data_fabric.lineage_events": [],
             "data_fabric.provenance_records": [],
+            "data_fabric.quality_assessments": [],
+            "data_fabric.ontology_concepts": [],
+            "data_fabric.ontology_relationships": [],
+            "data_fabric.semantic_mappings": [],
+            "data_fabric.idempotency_records": [],
         }
         self.executed_filters: list[tuple[str, tuple[tuple[str, Any], ...]]] = []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
@@ -149,7 +205,10 @@ class FakeRawSupabaseClient:
     def insert_error(self, table_name: str, row: dict[str, Any]) -> str | None:
         rows = self.tables.setdefault(table_name, [])
         primary = PRIMARY_KEYS.get(table_name)
-        if primary and any(existing[primary] == row[primary] for existing in rows):
+        if table_name in {"data_fabric.ontology_concepts", "data_fabric.idempotency_records"}:
+            if any(existing["organization_id"] == row["organization_id"] and existing["tenant_id"] == row["tenant_id"] and existing[primary] == row[primary] for existing in rows):
+                return f"duplicate {primary}"
+        elif primary and any(existing[primary] == row[primary] for existing in rows):
             return f"duplicate {primary}"
         if table_name == "data_fabric.enterprise_relationships":
             for existing in rows:

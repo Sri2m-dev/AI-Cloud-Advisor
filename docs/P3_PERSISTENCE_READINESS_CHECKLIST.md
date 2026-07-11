@@ -23,6 +23,13 @@
 
 ## Decision
 
-P3.14 keeps persistence readiness at **GO WITH CONDITIONS** for a limited Supabase PostgreSQL relationship and immutable history adapter slice.
+P3.15A keeps persistence readiness at **GO WITH CONDITIONS** for a limited Supabase governance, semantic, and idempotency adapter slice.
 
-Still blocked until future review and merge: migration runner, quality/ontology/semantic/idempotency adapters, production RLS policies, ORM models if needed, multi-repository transaction RPC, runtime wiring, dashboards, connectors, schedulers, and Knowledge Graph integration.
+Still blocked until future review and merge: migration runner, production RLS policies, ORM models if needed, P3.15B multi-repository transaction RPC, runtime wiring, dashboards, connectors, schedulers, and Knowledge Graph integration.
+
+## P3.15A Update
+
+- Quality assessments are append-only with database mutation-prevention triggers.
+- Ontology and semantic mappings use tenant-filtered optimistic-concurrency RPCs.
+- Idempotency transitions use explicit atomic RPCs.
+- Runtime wiring remains disabled.
