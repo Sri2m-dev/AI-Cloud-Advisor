@@ -1,47 +1,37 @@
 """Opt-in integration tests for the P3 Supabase entity adapter foundation.
 
-These tests never run against a real Supabase project unless explicitly enabled with
-P3_SUPABASE_RUN_INTEGRATION=1 and test-only credentials.
+These tests never run against a real Supabase project unless the shared P3
+integration safety gate is explicitly enabled with test-only credentials.
 """
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
-from uuid import uuid4
 
-import pytest
-
-from data_fabric.adapters.supabase import DataFabricDatabaseConfig, SupabaseDataFabricClient
+from data_fabric.adapters.supabase import SupabaseDataFabricClient
 from data_fabric.adapters.supabase.entity_repository import SupabaseEntityRepository
 from data_fabric.contracts import EnterpriseEntity, EntityType
-from data_fabric.foundation import TenantContext
-
-
-
-def _integration_config() -> DataFabricDatabaseConfig:
-    if os.getenv("P3_SUPABASE_RUN_INTEGRATION") != "1":
-        pytest.skip("P3 Supabase integration tests are opt-in only")
-    url = os.getenv("P3_SUPABASE_TEST_URL")
-    key = os.getenv("P3_SUPABASE_TEST_SERVICE_ROLE_KEY")
-    if not url or not key:
-        pytest.skip("P3 Supabase test URL/service role key are not configured")
-    return DataFabricDatabaseConfig(url, key)
+from tests.data_fabric.supabase_integration_safety import (
+    cleanup_test_tenant,
+    client_or_skip,
+    create_test_identifier,
+    create_test_tenant_context,
+)
 
 
 def test_supabase_entity_repository_integration_smoke() -> None:
-    config = _integration_config()
-    repository = SupabaseEntityRepository(SupabaseDataFabricClient(config))
-    unique = uuid4().hex
-    tenant_context = TenantContext(f"org-it-{unique}", f"tenant-it-{unique}")
+    client = client_or_skip()
+    assert isinstance(client, SupabaseDataFabricClient)
+    repository = SupabaseEntityRepository(client)
+    tenant_context = create_test_tenant_context("entity")
     now = datetime.now(timezone.utc)
     entity = EnterpriseEntity(
-        id=f"entity-it-{unique}",
-        canonical_id=f"canonical-it-{unique}",
+        id=create_test_identifier("entity"),
+        canonical_id=create_test_identifier("canonical"),
         entity_type=EntityType.APPLICATION,
         name="Integration Entity",
         source_system="integration-test",
-        source_identifier=f"source-it-{unique}",
+        source_identifier=create_test_identifier("source"),
         organization_id=tenant_context.organization_id,
         tenant_id=tenant_context.tenant_id,
         created_at=now,
@@ -49,13 +39,16 @@ def test_supabase_entity_repository_integration_smoke() -> None:
         metadata={"purpose": "p3.13 integration smoke"},
     )
 
-    created = repository.add(entity)
-    fetched = repository.get(tenant_context, created.record_id)
+    try:
+        created = repository.add(entity)
+        fetched = repository.get(tenant_context, created.record_id)
 
-    assert fetched is not None
-    assert fetched.payload["canonical_id"] == entity.canonical_id
-    assert repository.find_by_source_identity(
-        tenant_context,
-        entity.source_system,
-        entity.source_identifier,
-    ) is not None
+        assert fetched is not None
+        assert fetched.payload["canonical_id"] == entity.canonical_id
+        assert repository.find_by_source_identity(
+            tenant_context,
+            entity.source_system,
+            entity.source_identifier,
+        ) is not None
+    finally:
+        cleanup_test_tenant(client, tenant_context)
