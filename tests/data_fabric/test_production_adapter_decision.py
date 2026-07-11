@@ -82,16 +82,18 @@ def test_decision_evaluates_required_adapter_options_and_criteria():
         assert criterion in content
 
 
-def test_database_decision_phase_does_not_add_adapter_or_migration_code():
+def test_database_decision_phase_does_not_wire_product_runtime_paths():
     forbidden_paths = (
         "data_fabric/persistence_adapters",
         "data_fabric/database_adapters",
-        "data_fabric/adapters",
         "data_fabric/migrations",
+        "pages/data_fabric_persistence.py",
+        "connector_runtime/data_fabric_persistence.py",
+        "services/data_fabric_persistence.py",
     )
 
     for path in forbidden_paths:
-        assert not Path(path).exists(), f"P3.12 must not add implementation path: {path}"
+        assert not Path(path).exists(), f"P3.12/P3.13 must not wire product runtime path: {path}"
 
 
 def test_database_decision_docs_defer_runtime_and_adapter_implementation():
