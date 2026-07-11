@@ -9,6 +9,10 @@ from data_fabric.adapters.supabase.exceptions import (
     SupabaseAdapterOperationError,
 )
 from data_fabric.adapters.supabase.health import SupabaseAdapterHealthCheck
+from data_fabric.adapters.supabase.idempotency_repository import SupabaseIdempotencyRepository
+from data_fabric.adapters.supabase.ontology_repository import SupabaseOntologyRepository
+from data_fabric.adapters.supabase.quality_repository import SupabaseQualityAssessmentRepository
+from data_fabric.adapters.supabase.semantic_mapping_repository import SupabaseSemanticMappingRepository
 from data_fabric.adapters.supabase.lineage_repository import SupabaseLineageRepository
 from data_fabric.adapters.supabase.provenance_repository import SupabaseProvenanceRepository
 from data_fabric.adapters.supabase.relationship_repository import SupabaseRelationshipRepository
@@ -22,10 +26,14 @@ __all__ = [
     "SupabaseAdapterHealthCheck",
     "SupabaseAdapterOperationError",
     "SupabaseDataFabricClient",
-    "SupabaseLineageRepository",
-    "SupabaseProvenanceRepository",
-    "SupabaseRelationshipRepository",
     "SupabaseDataFabricUnitOfWork",
     "SupabaseEntityRepository",
+    "SupabaseIdempotencyRepository",
+    "SupabaseLineageRepository",
+    "SupabaseOntologyRepository",
+    "SupabaseProvenanceRepository",
+    "SupabaseQualityAssessmentRepository",
+    "SupabaseRelationshipRepository",
+    "SupabaseSemanticMappingRepository",
     "SupabaseVersionRepository",
 ]
