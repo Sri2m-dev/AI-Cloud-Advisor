@@ -59,6 +59,11 @@ def test_migrations_are_explicit_and_non_destructive() -> None:
         "0001_create_data_fabric_schema.sql",
         "0002_create_enterprise_entities.sql",
         "0003_create_entity_update_rpc.sql",
+        "0004_create_enterprise_relationships.sql",
+        "0005_create_entity_versions.sql",
+        "0006_create_lineage_events.sql",
+        "0007_create_provenance_records.sql",
+        "0008_create_relationship_update_rpc.sql",
     ]
 
     combined = "\n".join(path.read_text().lower() for path in MIGRATION_ROOT.glob("*.sql"))

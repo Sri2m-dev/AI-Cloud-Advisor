@@ -9,7 +9,11 @@ from data_fabric.adapters.supabase.exceptions import (
     SupabaseAdapterOperationError,
 )
 from data_fabric.adapters.supabase.health import SupabaseAdapterHealthCheck
+from data_fabric.adapters.supabase.lineage_repository import SupabaseLineageRepository
+from data_fabric.adapters.supabase.provenance_repository import SupabaseProvenanceRepository
+from data_fabric.adapters.supabase.relationship_repository import SupabaseRelationshipRepository
 from data_fabric.adapters.supabase.unit_of_work import SupabaseDataFabricUnitOfWork
+from data_fabric.adapters.supabase.version_repository import SupabaseVersionRepository
 
 __all__ = [
     "DataFabricDatabaseConfig",
@@ -18,6 +22,10 @@ __all__ = [
     "SupabaseAdapterHealthCheck",
     "SupabaseAdapterOperationError",
     "SupabaseDataFabricClient",
+    "SupabaseLineageRepository",
+    "SupabaseProvenanceRepository",
+    "SupabaseRelationshipRepository",
     "SupabaseDataFabricUnitOfWork",
     "SupabaseEntityRepository",
+    "SupabaseVersionRepository",
 ]

@@ -21,6 +21,8 @@ class SupabaseDataFabricUnitOfWork:
 
     Supabase REST does not provide transparent multi-statement transactions here.
     Multi-step atomic behavior must use reviewed SQL/RPC in a later phase.
+    P3.14 formally defers the relationship + version + lineage + provenance
+    atomic write bundle to a future controlled RPC boundary.
     """
 
     tenant_context: TenantContext | None = None
