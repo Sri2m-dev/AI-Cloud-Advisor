@@ -107,6 +107,8 @@ class FakeRpcOperation:
 
     def execute(self) -> FakeResponse:
         self.raw_client.rpc_calls.append((self.function_name, deepcopy(self.params)))
+        if self.function_name in {"data_fabric_atomic_entity_write", "data_fabric_atomic_relationship_write"}:
+            return self._atomic_write()
         if self.function_name == "data_fabric_update_enterprise_relationship":
             return self._update_mutable(
                 "data_fabric.enterprise_relationships",
@@ -130,6 +132,35 @@ class FakeRpcOperation:
         if self.function_name == "data_fabric_expire_idempotency_key":
             return self._transition_idempotency("expired")
         return FakeResponse(error="unknown rpc")
+
+    def _atomic_write(self) -> FakeResponse:
+        if self.function_name in self.raw_client.rpc_errors:
+            return FakeResponse(error=self.raw_client.rpc_errors[self.function_name])
+        if self.function_name in self.raw_client.rpc_results:
+            result = self.raw_client.rpc_results[self.function_name]
+            return FakeResponse(deepcopy(result))
+        request = self.params["p_request"]
+        subject_key = "entity_record" if self.function_name == "data_fabric_atomic_entity_write" else "relationship_record"
+        subject_type = "entity" if subject_key == "entity_record" else "relationship"
+        status = "no_change" if request["operation"] == "no_change" else "committed"
+        return FakeResponse(
+            {
+                "status": status,
+                "subject_type": subject_type,
+                "subject_id": request[subject_key]["record_id"],
+                "operation": request["operation"],
+                "resulting_revision": 1 if request["operation"] == "create" else 2,
+                "resulting_version": 1,
+                "version_created": bool(request.get("entity_version")) and request["operation"] != "no_change",
+                "lineage_ids": [record["record_id"] for record in request.get("lineage_events", [])],
+                "provenance_ids": [record["record_id"] for record in request.get("provenance_records", [])],
+                "quality_assessment_id": (request.get("quality_assessment") or {}).get("record_id"),
+                "idempotency_status": "completed",
+                "replayed": False,
+                "correlation_id": request.get("correlation_id"),
+                "records": [],
+            }
+        )
 
     def _reserve_idempotency(self) -> FakeResponse:
         table = self.raw_client.tables["data_fabric.idempotency_records"]
@@ -195,6 +226,8 @@ class FakeRawSupabaseClient:
         }
         self.executed_filters: list[tuple[str, tuple[tuple[str, Any], ...]]] = []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
+        self.rpc_results: dict[str, Any] = {}
+        self.rpc_errors: dict[str, Any] = {}
 
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from data_fabric.adapters.supabase.atomic_write import SupabaseAtomicWriteExecutor
 from data_fabric.foundation import TenantContext
 
 
@@ -17,15 +18,17 @@ class SupabaseUnitOfWorkState(str, Enum):
 
 @dataclass(slots=True)
 class SupabaseDataFabricUnitOfWork:
-    """Minimal transaction boundary placeholder for entity operations.
+    """Minimal state marker for isolated Supabase repository operations.
 
     Supabase REST does not provide transparent multi-statement transactions here.
-    Multi-step atomic behavior must use reviewed SQL/RPC in a later phase.
-    P3.14 formally defers the relationship + version + lineage + provenance
-    atomic write bundle to a future controlled RPC boundary.
+    Individual repository operations remain available for isolated, tenant-scoped
+    work. The only supported multi-record canonical write transaction path is
+    the reviewed ``SupabaseAtomicWriteExecutor`` RPC boundary; this class does
+    not advertise a general-purpose Python-side or distributed transaction.
     """
 
     tenant_context: TenantContext | None = None
+    atomic_executor: SupabaseAtomicWriteExecutor | None = None
     state: SupabaseUnitOfWorkState = SupabaseUnitOfWorkState.NOT_STARTED
     failure_reason: str | None = None
 

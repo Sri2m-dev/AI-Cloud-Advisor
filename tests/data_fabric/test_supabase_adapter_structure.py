@@ -72,6 +72,8 @@ def test_migrations_are_explicit_and_non_destructive() -> None:
         "0014_create_ontology_update_rpcs.sql",
         "0015_create_semantic_mapping_update_rpc.sql",
         "0016_create_idempotency_state_rpcs.sql",
+        "0017_create_atomic_entity_write_rpc.sql",
+        "0018_create_atomic_relationship_write_rpc.sql",
     ]
 
     combined = "\n".join(path.read_text().lower() for path in MIGRATION_ROOT.glob("*.sql"))

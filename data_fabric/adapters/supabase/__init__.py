@@ -1,5 +1,14 @@
 """Supabase PostgreSQL Data Fabric adapter foundation."""
 
+from data_fabric.adapters.supabase.atomic_write import (
+    AtomicEntityWriteRequest,
+    AtomicRelationshipWriteRequest,
+    AtomicWriteFailure,
+    AtomicWriteRecordResult,
+    AtomicWriteResult,
+    AtomicWriteStatus,
+    SupabaseAtomicWriteExecutor,
+)
 from data_fabric.adapters.supabase.client import SupabaseDataFabricClient
 from data_fabric.adapters.supabase.config import DataFabricDatabaseConfig
 from data_fabric.adapters.supabase.entity_repository import SupabaseEntityRepository
@@ -20,11 +29,18 @@ from data_fabric.adapters.supabase.unit_of_work import SupabaseDataFabricUnitOfW
 from data_fabric.adapters.supabase.version_repository import SupabaseVersionRepository
 
 __all__ = [
+    "AtomicEntityWriteRequest",
+    "AtomicRelationshipWriteRequest",
+    "AtomicWriteFailure",
+    "AtomicWriteRecordResult",
+    "AtomicWriteResult",
+    "AtomicWriteStatus",
     "DataFabricDatabaseConfig",
     "SupabaseAdapterConfigurationError",
     "SupabaseAdapterError",
     "SupabaseAdapterHealthCheck",
     "SupabaseAdapterOperationError",
+    "SupabaseAtomicWriteExecutor",
     "SupabaseDataFabricClient",
     "SupabaseDataFabricUnitOfWork",
     "SupabaseEntityRepository",
