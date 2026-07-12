@@ -6,12 +6,14 @@ P3.17 disposable Supabase staging validation is **BLOCKED** because no explicitl
 
 No database operation was attempted.
 
+Latest validation-gate attempt: `2026-07-12T05:56:22Z`.
+
 ## Baseline
 
 | Item | Value |
 | --- | --- |
-| P3.16 certification merge baseline | `6a5fda09` |
-| P3.17 branch | `feature/p3-supabase-staging-validation` |
+| P3.17A safety-hardening merge baseline | `17e0d0fb merge: harden P3 Supabase staging validation safety` |
+| P3.17 validation branch | `feature/p3-supabase-live-validation` |
 | Safety gate outcome | `BLOCKED` |
 | Runtime wiring | Disabled |
 
@@ -24,7 +26,18 @@ No database operation was attempted.
 | `P3_SUPABASE_TEST_SERVICE_ROLE_KEY` | MISSING |
 | Explicit disposable/test project confirmation | MISSING |
 | Production URL rejection check | NOT RUN; no URL configured |
+| Target URL accepted | NO; no URL configured |
+| Test target classified as approved disposable/dedicated | NO; no target configured |
+| Redacted project reference | `UNAVAILABLE` |
 | Unique test organization/tenant generation | AVAILABLE in tests, but not executed against a database |
+
+Local safety-helper result:
+
+```text
+SAFETY_GATE_ATTEMPT=local_config_resolution_only
+SAFETY_GATE_RESULT=BLOCKED
+SAFETY_GATE_REASON=P3 Supabase integration tests are opt-in only
+```
 
 ## Reason For Stop
 
@@ -32,7 +45,7 @@ P3.17 validates real PostgreSQL and Supabase behavior. The phase requires a disp
 
 ## Required Configuration Before Retry
 
-Configure these names only in a local process environment or approved secret mechanism for a disposable or dedicated Supabase test project:
+Create and explicitly approve a disposable or dedicated Supabase test project for Nexora P3 validation. Then configure these names only in the local PowerShell process used by Codex or an approved secret mechanism:
 
 ```text
 P3_SUPABASE_RUN_INTEGRATION
@@ -87,7 +100,7 @@ Safety defects identified during pre-flight:
 
 Safety-hardening status:
 
-- corrected on branch, pending validation/commit
+- merged to `main` at `17e0d0fb`
 - shared fail-closed helper added for all P3 Supabase integration tests
 - exact enable value remains `1`
 - application Supabase env vars are not used as fallback
@@ -118,8 +131,8 @@ Before P3.17 can continue:
 - [ ] P3.17A safety-hardening validation passed and committed
 - [ ] Cleanup approach confirmed as scoped test-owned-prefix cleanup or disposable project reset
 - [ ] Canonical clean workspace in use
-- [ ] Branch remains `feature/p3-supabase-staging-validation`
+- [ ] Branch remains `feature/p3-supabase-live-validation`
 
 ## Next Step
 
-Operator action: provision and approve a disposable or dedicated Supabase test project, apply migrations `0001` through `0018` through the approved manual test-environment process, verify RLS/RPC grants, set only the P3 test environment variables locally, and resume using `docs/P3_SUPABASE_STAGING_VALIDATION_RUNBOOK.md`.
+Operator action: provision and approve a disposable or dedicated Supabase test project, set only the P3 test environment variables locally, and resume using `docs/P3_SUPABASE_STAGING_VALIDATION_RUNBOOK.md`. Do not share the service-role key in chat.
