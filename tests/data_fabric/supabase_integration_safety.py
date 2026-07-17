@@ -6,6 +6,7 @@ This module is test-only. It must not be imported by runtime code.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -30,6 +31,7 @@ APP_SUPABASE_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY"
 
 ENABLE_VALUE = "1"
 TEST_ID_PREFIX = "p3test-"
+SUPABASE_PROJECT_HOST_PATTERN = re.compile(r"^[a-z0-9]{20}\.supabase\.co$")
 
 DATA_FABRIC_CLEANUP_TABLES = (
     "idempotency_records",
@@ -173,10 +175,16 @@ def _env(env: Mapping[str, str] | None) -> Mapping[str, str]:
 def _validate_url(url: str, env: Mapping[str, str]) -> None:
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    if parsed.scheme not in {"https"} or not host:
-        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must be a hosted https URL")
-    if host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".local"):
-        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must not target localhost")
+    if parsed.scheme != "https":
+        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must use HTTPS")
+    if not SUPABASE_PROJECT_HOST_PATTERN.fullmatch(host):
+        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must use a valid Supabase project hostname")
+    if parsed.port is not None:
+        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must not specify a port")
+    if parsed.path not in {"", "/"}:
+        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must be the project root")
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise SupabaseIntegrationSafetyError("P3 Supabase test URL must not contain credentials, query, or fragment")
     if "prod" in host or "production" in host or "prod" in parsed.path.lower():
         raise SupabaseIntegrationSafetyError("refusing production-looking P3 Supabase test URL")
 
