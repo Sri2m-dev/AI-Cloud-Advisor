@@ -28,4 +28,4 @@ Validation initially identified: a non-root `/rest/v1` URL, an unexposed `data_f
 
 One RPC contract edge was recorded: JSON `null` for optional `quality_assessment` is treated as present by migration 0017; callers omit absent optional dependent objects. PostgreSQL rollback was verified complete.
 
-The focused atomic adapter unit module is presently blocked on Python 3.11 by the pre-existing zero-argument `super()` call in frozen slotted persistence dataclasses (`data_fabric/persistence/models.py`). This checkpoint does not alter runtime models or wiring; the safety regressions and direct live RPC suite are the authoritative focused checks for this branch.
+The Python 3.11 zero-argument `super()` defect in frozen slotted persistence dataclasses was resolved during the release gate by explicitly invoking `PersistenceRecord.__post_init__`. The atomic adapter and persistence foundation regressions now pass without changing public contracts.

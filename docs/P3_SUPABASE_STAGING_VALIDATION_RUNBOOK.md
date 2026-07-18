@@ -1,5 +1,7 @@
 # P3 Supabase Staging Validation Runbook
 
+> Historical staging preparation: the implemented live suite and current release disposition are documented in `P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md` and `P3_DATA_FABRIC_RELEASE_GATE.md`.
+
 ## Purpose
 
 This runbook prepares P3.17 disposable Supabase staging validation. It records the exact integration-test harness requirements and operator steps required before live validation can resume.

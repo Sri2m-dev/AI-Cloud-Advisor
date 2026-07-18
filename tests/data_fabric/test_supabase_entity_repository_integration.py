@@ -5,11 +5,11 @@ from uuid import uuid4
 
 from supabase import create_client
 
-from tests.data_fabric.supabase_integration_safety import create_test_identifier, resolve_config
+from tests.data_fabric.supabase_integration_safety import config_or_skip, create_test_identifier
 
 
 def test_supabase_entity_tenant_isolation_and_scoped_cleanup() -> None:
-    config = resolve_config()
+    config = config_or_skip()
     db = create_client(config.url, config.service_role_key).schema("data_fabric")
     token = uuid4().hex
     record_id = f"p3test-entity-{token}"

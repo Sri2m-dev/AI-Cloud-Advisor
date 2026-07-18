@@ -10,13 +10,13 @@ from postgrest.exceptions import APIError
 from supabase import create_client
 
 from tests.data_fabric.supabase_integration_safety import (
+    config_or_skip,
     create_test_identifier,
-    resolve_config,
 )
 
 
 def _db():
-    config = resolve_config()
+    config = config_or_skip()
     return create_client(config.url, config.service_role_key).schema("data_fabric")
 
 

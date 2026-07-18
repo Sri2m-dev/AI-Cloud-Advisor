@@ -74,7 +74,7 @@ class MutableRecord(PersistenceRecord):
     deactivated_by: str | None = None
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        PersistenceRecord.__post_init__(self)
         if self.revision < 1:
             raise PersistenceValidationError("revision must be greater than or equal to 1")
         token = self.concurrency_token or ConcurrencyToken(self.revision)
@@ -100,7 +100,7 @@ class ImmutableRecord(PersistenceRecord):
     payload_hash: str = ""
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        PersistenceRecord.__post_init__(self)
         computed = self.payload_hash or DefaultDeterministicSerializer().content_hash(self.payload)
         object.__setattr__(self, "payload_hash", computed)
 
