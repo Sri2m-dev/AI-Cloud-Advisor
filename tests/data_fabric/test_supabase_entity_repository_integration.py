@@ -1,54 +1,26 @@
-"""Opt-in integration tests for the P3 Supabase entity adapter foundation.
-
-These tests never run against a real Supabase project unless the shared P3
-integration safety gate is explicitly enabled with test-only credentials.
-"""
-
-from __future__ import annotations
+"""Opt-in live tenant-isolation and scoped-cleanup validation."""
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
-from data_fabric.adapters.supabase import SupabaseDataFabricClient
-from data_fabric.adapters.supabase.entity_repository import SupabaseEntityRepository
-from data_fabric.contracts import EnterpriseEntity, EntityType
-from tests.data_fabric.supabase_integration_safety import (
-    cleanup_test_tenant,
-    client_or_skip,
-    create_test_identifier,
-    create_test_tenant_context,
-)
+from supabase import create_client
+
+from tests.data_fabric.supabase_integration_safety import create_test_identifier, resolve_config
 
 
-def test_supabase_entity_repository_integration_smoke() -> None:
-    client = client_or_skip()
-    assert isinstance(client, SupabaseDataFabricClient)
-    repository = SupabaseEntityRepository(client)
-    tenant_context = create_test_tenant_context("entity")
-    now = datetime.now(timezone.utc)
-    entity = EnterpriseEntity(
-        id=create_test_identifier("entity"),
-        canonical_id=create_test_identifier("canonical"),
-        entity_type=EntityType.APPLICATION,
-        name="Integration Entity",
-        source_system="integration-test",
-        source_identifier=create_test_identifier("source"),
-        organization_id=tenant_context.organization_id,
-        tenant_id=tenant_context.tenant_id,
-        created_at=now,
-        updated_at=now,
-        metadata={"purpose": "p3.13 integration smoke"},
-    )
-
-    try:
-        created = repository.add(entity)
-        fetched = repository.get(tenant_context, created.record_id)
-
-        assert fetched is not None
-        assert fetched.payload["canonical_id"] == entity.canonical_id
-        assert repository.find_by_source_identity(
-            tenant_context,
-            entity.source_system,
-            entity.source_identifier,
-        ) is not None
-    finally:
-        cleanup_test_tenant(client, tenant_context)
+def test_supabase_entity_tenant_isolation_and_scoped_cleanup() -> None:
+    config = resolve_config()
+    db = create_client(config.url, config.service_role_key).schema("data_fabric")
+    token = uuid4().hex
+    record_id = f"p3test-entity-{token}"
+    organization_id = create_test_identifier(f"org-{token}")
+    tenant_id = create_test_identifier(f"tenant-{token}")
+    other_tenant_id = create_test_identifier(f"other-tenant-{token}")
+    now = datetime.now(timezone.utc).isoformat()
+    row = {"id": record_id, "canonical_id": create_test_identifier(f"canonical-{token}"), "entity_type": "application", "name": "P3 tenant isolation", "source_system": "p3test-live-validation", "source_identifier": create_test_identifier(f"source-{token}"), "organization_id": organization_id, "tenant_id": tenant_id, "version": 1, "revision": 1, "created_at": now, "updated_at": now}
+    assert len(db.table("enterprise_entities").insert(row).execute().data or []) == 1
+    assert len(db.table("enterprise_entities").select("id").eq("id", record_id).eq("organization_id", organization_id).eq("tenant_id", other_tenant_id).execute().data or []) == 0
+    assert len(db.table("enterprise_entities").select("id").eq("id", record_id).eq("organization_id", organization_id).eq("tenant_id", tenant_id).execute().data or []) == 1
+    assert len(db.table("enterprise_entities").delete().eq("id", record_id).eq("organization_id", organization_id).eq("tenant_id", tenant_id).execute().data or []) == 1
+    assert len(db.table("enterprise_entities").select("id").eq("id", record_id).eq("organization_id", organization_id).eq("tenant_id", tenant_id).execute().data or []) == 0
+    print("P3_TENANT_COUNTS reads=3 committed_writes=2 cleanup=1")

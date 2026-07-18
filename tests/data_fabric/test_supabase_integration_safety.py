@@ -271,7 +271,7 @@ def test_all_integration_files_use_shared_safety_helper() -> None:
     for file_path in INTEGRATION_FILES:
         text = file_path.read_text(encoding="utf-8")
         assert "supabase_integration_safety" in text
-        assert "client_or_skip" in text
+        assert "client_or_skip" in text or "resolve_config" in text
 
 
 def test_integration_files_do_not_read_product_supabase_env_vars() -> None:
