@@ -1,6 +1,6 @@
 # WP-003 Implementation Evidence
 
-Status: Local validation complete; hosted CI and Program G review pending
+Status: Local and hosted validation complete; Program G review pending
 
 Work package: WP-003 - Contract and Event Governance Toolkit
 
@@ -39,6 +39,7 @@ Execution date: 2026-07-19
 | P3 non-secret release gate | 94 passed, 0 failed |
 | Gated P3 integration collection | 5 collected |
 | Secret-free gated integrations | 5 expected opt-in skips, 0 failed |
+| Hosted CI | Passed; run `29693784830`, job `88210944836` |
 
 The full suite retained three known Pydantic v2 deprecation warnings. Local pytest
 also reported cache-write warnings because the existing `.pytest_cache` path was
@@ -46,7 +47,6 @@ not writable. Neither warning affected collection or execution results.
 
 ## Pending closure evidence
 
-- hosted CI results;
 - Program G review decision;
 - merge and post-merge validation, if later authorized.
 
