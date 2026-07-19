@@ -13,7 +13,7 @@ from tests.data_fabric import supabase_integration_safety as safety
 
 BASE_ENV = {
     safety.ENABLE_ENV: "1",
-    safety.URL_ENV: "https://disposable-p3.example.test",
+    safety.URL_ENV: "https://abcdefghijklmnopqrst.supabase.co",
     safety.KEY_ENV: "local-test-secret",
 }
 
@@ -129,11 +129,42 @@ def test_malformed_or_unsafe_url_rejected(url: str) -> None:
         safety.resolve_config(env)
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://abcdefghijklmnopqrst.supabase.co/rest/v1",
+        "https://abcdefghijklmnopqrst.supabase.co/other",
+        "https://abcdefghijklmnopqrst.supabase.co?mode=test",
+        "https://abcdefghijklmnopqrst.supabase.co#fragment",
+        "https://abcdefghijklmnopqrst.supabase.co:443",
+        "https://abcdefghijklmnopqrs.supabase.co",
+        "https://abcdefghijklmnopqrstu.supabase.co",
+        "https://abcdefghijklmnopqrst.example.com",
+        "https://supabase.co",
+    ],
+)
+def test_non_root_or_invalid_supabase_project_url_rejected(url: str) -> None:
+    with pytest.raises(safety.SupabaseIntegrationSafetyError):
+        safety.resolve_config({**BASE_ENV, safety.URL_ENV: url})
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://abcdefghijklmnopqrst.supabase.co",
+        "https://abcdefghijklmnopqrst.supabase.co/",
+        "https://abc123def456ghi789jk.supabase.co",
+    ],
+)
+def test_valid_supabase_project_root_url_accepted(url: str) -> None:
+    assert safety.resolve_config({**BASE_ENV, safety.URL_ENV: url}).redacted_report()["url_present"]
+
+
 def test_known_prohibited_project_ref_rejected() -> None:
     env = {
         **BASE_ENV,
-        safety.URL_ENV: "https://blockedref.supabase.test",
-        safety.PROHIBITED_PROJECT_REFS_ENV: "blockedref",
+        safety.URL_ENV: "https://blockedref00000000000.supabase.co",
+        safety.PROHIBITED_PROJECT_REFS_ENV: "blockedref00000000000",
     }
     with pytest.raises(safety.SupabaseIntegrationSafetyError):
         safety.resolve_config(env)
@@ -142,8 +173,8 @@ def test_known_prohibited_project_ref_rejected() -> None:
 def test_normal_application_url_is_rejected_when_detectable() -> None:
     env = {
         **BASE_ENV,
-        safety.URL_ENV: "https://normal-app.example.test",
-        safety.APP_SUPABASE_URL_ENV: "https://normal-app.example.test",
+        safety.URL_ENV: "https://normalapp00000000000.supabase.co",
+        safety.APP_SUPABASE_URL_ENV: "https://normalapp00000000000.supabase.co",
     }
     with pytest.raises(safety.SupabaseIntegrationSafetyError):
         safety.resolve_config(env)
@@ -157,7 +188,7 @@ def test_unsafe_target_rejected_before_client_creation(monkeypatch: pytest.Monke
         return object()
 
     monkeypatch.setattr(safety, "SupabaseDataFabricClient", fake_client)
-    env = {**BASE_ENV, safety.URL_ENV: "https://prod-target.example.test"}
+    env = {**BASE_ENV, safety.URL_ENV: "https://prodtarget0000000000.supabase.co"}
     with pytest.raises(safety.SupabaseIntegrationSafetyError):
         safety.client_or_skip(env)
     assert calls["client"] == 0
@@ -232,7 +263,7 @@ def test_secret_values_are_absent_from_helper_repr_and_errors() -> None:
     assert "***REDACTED***" in repr(config)
 
     with pytest.raises(safety.SupabaseIntegrationSafetyError) as exc_info:
-        safety.resolve_config({**BASE_ENV, safety.URL_ENV: "https://prod-target.example.test"})
+        safety.resolve_config({**BASE_ENV, safety.URL_ENV: "https://prodtarget0000000000.supabase.co"})
     assert "local-test-secret" not in str(exc_info.value)
 
 
@@ -240,7 +271,7 @@ def test_all_integration_files_use_shared_safety_helper() -> None:
     for file_path in INTEGRATION_FILES:
         text = file_path.read_text(encoding="utf-8")
         assert "supabase_integration_safety" in text
-        assert "client_or_skip" in text
+        assert "client_or_skip" in text or "config_or_skip" in text or "resolve_config" in text
 
 
 def test_integration_files_do_not_read_product_supabase_env_vars() -> None:

@@ -21,16 +21,16 @@ ADRs remain the source of truth for the detailed decision, context, consequences
 | ADR-005 | Certification Framework | Accepted | v1.0.0 Enterprise Foundation | `docs/architecture/ADR-005-Certification-Framework.md` |
 | ADR-006 | Caching Strategy | Accepted | v1.0.0 Enterprise Foundation | `docs/architecture/ADR-006-Caching-Strategy.md` |
 | ADR-007 | Universal Connector Framework | Accepted | v1.1.0 Universal Connectors | `docs/architecture/ADR-007-Universal-Connector-Framework.md` |
-| ADR-008 | Enterprise Data Fabric | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-008-Enterprise-Data-Fabric.md` |
-| ADR-009 | Canonical Entity Model | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-009-Canonical-Entity-Model.md` |
-| ADR-010 | Enterprise Semantic Layer | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-010-Enterprise-Semantic-Layer.md` |
-| ADR-011 | Identity Resolution | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-011-Identity-Resolution.md` |
-| ADR-012 | Data Lineage | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-012-Data-Lineage.md` |
-| ADR-013 | Provenance Framework | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-013-Provenance-Framework.md` |
-| ADR-014 | Versioning Strategy | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-014-Versioning-Strategy.md` |
-| ADR-015 | Data Quality Framework | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-015-Data-Quality-Framework.md` |
-| ADR-016 | Data Fabric Persistence Architecture | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-016-Data-Fabric-Persistence-Architecture.md` |
-| ADR-017 | Production Data Fabric Persistence Adapter | Proposed | P3 Enterprise Data Fabric | `docs/architecture/ADR-017-Production-Data-Fabric-Persistence-Adapter.md` |
+| ADR-008 | Enterprise Data Fabric | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-008-Enterprise-Data-Fabric.md` |
+| ADR-009 | Canonical Entity Model | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-009-Canonical-Entity-Model.md` |
+| ADR-010 | Enterprise Semantic Layer | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-010-Enterprise-Semantic-Layer.md` |
+| ADR-011 | Identity Resolution | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-011-Identity-Resolution.md` |
+| ADR-012 | Data Lineage | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-012-Data-Lineage.md` |
+| ADR-013 | Provenance Framework | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-013-Provenance-Framework.md` |
+| ADR-014 | Versioning Strategy | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-014-Versioning-Strategy.md` |
+| ADR-015 | Data Quality Framework | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-015-Data-Quality-Framework.md` |
+| ADR-016 | Data Fabric Persistence Architecture | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-016-Data-Fabric-Persistence-Architecture.md` |
+| ADR-017 | Production Data Fabric Persistence Adapter | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-017-Production-Data-Fabric-Persistence-Adapter.md` |
 
 ## Release Mapping
 
@@ -77,16 +77,16 @@ Architecture-only decision package:
 
 ## Current Release Boundary
 
-Current release state:
+Current release-candidate state:
 
 ```text
-v1.1.0 Universal Connectors
-Status: Release mode
-Engineering: Frozen
-Tag: Pending post-merge E8.1.17 validation
+v1.2.0 Data Fabric candidate
+Branch: feature/p3-supabase-live-validation
+Status: P3.10 certification; unmerged and untagged
+Engineering: Frozen outside certification work
 ```
 
-P3 implementation remains blocked until ADR-008 through ADR-017 are reviewed and accepted.
+ADR-008 through ADR-017 are accepted and their P3 foundation scope is implemented and live validated. Broader runtime adoption and intelligence evolution remain blocked pending the post-release architecture review.
 
 ## P3 Architecture Boundary
 
@@ -94,9 +94,9 @@ The P3 architecture package is:
 
 ```text
 ADR-008 through ADR-017
-Status: Proposed
+Status: Accepted for the implemented P3 foundation contract
 Program: P3 Enterprise Data Fabric
-Scope: Architecture only until reviewed and accepted
+Scope: Foundation implemented; relationship-version history deferred under migration 0018
 ```
 
 ADR-008 should include the locked architectural invariant:

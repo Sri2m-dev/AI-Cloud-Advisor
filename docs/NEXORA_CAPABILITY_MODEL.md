@@ -1,6 +1,6 @@
 # Nexora Capability Model
 
-Status: Proposed
+Status: Current capability map; implementation depth varies by capability
 Program: P3 Enterprise Data Fabric & Intelligence Platform
 Date: 2026-07-09
 
@@ -31,22 +31,15 @@ Connectors
   -> Dashboards and Decisions
 ```
 
-## P3 Capability Priority
+## P3 Foundation Delivery
 
-1. Architecture and ADRs
-2. Canonical entity model
-3. Identity resolution
-4. Relationship engine
-5. Lineage and provenance
-6. Semantic layer
-7. Data quality framework
-8. Enterprise APIs
-9. Knowledge Graph v2
-10. AI intelligence layer
+Implemented and validated in P3: architecture and ADRs, canonical entity and relationship contracts, identity resolution, lineage, provenance, semantic ontology, data quality, versioning, persistence, and atomic Supabase RPC behavior.
+
+Knowledge Graph v2, enterprise-wide API adoption, and the broader AI intelligence layer are roadmap capabilities, not implied P3 runtime deliverables.
 
 ## Guardrails
 
 - No direct dashboard dependency on source-specific connector payloads after migration.
 - No provider-specific logic in the core fabric.
 - No AI recommendation without entity, relationship, lineage, provenance, and quality context.
-- No implementation before architecture review.
+- No new implementation before the post-release architecture review.

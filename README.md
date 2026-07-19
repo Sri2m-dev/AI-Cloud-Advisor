@@ -1,197 +1,74 @@
 # Nexora Enterprise Intelligence Platform
 
-Nexora is an Enterprise Intelligence and Decision Platform for executive, CIO, business architecture, cloud, SaaS, governance, connector, and AI-driven operational intelligence.
+Nexora is an Enterprise Technology Intelligence Platform spanning executive and CIO workspaces, business architecture, financial intelligence, governance, Universal Connectors, and a canonical Enterprise Data Fabric.
 
-This repository is the proposed canonical codebase for the v1.1.0 Universal Connector Framework release baseline.
-
-## Current Release Baseline
+## Current release-candidate baseline
 
 ```text
-Current program:
-P2 - Universal Connector Framework
-
-Current release candidate:
-v1.1.0-universal-connectors
-
-Canonical application entrypoint:
-app_main.py
+Program: P3.10 repository and release certification
+Branch: feature/p3-supabase-live-validation
+Certified through: Phase 2 CI Certification
+Target release tag after review and merge: v1.2.0-data-fabric
+Application entry point: app_main.py
+Python: 3.11
 ```
 
-The release tag must be created only after repository cutover and E8.1.17 post-merge validation pass.
+P3 Data Fabric Foundation is implemented and live validated within its declared contract. Relationship-version history remains intentionally deferred under migration 0018. Merge and tagging remain unauthorized until the review gate is explicitly approved.
 
-## Architecture Summary
-
-Nexora is organized as a layered enterprise platform:
+## Architecture
 
 ```text
-Streamlit Pages
-    -> Shared Platform Framework
-    -> Certification Services
-    -> Business Services
-    -> Repositories
-    -> Supabase / External Data Sources
-
-Universal Connector Framework
-    -> Connector SDK
-    -> Registry
-    -> Runtime
-    -> Authentication and Secrets
-    -> Normalization
-    -> Persistence
-    -> Orchestration
-    -> Observability
-    -> Provider Adapters
+Workspaces and Reports
+    -> Business and Certification Services
+    -> Knowledge Graph / Digital Twin / Intelligence
+    -> Enterprise Data Fabric
+    -> Universal Connectors
+    -> Supabase and External Systems
 ```
 
-Key platform capabilities include:
+The Data Fabric provides canonical entities and relationships, identity resolution, semantic ontology, versioning, lineage, provenance, data quality, tenant isolation, idempotency, and secured atomic write RPCs. It is not yet wired as a replacement for every legacy runtime read path.
 
-- Executive Workspace
-- CIO Workspace
-- Business Architecture
-- Enterprise Financial Model
-- Knowledge Graph
-- Technology Digital Twin
-- Shared Platform Framework
-- Universal Connector Framework
-- AWS, Azure, and GCP runtime adapter foundations
+See `docs/NEXORA_ENTERPRISE_ARCHITECTURE.md`, `docs/NEXORA_DATA_FABRIC.md`, `docs/ARCHITECTURE_DECISION_INDEX.md`, and `docs/P3_DATA_FABRIC_RELEASE_GATE.md`.
 
-## How to Run Locally
+## Local setup
 
-Create a local environment and install dependencies:
+Use Python 3.11 and `.env.example` as the configuration template. Never commit secrets.
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt `
+  -r requirements-prod.txt -r requirements.frontend.txt `
+  -r backend\requirements.txt
+python -m pip check
 ```
 
-Optional development dependencies:
-
-```powershell
-pip install -r requirements-dev.txt
-```
-
-Start the Streamlit app:
+Start the application:
 
 ```powershell
 python -m streamlit run app_main.py --server.port 8513
 ```
 
-## Required Environment Variables
+Environment guidance is in `docs/NEXORA_ENVIRONMENT_CONFIGURATION.md`. P3 live validation uses separate `P3_SUPABASE_*` variables and is opt-in only; ordinary local and CI commands do not use live credentials.
 
-Use `.env.example` or `.streamlit/secrets.toml.example` as templates. Do not commit real secrets.
+## Certified validation
 
-Minimum local baseline:
-
-```text
-SUPABASE_URL
-SUPABASE_KEY
-DEFAULT_ORG_ID
-ENVIRONMENT
+```powershell
+python -m pytest --collect-only -q
+python -m pytest -q
 ```
 
-Conditional variables:
+Current certified results:
 
-```text
-OPENAI_API_KEY
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
-AWS_DEFAULT_REGION
-AZURE_TENANT_ID
-AZURE_CLIENT_ID
-AZURE_CLIENT_SECRET
-AZURE_SUBSCRIPTION_ID
-GCP_PROJECT_ID
-GCP_SERVICE_ACCOUNT_SECRET_REF
-```
+- Full collection: 325 collected, 0 errors
+- Full suite: 320 passed, 5 expected opt-in skips, 0 failed
+- P3 non-secret gate: 94 passed, 0 failed
+- Gated integrations without secrets: 5 expected skips
 
-For full details, see `docs/NEXORA_ENVIRONMENT_CONFIGURATION.md`.
+Exact commands and scope are recorded in `docs/RELEASE_REPRODUCTION.md`, `docs/REPOSITORY_HEALTH_PHASE1.md`, `docs/CI_CERTIFICATION.md`, and `docs/P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md`.
 
-## Key Routes
+## Release boundary
 
-Executive workspace:
+The release candidate must pass documentation review and subsequent merge preparation before governance can authorize merge. If approved, merge the feature branch into `main`, verify the reviewed merge commit, and tag that merge commit—not a feature-branch commit—as `v1.2.0-data-fabric`.
 
-- `/executive_dashboard`
-- `/enterprise_spend`
-- `/approval_center`
-- `/reports`
-
-CIO workspace:
-
-- `/cio_dashboard`
-- `/technology_health`
-- `/technology_inventory`
-- `/technology_knowledge_graph`
-- `/technology_digital_twin`
-- `/application_inventory`
-- `/saas_intelligence`
-- `/risk_governance`
-
-Business Architecture:
-
-- `/business_architecture`
-- `/business_units`
-- `/business_capabilities`
-- `/business_services`
-- `/business_processes`
-- `/enterprise_capability_map`
-
-Connector operations:
-
-- `/connector_operations`
-- `/connector_studio`
-- `/cloud_connections`
-- `/aws_connector_setup`
-- `/azure_connector_setup`
-
-## Release Process
-
-The v1.1.0 release should follow this sequence:
-
-```text
-1. Complete repository source-of-truth cutover.
-2. Merge the canonical recovery baseline into official main.
-3. Run E8.1.17 Post-Merge Release Gate.
-4. Review docs/E8_1_17_RELEASE_VALIDATION.md.
-5. Tag v1.1.0-universal-connectors only if validation is GO.
-6. Push the tag.
-7. Close Program P2.
-```
-
-Do not start Program P3 / Enterprise Data Fabric until the v1.1.0 tag is complete.
-
-## Documentation Index
-
-Repository governance:
-
-- `docs/REPOSITORY_CONSOLIDATION_ASSESSMENT.md`
-- `docs/SOURCE_OF_TRUTH_CUTOVER_PLAN.md`
-- `docs/GITHUB_CUTOVER_RUNBOOK.md`
-- `docs/REPOSITORY_SELF_CONTAINMENT_AUDIT.md`
-
-Release documentation:
-
-- `docs/NEXORA_RELEASE_NOTES_v1.1.0.md`
-- `docs/NEXORA_RELEASE_CHECKLIST_v1.1.0.md`
-- `docs/NEXORA_v1.1.0_FEATURE_MATRIX.md`
-- `docs/E8_1_RELEASE_REVIEW.md`
-
-Architecture:
-
-- `docs/NEXORA_PLATFORM_ARCHITECTURE.md`
-- `docs/ARCHITECTURE_DECISION_INDEX.md`
-- `docs/architecture/ADR-001-Shared-Platform-Framework.md`
-- `docs/architecture/ADR-002-Enterprise-Financial-Model.md`
-- `docs/architecture/ADR-003-Knowledge-Graph.md`
-- `docs/architecture/ADR-004-Digital-Twin.md`
-- `docs/architecture/ADR-005-Certification-Framework.md`
-- `docs/architecture/ADR-006-Caching-Strategy.md`
-- `docs/architecture/ADR-007-Universal-Connector-Framework.md`
-
-Operations:
-
-- `docs/NEXORA_DEPLOYMENT_GUIDE.md`
-- `docs/NEXORA_ENVIRONMENT_CONFIGURATION.md`
-- `docs/NEXORA_OPERATIONS_RUNBOOK.md`
-- `docs/NEXORA_BACKUP_RECOVERY_GUIDE.md`
-- `docs/NEXORA_CACHING_STRATEGY.md`
+Do not merge, tag, or begin new architecture or feature implementation solely from this README.

@@ -11,6 +11,7 @@ from data_fabric.foundation import DataFabricConflictError, DataFabricTenantBoun
 from data_fabric.orchestration import IdempotencyState
 from data_fabric.persistence import (
     AppendOnlyRecord,
+    ConcurrencyToken,
     EntityPersistenceMapper,
     InMemoryEntityRepository,
     InMemoryIdempotencyRepository,
@@ -18,6 +19,7 @@ from data_fabric.persistence import (
     InMemoryPersistenceUnitOfWork,
     InMemoryRelationshipRepository,
     InMemoryVersionRepository,
+    ImmutableRecord,
     MutableRecord,
     PageRequest,
     PersistenceImmutableStateError,
@@ -25,6 +27,26 @@ from data_fabric.persistence import (
     RepositoryQuery,
     SortSpecification,
 )
+
+
+def test_python311_slotted_record_subclasses_run_base_post_init() -> None:
+    """Regression for zero-argument super() with dataclass(slots=True)."""
+    now = datetime.now(timezone.utc)
+    common = {
+        "record_id": "record-1",
+        "organization_id": "org-1",
+        "tenant_id": "tenant-1",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    mutable = MutableRecord(**common)
+    immutable = ImmutableRecord(**common)
+    append_only = AppendOnlyRecord(**common)
+
+    assert mutable.concurrency_token == ConcurrencyToken(1)
+    assert immutable.payload_hash
+    assert append_only.payload_hash
 
 
 def tenant() -> TenantContext:

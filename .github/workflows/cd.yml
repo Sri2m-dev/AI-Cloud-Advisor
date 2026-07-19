@@ -49,11 +49,16 @@ jobs:
             ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
 
       - name: Trigger deployment webhook
-        if: ${{ secrets.DEPLOY_WEBHOOK_URL != '' }}
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
         run: |
-          curl -X POST "${{ secrets.DEPLOY_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"service":"${{ matrix.service }}","image":"ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}","ref":"${{ github.ref_name }}"}'
+          if [ -n "$DEPLOY_WEBHOOK_URL" ]; then
+            curl -X POST "$DEPLOY_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d '{"service":"${{ matrix.service }}","image":"ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}","ref":"${{ github.ref_name }}"}'
+          else
+            echo "DEPLOY_WEBHOOK_URL is not configured; skipping deployment trigger."
+          fi
 
       - name: Deployment note
         run: |
