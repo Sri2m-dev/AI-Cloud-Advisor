@@ -1,6 +1,6 @@
 # WP-002 Implementation Evidence
 
-Status: Local validation complete; pending hosted CI and Program G review
+Status: Validation complete; pending Program G review
 
 Work package: WP-002 — Tenant Identity and Authorization Foundation
 
@@ -49,7 +49,16 @@ No live Supabase validation or database operation ran. Five existing warnings re
 
 ## Pending closure evidence
 
-- hosted CI on the final review commit;
 - Program G conformance and merge decisions.
+
+## Hosted evidence
+
+- Pull request: `#7`
+- Implementation commit: `88c304c0`
+- Hosted CI run: `29691710307`
+- Hosted job: `88205503049`
+- Result: passed
+
+The final documentation-only evidence descendant must also pass pull-request CI before handoff.
 
 WP-003 remains inactive. This record does not authorize merge.
