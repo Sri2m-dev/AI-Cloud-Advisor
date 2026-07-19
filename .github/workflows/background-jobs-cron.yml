@@ -42,33 +42,33 @@ jobs:
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
         run: |
           python - <<'PY'
-from datetime import datetime
-from backend.jobs.tasks import (
-  job_alert_engine_hourly,
-    job_anomaly_scan_hourly,
-    job_cost_ingestion_hourly,
-    job_kpi_refresh_15m,
-    job_optimization_engine_daily,
-    job_report_generation_daily,
-)
+          from datetime import datetime
+          from backend.jobs.tasks import (
+              job_alert_engine_hourly,
+              job_anomaly_scan_hourly,
+              job_cost_ingestion_hourly,
+              job_kpi_refresh_15m,
+              job_optimization_engine_daily,
+              job_report_generation_daily,
+          )
 
-now = datetime.utcnow()
-minute = now.minute
-hour = now.hour
+          now = datetime.utcnow()
+          minute = now.minute
+          hour = now.hour
 
-# 15-min KPI refresh
-if minute % 15 == 0:
-    job_kpi_refresh_15m()
+          # 15-min KPI refresh
+          if minute % 15 == 0:
+              job_kpi_refresh_15m()
 
-# hourly ingestion + anomaly
-if minute == 0:
-    job_cost_ingestion_hourly()
-    job_anomaly_scan_hourly()
-    job_alert_engine_hourly()
+          # hourly ingestion + anomaly
+          if minute == 0:
+              job_cost_ingestion_hourly()
+              job_anomaly_scan_hourly()
+              job_alert_engine_hourly()
 
-# daily jobs
-if hour == 2 and minute == 0:
-    job_optimization_engine_daily()
-if hour == 3 and minute == 0:
-    job_report_generation_daily()
-PY
+          # daily jobs
+          if hour == 2 and minute == 0:
+              job_optimization_engine_daily()
+          if hour == 3 and minute == 0:
+              job_report_generation_daily()
+          PY
