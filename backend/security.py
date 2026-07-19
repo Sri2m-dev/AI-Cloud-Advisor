@@ -4,6 +4,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.jwt_utils import verify_jwt
+from auth.tenant_authorization import TenantAuthorizationContext, TenantAuthorizationError
 from backend.token_store import is_token_revoked
 from core.user_profile import get_user_profile
 
@@ -178,21 +179,23 @@ def tenant_guard(
         alias="X-Tenant-Id",
     ),
 ):
-    token_tenant = user.get("tenant_id") or user.get("org_id")
-    middleware_tenant = getattr(request.state, "tenant_id", None)
-
-    chosen_tenant = middleware_tenant or token_tenant
-
-    if not chosen_tenant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tenant is required",
+    try:
+        context = TenantAuthorizationContext.from_principal(
+            user,
+            source_boundary="api",
         )
-
-    if x_tenant_id and str(chosen_tenant) != str(x_tenant_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant mismatch",
+        middleware_tenant = getattr(request.state, "tenant_id", None)
+        chosen_tenant = middleware_tenant or context.tenant_id
+        context.authorize(
+            organization_id=context.organization_id,
+            tenant_id=x_tenant_id or chosen_tenant,
         )
-
-    return str(chosen_tenant)
+        return context.tenant_id
+    except TenantAuthorizationError as exc:
+        detail = str(exc)
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if "is required" in detail
+            else status.HTTP_403_FORBIDDEN
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc

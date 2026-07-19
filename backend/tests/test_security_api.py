@@ -55,6 +55,19 @@ def test_tenant_isolation_blocks_mismatch():
     assert response.status_code == 403
 
 
+def test_tenant_isolation_denies_missing_identity_scope():
+    app = _build_test_app()
+    app.dependency_overrides[get_current_user] = lambda: {
+        "username": "u1",
+        "role": "viewer",
+    }
+
+    response = TestClient(app).get("/viewer")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "organization_id is required"
+
+
 def test_rbac_blocks_non_admin():
     app = _build_test_app()
     app.dependency_overrides[get_current_user] = lambda: {
