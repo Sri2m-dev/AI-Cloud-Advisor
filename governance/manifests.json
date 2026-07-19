@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "providers": [
+    {
+      "contract_id": "enterprise.correlation-event",
+      "kind": "event",
+      "version": "1.0.0",
+      "provider": "Enterprise Correlation",
+      "fields": [
+        {"name": "event_type", "type": "string", "required": true},
+        {"name": "organization_id", "type": "string", "required": true},
+        {"name": "title", "type": "string", "required": true},
+        {"name": "source_system", "type": "string", "required": true},
+        {"name": "description", "type": "string", "required": false},
+        {"name": "metadata", "type": "object", "required": false}
+      ],
+      "deprecations": []
+    },
+    {
+      "contract_id": "workflow.execution-event",
+      "kind": "event",
+      "version": "1.0.0",
+      "provider": "Workflow Execution",
+      "fields": [
+        {"name": "id", "type": "string", "required": true},
+        {"name": "event_type", "type": "string", "required": true},
+        {"name": "workflow_id", "type": "string", "required": true},
+        {"name": "payload", "type": "object", "required": true},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "sequence", "type": "integer", "required": true}
+      ],
+      "deprecations": []
+    }
+  ],
+  "consumers": [
+    {
+      "consumer": "Correlation Service",
+      "contract_id": "enterprise.correlation-event",
+      "minimum_version": "1.0.0",
+      "required_fields": {
+        "event_type": "string",
+        "organization_id": "string",
+        "title": "string",
+        "source_system": "string"
+      }
+    },
+    {
+      "consumer": "Safe Execution",
+      "contract_id": "workflow.execution-event",
+      "minimum_version": "1.0.0",
+      "required_fields": {
+        "event_type": "string",
+        "workflow_id": "string",
+        "payload": "object",
+        "sequence": "integer"
+      }
+    }
+  ]
+}
