@@ -1,6 +1,6 @@
 # Nexora Domain Model
 
-Status: Proposed
+Status: Current canonical domain direction with explicit P3 foundation boundary
 Program: P3 Enterprise Data Fabric & Intelligence Platform
 Date: 2026-07-09
 
@@ -33,7 +33,7 @@ Owner accountable_for EnterpriseEntity
 
 ## Relationship Rules
 
-- Relationships are canonical, versioned, and extensible.
+- Relationships are canonical and extensible. Mutable relationship revisions are supported; durable relationship-version history is deferred under migration 0018.
 - Relationships carry confidence, provenance, and lineage.
 - Direction and cardinality are explicit.
 - Provider-specific relationships are normalized into enterprise relationship types.

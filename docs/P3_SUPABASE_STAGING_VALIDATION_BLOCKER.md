@@ -1,5 +1,7 @@
 # P3 Supabase Staging Validation Blocker
 
+Status: **Resolved historical blocker.** The final dedicated-project outcome is recorded in `P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md`.
+
 ## Status
 
 P3.17 disposable Supabase staging validation is **BLOCKED** because no explicitly approved disposable Supabase test environment is configured in this shell.

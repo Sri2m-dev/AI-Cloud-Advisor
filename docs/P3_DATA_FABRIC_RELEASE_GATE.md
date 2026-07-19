@@ -4,6 +4,7 @@
 
 - Source branch: `feature/p3-supabase-live-validation`
 - Reviewed candidate: `ddb0ed153dbeeee9d8b5e262ca769eaa3e6786d0`
+- Current certification baseline before Phase 3: `0a3c8d4e7c23a3b07c998dcb71a0f4aceee437eb`
 - Target branch: `main`
 - Python: 3.11.9
 - Supabase project: dedicated `nexora-p3-validation` project, reference `ageubmyosicypqqkdvox`
@@ -42,13 +43,13 @@ Retained evidence is expected. It includes the immutable snapshot `d18b6ccf-71bb
 
 ## CI reproducibility
 
-`.github/workflows/ci.yml` pins Python 3.11 and now runs the explicit P3 non-secret safety, atomic adapter, persistence, certification, migration/static, compile, and integration-collection checks. Live tests use `config_or_skip()` and do not require service-role credentials on ordinary pushes or pull requests.
+`.github/workflows/ci.yml` pins Python 3.11, installs all five candidate dependency manifests, runs `pip check`, compiles and imports active source, performs reproducible Ruff checks, collects and executes the full suite, reruns the 94-test P3 gate, collects the five gated integrations, and verifies their five expected secret-free skips. Live tests use `config_or_skip()` and do not require service-role credentials on ordinary pushes or pull requests.
 
-The workflow now installs `requirements-dev.txt`; that manifest explicitly supplies `ruff`, `mypy`, and the PostgreSQL test driver used during collection. The P3-specific CI command is reproducible and green. The repository-wide `pytest -q` baseline is not yet green because `tests/services/test_sla_logic.py` imports a missing `services.approval_service.calculate_sla_status` symbol. That service issue is unrelated to Data Fabric and was not changed under this gate.
+The repository-health blocker involving `services.approval_service.calculate_sla_status` was resolved in Phase 1 without changing Data Fabric. The certified repository baseline is 325 collected, 320 passed, five expected opt-in skips, and zero failures. Phase 2 CI certification is recorded in `CI_CERTIFICATION.md`.
 
 ## Release decision
 
-Release gate recommendation: **CONDITIONAL — P3 APPROVED, REPOSITORY CI BLOCKED**. Both P3 qualifications are dispositioned: relationship history is accepted deferred scope and the Python 3.11 defect is resolved with regression coverage. Merge should wait until the unrelated missing `calculate_sla_status` CI collection blocker is resolved or explicitly accepted by release governance.
+Release gate recommendation: **P3 APPROVED; RELEASE-CANDIDATE CERTIFICATION IN PROGRESS**. Both P3 qualifications are dispositioned: relationship history is accepted deferred scope and the Python 3.11 defect is resolved with regression coverage. Repository reproduction, health, and CI certification are green. Merge must still wait for completion and explicit approval of the remaining governance gate.
 
 Merge and tag remain unauthorized in this gate run. After explicit approval, merge the reviewed release-gate commit into `main`, verify the merge commit and clean worktree, then tag that merge commit as `v1.2.0-data-fabric`. No next implementation phase should begin before the architecture review.
 

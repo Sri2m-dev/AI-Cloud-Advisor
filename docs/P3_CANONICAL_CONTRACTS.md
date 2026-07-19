@@ -1,6 +1,6 @@
 # P3 Canonical Contracts
 
-Status: Proposed contract baseline
+Status: Implemented P3 canonical contract baseline
 Program: P3.2 Canonical Enterprise Model Contracts
 Scope: Contracts only; no runtime, dashboard, connector, database, or Supabase behavior changes.
 

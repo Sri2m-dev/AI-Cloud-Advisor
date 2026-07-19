@@ -11,7 +11,7 @@ This certification does not authorize a merge or tag.
 - Repository: `C:\Users\SrikanthMudaliar\AI-Cloud-Advisor-p3-clean`
 - Branch: `feature/p3-supabase-live-validation`
 - Starting commit: `507e41c693e312197b5d1495d5a9667ac18ca625`
-- Ending commit: the Phase 2 commit containing this report
+- Ending commit: `0a3c8d4e7c23a3b07c998dcb71a0f4aceee437eb`
 - Python: 3.11.9 locally; CI pins the Python 3.11 release line
 - Starting worktree: clean
 

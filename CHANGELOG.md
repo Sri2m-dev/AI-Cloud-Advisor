@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## Unreleased — v1.2.0-data-fabric release candidate
+
+### Added
+- Enterprise Data Fabric contracts, registries, identity resolution, semantic ontology, lineage, provenance, quality, versioning, persistence adapters, and migrations 0001–0018.
+- Secured atomic entity and relationship write RPC adapters with tenant scoping, optimistic concurrency, idempotency, replay, and rollback behavior.
+- P3 Supabase live-validation, release-reproduction, repository-health, and CI-certification evidence.
+
+### Validation
+- Live Supabase validation passed within the declared P3 contract.
+- Non-secret CI baseline: 325 tests collected; 320 passed and five expected opt-in integrations skipped.
+- P3 non-secret release gate: 94 passed.
+
+### Known limitations
+- Relationship-version history is intentionally deferred under migration 0018.
+- The release remains unmerged and untagged pending completion of the review gate.
+
 ## v1.1.0-universal-connectors - 2026-07-07
 
 ### Added

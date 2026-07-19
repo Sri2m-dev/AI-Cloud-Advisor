@@ -1,6 +1,6 @@
 # ADR-009: Canonical Entity Model
 
-Status: Proposed
+Status: Accepted — P3 foundation implemented and validated
 Date: 2026-07-09
 Program: P3 Enterprise Data Fabric & Intelligence Platform
 

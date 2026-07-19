@@ -1,6 +1,6 @@
 # Nexora Data Fabric
 
-Status: Proposed
+Status: Implemented and live validated within the P3 foundation contract
 Program: P3 Enterprise Data Fabric & Intelligence Platform
 Date: 2026-07-09
 
@@ -20,6 +20,8 @@ The Nexora Data Fabric is the provider-agnostic foundation for enterprise intell
 - Data quality service
 - Search service
 - API contracts for dashboards, graph, AI, and reporting
+
+The current contract includes entity version snapshots. Relationship-version history is intentionally deferred by migration 0018; relationship create, update, replay, concurrency, and rollback behavior are validated without claiming relationship history creation.
 
 ## Data Flow
 

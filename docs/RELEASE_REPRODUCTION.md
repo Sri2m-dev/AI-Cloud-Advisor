@@ -19,6 +19,8 @@
 | Fresh-clone HEAD | `273db69cb34e559bd339174925bdfd4bc4847d75` |
 | Fresh-clone worktree | Clean |
 
+This evidence was committed as `67ceb65add12470efe396dce7a79a4a8511757a0`. Later certification commits do not alter the historical fresh-clone result recorded here.
+
 The branch was pushed normally. No rebase, amend, force push, merge, or tag was performed.
 
 ## Runtime and dependencies
@@ -92,7 +94,7 @@ Compared with `docs/P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md` and `docs/P3_DATA
 - The candidate produces 94 passed, 0 failed, and no unexpected skips.
 - All five gated integrations collect successfully and produce the five expected opt-in skips when executed without secrets.
 - Live Supabase results were not reproduced by design; their durable evidence and database-operation counts remain documented in the live-validation checkpoint.
-- The current hardened candidate is `273db69c...`; older commit identifiers in the evidence documents describe earlier validation checkpoints.
+- The reproduced hardened candidate is `273db69c...`; later commits add certification evidence and the repository-health/CI corrections documented by subsequent phase reports.
 - Relationship-version history remains the documented migration 0018 deferred behavior.
 
 No unexplained difference was observed in the approved Phase 0 scope.
@@ -106,4 +108,3 @@ No unexplained difference was observed in the approved Phase 0 scope.
 - Merge: not performed.
 - Tag: not created.
 - Phase 1 repository-health work: not started.
-

@@ -1,6 +1,6 @@
 # Nexora Enterprise Architecture
 
-Status: Proposed
+Status: Current foundation architecture; post-P3 intelligence evolution remains subject to review
 Program: P3 Enterprise Data Fabric & Intelligence Platform
 Date: 2026-07-09
 
@@ -52,7 +52,7 @@ Business Unit
 
 ## Governance Boundary
 
-Phase 1 is architecture-only. No service, repository, schema, connector, page, dashboard, or AI runtime should be implemented until these ADRs are reviewed and accepted.
+The P3 Data Fabric foundation is implemented and live validated. It does not automatically replace legacy dashboard, connector, scheduler, or Knowledge Graph runtime paths. Broader intelligence-layer integration remains subject to the post-release architecture review.
 
 ## Backward Compatibility
 

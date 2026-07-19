@@ -1,5 +1,7 @@
 # P3 Supabase Staging Validation Runbook
 
+Status: **Superseded historical runbook.** Do not use its staging branch or migration-application sequence for the certified release candidate. Current evidence and safe non-secret commands are in `P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md`, `P3_DATA_FABRIC_RELEASE_GATE.md`, and `CI_CERTIFICATION.md`.
+
 > Historical staging preparation: the implemented live suite and current release disposition are documented in `P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md` and `P3_DATA_FABRIC_RELEASE_GATE.md`.
 
 ## Purpose
