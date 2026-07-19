@@ -12,17 +12,17 @@
 | Severity | Count |
 |---|---:|
 | Critical | 0 |
-| High | 1 |
+| High | 0 |
 | Medium | 2 |
-| Low | 8 |
+| Low | 9 |
 
-The expected target was Critical 0, High 0, Medium 2. Read-only hosted-workflow verification discovered a new High release-gate risk, so the target profile is not currently met.
+The target release-risk profile is now met. Hosted CI run `29671495028` closed the former High workflow risk.
 
 ## Register
 
 | ID | Category | Debt | Status | Priority | Release effect | Recommended disposition |
 |---|---|---|---|---|---|---|
-| TD-001 | CI / Release | GitHub records zero-job failures for `background-jobs-cron.yml` and `cd.yml` on the certified head; feature-branch push did not run `ci.yml` | Open | High | Blocks merge approval | Correct workflow validation issues in a separately authorized CI phase, run hosted CI on the reviewed head, and require a successful check result. |
+| TD-001 | CI / Release | Hosted workflow validation and feature-branch CI coverage | Resolved by run `29671495028` | Closed | None | Preserve the corrected triggers and `python -m pytest` invocation. |
 | TD-002 | Data Fabric | Durable relationship-version history is intentionally deferred by migration 0018 | Accepted deferred scope | Medium | Does not invalidate P3, but constrains temporal relationship audit use cases | Define a compatible relationship-history persistence contract in a future approved program. |
 | TD-003 | Quality Engineering | Full repository Ruff baseline has 775 findings and bare mypy is not reproducible with the current package/config layout | Open | Medium | Does not block current tests; limits broad static-quality enforcement | Establish bounded Ruff and mypy baselines without mass changes to certified code. |
 | TD-004 | Archive | Thirty tracked archival placeholder `.py` files are not valid Python | Open | Low | Excluded from active compile/lint scope | Convert to non-source archival format after retention approval. |
@@ -33,6 +33,7 @@ The expected target was Critical 0, High 0, Medium 2. Read-only hosted-workflow 
 | TD-009 | Documentation | Dedicated Data Fabric operator/troubleshooting guide is missing | Open | Low | Operational knowledge remains distributed | Consolidate safe operations, diagnostics, recovery, and escalation guidance. |
 | TD-010 | Documentation | Connector Development Guide is missing | Open | Low | Provider extension conventions remain distributed | Document SDK contracts, certification, fixtures, and adapter lifecycle. |
 | TD-011 | Repository hygiene | Historical and outdated documentation remains in active-tree locations | Open | Low | Readers can select superseded guidance | Move governed historical material to an archive and retain explicit status banners. |
+| TD-012 | CI maintenance | `actions/checkout@v4` and `actions/setup-python@v5` emit Node.js 20 deprecation warnings while GitHub forces Node.js 24 | Open | Low | No current failure; future action-runtime maintenance | Upgrade action majors in a separately reviewed maintenance change when supported. |
 
 ## Accepted qualifications
 
@@ -40,5 +41,4 @@ Relationship history is an accepted contractual deferral, not a failed validatio
 
 ## Closure authority
 
-Debt items may be closed only with evidence appropriate to their scope. TD-001 requires hosted GitHub Actions success, not only local command reproduction. TD-002 requires a reviewed contract and must not be solved by silently changing migration 0018. Documentation/legal items require the relevant governance owner.
-
+Debt items may be closed only with evidence appropriate to their scope. TD-001 is closed by hosted GitHub Actions run `29671495028`, not only local command reproduction. TD-002 requires a reviewed contract and must not be solved by silently changing migration 0018. Documentation/legal items require the relevant governance owner.

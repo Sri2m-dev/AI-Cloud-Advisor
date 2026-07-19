@@ -4,7 +4,7 @@
 
 This package consolidates P3 Supabase live validation and P3.10 release reproduction, repository health, CI command certification, and documentation certification.
 
-**Certification outcome: PLATFORM BASELINE CERTIFIED; RELEASE APPROVAL WITHHELD PENDING HOSTED CI.**
+**Certification outcome: PLATFORM AND HOSTED CI CERTIFIED; ENGINEERING GO FOR MERGE REVIEW.**
 
 ## 1. Repository health summary
 
@@ -65,7 +65,7 @@ Live validation confirmed a real dedicated Supabase backend, tenant isolation, o
 | Service role | PASS with documented least privilege — schema `USAGE`, narrow table reads/entity mutations, and migration-established RPC `EXECUTE`; no direct append-only update/delete |
 | Database mutation | PASS — migrations were not reapplied; mutable cleanup was exact-scope; immutable/durable evidence was retained by contract |
 | CI secret exposure | PASS for non-secret CI design — ordinary test execution explicitly empties P3 live variables and integration tests skip |
-| Hosted CI result | NOT CERTIFIED — workflow-file failures and absence of a feature-head CI run prevent release approval |
+| Hosted CI result | PASS — run `29671495028` succeeded on `5ff2e57195861b7cb1fcbac3f7804ce15db8768d` |
 
 ## 5. Technical debt and risk
 
@@ -74,11 +74,11 @@ The authoritative register is `docs/TECHNICAL_DEBT_REGISTER.md`.
 | Severity | Count | Principal exposure |
 |---|---:|---|
 | Critical | 0 | None identified |
-| High | 1 | Hosted workflow zero-job failures / missing feature-head CI evidence |
+| High | 0 | Former hosted workflow risk resolved by run `29671495028` |
 | Medium | 2 | Deferred relationship history; broad Ruff/mypy baseline |
-| Low | 8 | Archive, warnings, documentation, licensing, and hygiene debt |
+| Low | 9 | Archive, warnings, action maintenance, documentation, licensing, and hygiene debt |
 
-No Critical issue and no Data Fabric correctness issue remains. The High item is a governance and operational release blocker.
+No Critical or High issue and no Data Fabric correctness issue remains.
 
 ## 6. Release readiness
 
@@ -91,15 +91,15 @@ No Critical issue and no Data Fabric correctness issue remains. The High item is
 | Documentation | PASS |
 | Runtime/Data Fabric behavior | PASS within contract |
 | Dedicated database validation | PASS |
-| Hosted CI on reviewed head | **FAIL / INCOMPLETE** |
-| Merge readiness | **NO-GO** |
-| Tag readiness | **NO-GO** |
+| Hosted CI on reviewed engineering head | **PASS** |
+| Merge readiness | **ENGINEERING GO; GOVERNANCE APPROVAL REQUIRED** |
+| Tag readiness | **NOT YET — validate and approve the merge commit first** |
 
 ## 7. Executive recommendation
 
-Nexora has sufficient evidence to conclude that P3 Data Fabric Foundation is complete, reproducible, secure within its declared permissions, and technically suitable for the v1.2 baseline. It should **not yet become `v1.2.0-data-fabric`** because the hosted CI gate has not passed on the reviewed candidate.
+Nexora has sufficient evidence to conclude that P3 Data Fabric Foundation is complete, reproducible, secure within its declared permissions, hosted-CI validated, and technically suitable for the v1.2 baseline. It is **engineering-ready for merge review**.
 
-Approve a narrowly scoped workflow-validation correction, obtain successful hosted CI on the reviewed head, review this package and the final diff, and then make an explicit merge decision. If the merge is authorized, validate the merge commit and tag that merge commit only. Do not merge or tag from this certification package alone.
+Review this package and the final diff, then make an explicit merge decision. If merge is authorized, validate the merge commit and tag that merge commit only. Do not merge or tag from this certification package alone.
 
 ## Certification boundary
 
@@ -109,4 +109,3 @@ Approve a narrowly scoped workflow-validation correction, obtain successful host
 - Data Fabric or migration change: no.
 - CI change in Phase 4: no.
 - Feature or architecture work: no.
-
