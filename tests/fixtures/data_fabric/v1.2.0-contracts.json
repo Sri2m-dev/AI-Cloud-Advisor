@@ -1,0 +1,822 @@
+{
+  "baseline_commit": "0a4ab32f4ad431a22ec3ae11cc962cc54c5b15e2",
+  "baseline_tag": "v1.2.0-data-fabric",
+  "contracts": {
+    "EnterpriseEntity": {
+      "fields": [
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "canonical_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "entity_type",
+          "type": "EntityType | str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_system",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_identifier",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "organization_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "tenant_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1
+          },
+          "name": "version",
+          "type": "int"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "confidence_score",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "quality_score",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "tags",
+          "type": "list[str]"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "identity",
+          "type": "EntityIdentity | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "lineage",
+          "type": "EntityLineage | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "provenance",
+          "type": "EntityProvenance | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "entity_version",
+          "type": "EntityVersion | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "quality",
+          "type": "EntityQuality | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "ownership",
+          "type": "EntityOwnership | NoneType"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.entity",
+      "slots": true
+    },
+    "EnterpriseRelationship": {
+      "fields": [
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "relationship_type",
+          "type": "RelationshipType | str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_entity_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "target_entity_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "organization_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "tenant_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "source_system",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "source_identifier",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "updated_at",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1
+          },
+          "name": "version",
+          "type": "int"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "confidence_score",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "quality_score",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "tags",
+          "type": "list[str]"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "lineage",
+          "type": "EntityLineage | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "provenance",
+          "type": "EntityProvenance | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "quality",
+          "type": "EntityQuality | NoneType"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.relationship",
+      "slots": true
+    },
+    "EntityIdentity": {
+      "fields": [
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "canonical_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_system",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_identifier",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "organization_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "tenant_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "aliases",
+          "type": "list[str]"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 100
+          },
+          "name": "source_priority",
+          "type": "int"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "match_confidence",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.identity",
+      "slots": true
+    },
+    "EntityLineage": {
+      "fields": [
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "connector",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "raw_record_id",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "normalized_record_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "canonical_entity_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "transformation_name",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "transformation_version",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "observed_at",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.lineage",
+      "slots": true
+    },
+    "EntityOwnership": {
+      "fields": [
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "owner_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "owner_name",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "owner_email",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "department_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "department_name",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "cost_center_id",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "accountability",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.ownership",
+      "slots": true
+    },
+    "EntityProvenance": {
+      "fields": [
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_system",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "source_identifier",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "required"
+          },
+          "name": "collection_method",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "connector_version",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "normalization_rule",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "identity_resolution_rule",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "reviewed_by",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "reviewed_at",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "captured_at",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.provenance",
+      "slots": true
+    },
+    "EntityQuality": {
+      "fields": [
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "completeness",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "freshness",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "accuracy",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "consistency",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "validity",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": 1.0
+          },
+          "name": "trust_score",
+          "type": "float"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "owner",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "last_verified_at",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.quality",
+      "slots": true
+    },
+    "EntityType": {
+      "kind": "enum",
+      "module": "data_fabric.contracts.enums",
+      "values": [
+        "business_capability",
+        "business_service",
+        "application",
+        "technology",
+        "cloud_resource",
+        "saas_application",
+        "vendor",
+        "contract",
+        "cost_center",
+        "department",
+        "owner",
+        "project",
+        "environment",
+        "business_process",
+        "risk",
+        "recommendation",
+        "approval",
+        "policy",
+        "evidence"
+      ]
+    },
+    "EntityVersion": {
+      "fields": [
+        {
+          "default": {
+            "kind": "value",
+            "value": 1
+          },
+          "name": "version",
+          "type": "int"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "effective_from",
+          "type": "datetime"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "effective_to",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "source_updated_at",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "change_reason",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "supersedes_version",
+          "type": "int | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "superseded_by_version",
+          "type": "int | NoneType"
+        },
+        {
+          "default": {
+            "kind": "factory"
+          },
+          "name": "metadata",
+          "type": "dict[str, Any]"
+        }
+      ],
+      "frozen": false,
+      "kind": "dataclass",
+      "module": "data_fabric.contracts.versioning",
+      "slots": true
+    },
+    "RelationshipType": {
+      "kind": "enum",
+      "module": "data_fabric.contracts.enums",
+      "values": [
+        "depends_on",
+        "runs_on",
+        "owned_by",
+        "supplied_by",
+        "funds",
+        "impacts",
+        "targets",
+        "monitors",
+        "governs",
+        "approves",
+        "evidences",
+        "associated_with"
+      ]
+    }
+  },
+  "exports": [
+    "EnterpriseEntity",
+    "EnterpriseRelationship",
+    "EntityIdentity",
+    "EntityLineage",
+    "EntityOwnership",
+    "EntityProvenance",
+    "EntityQuality",
+    "EntityVersion",
+    "EntityType",
+    "RelationshipType"
+  ],
+  "format_version": 1
+}
