@@ -64,7 +64,7 @@ if minute % 15 == 0:
 if minute == 0:
     job_cost_ingestion_hourly()
     job_anomaly_scan_hourly()
-  job_alert_engine_hourly()
+    job_alert_engine_hourly()
 
 # daily jobs
 if hour == 2 and minute == 0:
