@@ -75,18 +75,18 @@ jobs:
             tests/services/test_sla_logic.py
 
       - name: Collect full test suite
-        run: pytest --collect-only -q
+        run: python -m pytest --collect-only -q
 
       - name: Run full test suite without live secrets
         env:
           P3_SUPABASE_RUN_INTEGRATION: ""
           P3_SUPABASE_TEST_URL: ""
           P3_SUPABASE_TEST_SERVICE_ROLE_KEY: ""
-        run: pytest -q
+        run: python -m pytest -q
 
       - name: P3 Data Fabric release gate
         run: |
-          pytest -q \
+          python -m pytest -q \
             tests/data_fabric/test_supabase_integration_safety.py \
             tests/data_fabric/test_supabase_atomic_write_unit.py \
             tests/data_fabric/test_persistence_foundation.py \
@@ -96,7 +96,7 @@ jobs:
 
       - name: Collect gated P3 integrations
         run: |
-          pytest --collect-only -q \
+          python -m pytest --collect-only -q \
             tests/data_fabric/test_supabase_entity_repository_integration.py \
             tests/data_fabric/test_supabase_relationship_history_integration.py \
             tests/data_fabric/test_supabase_governance_semantic_integration.py \
@@ -108,7 +108,7 @@ jobs:
           P3_SUPABASE_TEST_URL: ""
           P3_SUPABASE_TEST_SERVICE_ROLE_KEY: ""
         run: |
-          pytest -q -rs \
+          python -m pytest -q -rs \
             tests/data_fabric/test_supabase_entity_repository_integration.py \
             tests/data_fabric/test_supabase_relationship_history_integration.py \
             tests/data_fabric/test_supabase_governance_semantic_integration.py \
