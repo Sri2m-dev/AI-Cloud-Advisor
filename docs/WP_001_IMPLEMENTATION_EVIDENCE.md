@@ -66,7 +66,7 @@ Five existing warnings remain: three recorded Pydantic v2 deprecations and two l
 | Offline and secret-free | Pass | No network/database dependency; live variables empty |
 | Baseline regression preserved | Pass | Full suite and 94-test P3 gate |
 | Scope boundary preserved | Pass | Five additive harness/evidence files only |
-| Hosted CI | Pending | Required after review commit is pushed |
+| Hosted CI | Pass | Run `29690666496` passed on implementation commit `480d6fa9` |
 | Program G conformance review | Pending | Must be recorded before merge approval |
 | Merge approval | Pending | This evidence does not authorize merge |
 
@@ -83,5 +83,15 @@ Review WP-001 for:
 3. correctness and maintainability of the strict snapshot policy;
 4. adequacy of automated and release evidence;
 5. authorization to commit, push, run hosted CI, and enter merge review.
+
+## Hosted evidence
+
+- Pull request: `#6`
+- Implementation commit: `480d6fa9`
+- Hosted CI run: `29690666496`
+- Hosted job: `88202683357`
+- Result: passed
+
+The final documentation-only evidence descendant must also pass the pull-request CI gate before review handoff.
 
 WP-002 remains inactive.
