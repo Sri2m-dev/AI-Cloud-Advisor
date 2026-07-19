@@ -38,6 +38,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize GHCR image namespace
+        shell: bash
+        run: echo "IMAGE_ROOT=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -45,8 +49,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_ROOT }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_ROOT }}/${{ matrix.service }}:latest
 
       - name: Trigger deployment webhook
         env:
@@ -55,12 +59,12 @@ jobs:
           if [ -n "$DEPLOY_WEBHOOK_URL" ]; then
             curl -X POST "$DEPLOY_WEBHOOK_URL" \
               -H "Content-Type: application/json" \
-              -d '{"service":"${{ matrix.service }}","image":"ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}","ref":"${{ github.ref_name }}"}'
+              -d '{"service":"${{ matrix.service }}","image":"${{ env.IMAGE_ROOT }}/${{ matrix.service }}:${{ github.sha }}","ref":"${{ github.ref_name }}"}'
           else
             echo "DEPLOY_WEBHOOK_URL is not configured; skipping deployment trigger."
           fi
 
       - name: Deployment note
         run: |
-          echo "Published image: ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}"
+          echo "Published image: ${{ env.IMAGE_ROOT }}/${{ matrix.service }}:${{ github.sha }}"
           echo "Set DEPLOY_WEBHOOK_URL secret to auto-trigger your deployment target."
