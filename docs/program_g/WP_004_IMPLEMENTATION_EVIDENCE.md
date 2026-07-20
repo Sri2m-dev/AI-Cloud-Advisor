@@ -8,7 +8,8 @@
 - Activation baseline: `main` at `243c218218c6d43d5099dcab2d75048bf86f9a1d`
 - Released foundation: `v1.2.0-data-fabric`
 - Local implementation and validation: Complete
-- Hosted CI and Program G review: Pending
+- Hosted CI: Passed (`29715806863`)
+- Program G review: Pending
 - Merge and post-merge validation: Not performed
 
 This evidence record does not authorize merge or activation of another work
@@ -113,10 +114,9 @@ added and no live-provider behavior was introduced.
 
 Before WP-004 may merge or close, the feature branch still requires:
 
-1. commit and normal push;
-2. hosted CI/CD evidence on the implementation commit;
-3. Program G review and explicit merge approval;
-4. merge into `main` through the approved process;
-5. post-merge validation and formal closure.
+1. Program G review and explicit merge approval;
+2. merge into `main` through the approved process;
+3. hosted CD and post-merge validation on `main`;
+4. formal closure.
 
 WP-005 through WP-020 remain inactive.
