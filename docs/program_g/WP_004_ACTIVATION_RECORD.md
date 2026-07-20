@@ -8,11 +8,11 @@
 | Exact title | Connector evidence certification |
 | Record version | 1.0 |
 | Record date | 2026-07-20 |
-| Status | **READY FOR OWNER APPROVAL** |
+| Status | **ACTIVE** |
 
-This is an authorization record. It does not activate WP-004 unless the Owner
-Approval section is completed through governance and the approved record is
-merged into `main`.
+This authorization record contains the explicit owner activation decision.
+Implementation becomes authorized only after this signed record is merged into
+`main` and its exact merge commit passes post-merge CI/CD.
 
 ## 2. Baseline
 
@@ -24,7 +24,7 @@ merged into `main`.
 | WP-001 | Closed |
 | WP-002 | Closed |
 | WP-003 | Closed |
-| WP-004 | Ready, not active |
+| WP-004 | Active after signed-record merge and post-merge validation |
 | WP-005–WP-020 | Inactive |
 
 ## 3. Dependency verification
@@ -62,11 +62,11 @@ The authoritative readiness criteria are in
 | Repository allowlist | Satisfied |
 | Approved implementation branch name | Satisfied |
 | Activation specification reviewed, merged, and post-merge validated | Satisfied at `42b45c531bb23c45005c21a89e2b6381f3f4eb41` |
-| Explicit implementation activation | Pending this record's owner disposition |
+| Explicit implementation activation | Approved by Srikanth Mudaliar on 2026-07-20 |
 
-**Readiness verdict:** all prerequisites for owner disposition are satisfied.
-WP-004 remains not active until this record receives an Owner Approval and the
-approved record is merged into `main`.
+**Readiness verdict:** satisfied. The owner activation decision is recorded
+below. Engineering may begin only from the validated `main` merge commit that
+contains this signed record.
 
 ## 5. Owner decisions
 
@@ -165,13 +165,43 @@ Status:
 ACTIVE
 
 Authority:
+Srikanth Mudaliar
+Owner of Nexora
 
 Date:
+2026-07-20
 
 Approved Branch:
+feature/wp-004-connector-evidence-certification
 
 Comments:
+Decision: APPROVED
+Implementation Authorization: YES
+Implementation Baseline: main @ 7a2c749f997f5e7142a9f640736da9509dfe26bf
+Released Foundation: v1.2.0-data-fabric
 ```
+
+Conditions:
+
+1. Implementation remains within the Program G catalog, WP-004 Activation
+   Specification, and this Activation Record.
+2. The reusable certification framework uses AWS and Microsoft 365 as
+   lighthouse connectors.
+3. Certification uses deterministic offline fixtures and synthetic credentials
+   only.
+4. Live-source, customer-environment, production-account, Supabase, and live
+   database access is prohibited.
+5. Existing connector functionality, runtime behavior, Data Fabric contracts,
+   schemas, migrations, APIs, UI, Knowledge Graph, registry, AI capabilities,
+   and CI workflows remain outside the approved allowlist.
+6. Deletion uses the certification-only logical tombstone representation.
+7. Pagination preserves opaque source-native cursors; checkpoints advance only
+   after successful validation and reconciliation.
+8. Certification metadata uses the additive WP-003 manifest profile without
+   changing existing provider, consumer, or runtime event behavior.
+9. Scope expansion requires a separate owner-approved governance decision.
+10. Architecture compliance, implementation evidence, mandatory test gates,
+    hosted CI/CD, and post-merge validation are required.
 
 ### Owner Rejection
 
@@ -184,8 +214,8 @@ Reason:
 Next Action:
 ```
 
-These sections are intentionally unsigned and unfilled. Neither section may be
-completed by an implementation agent without an explicit owner disposition.
+The Owner Approval section records Srikanth Mudaliar's explicit disposition.
+The rejection section remains unused.
 
 ## 12. Governance traceability
 
@@ -201,11 +231,12 @@ completed by an implementation agent without an explicit owner disposition.
 
 ## Current authority
 
-This draft authorizes nothing automatically. Until an Owner Approval is
-recorded and the approved record is merged into `main`:
+After this signed record is merged and its merge commit passes CI/CD, the
+authorized portfolio state is:
 
 ```text
-WP-004: READY, NOT ACTIVE
-Engineering: BLOCKED
-Implementation branch creation: BLOCKED
+WP-004: ACTIVE
+Engineering: AUTHORIZED WITHIN THE APPROVED SCOPE
+Approved branch: feature/wp-004-connector-evidence-certification
+WP-005–WP-020: INACTIVE
 ```
