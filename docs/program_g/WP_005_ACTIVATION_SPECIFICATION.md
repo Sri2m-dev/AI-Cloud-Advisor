@@ -1,6 +1,6 @@
 # WP-005 Activation Specification
 
-Status: Draft for governance review
+Status: Owner decisions recorded; documentation review and merge pending
 Normative: No
 Implementation authorization: No
 Work package: WP-005 — Canonical coverage and stewardship
@@ -16,10 +16,10 @@ and stewardship**. The authoritative Program G catalog assigns WP-005 an
 authority matrix, identity and quality queues, and a coverage data product. Its
 dependencies are WP-002 and WP-004.
 
-This draft neither activates WP-005 nor changes the ratified architecture, Data
-Fabric contracts, source authority, schemas, or runtime behavior. Unresolved
-decisions in Section 8 must be made by the Owner before an activation record may
-declare the package ready.
+This specification neither activates WP-005 nor changes the ratified
+architecture, Data Fabric contracts, schemas, or runtime behavior. The Owner's
+decisions are recorded in Section 8. A separate merged Activation Record and
+explicit Owner Activation are still required before engineering may begin.
 
 ## 2. Catalog Objective
 
@@ -40,9 +40,11 @@ workflow accepted**. Its primary catalog risk is unresolved identities.
 
 After a separate owner activation, WP-005 may implement:
 
-1. A versioned authority-matrix model that assigns authority at an explicitly
-   approved granularity and records organization, tenant, domain, entity type,
-   attribute, source, steward role, effective interval, and rationale.
+1. A versioned authority-matrix model for the Technology and Applications
+   lighthouse domains that records organization, tenant, domain, governed
+   subject, source, steward role, effective interval, and rationale. Governance
+   authority follows the hierarchy recorded in Section 8; source-authority
+   conflicts at equal governance authority require manual review.
 2. Deterministic evaluation of canonical coverage, identity disposition,
    quality status, and freshness using existing canonical, identity, ontology,
    provenance, lineage, and quality contracts as read-only inputs.
@@ -123,10 +125,9 @@ Program G governance.
 - **Constraint:** it is derived, reproducible, tenant-scoped, and never a source
   of canonical authority.
 
-## 6. Repository Boundaries Proposed for Approval
+## 6. Approved Repository Boundaries
 
-The exact implementation allowlist cannot become authoritative until Section 8
-is resolved. The proposed narrow areas are:
+The Owner approved the following narrow implementation allowlist:
 
 | Area | Proposed use |
 | --- | --- |
@@ -142,8 +143,10 @@ Read-only integration inputs are expected to include `authorization/`,
 identity, registry, quality, semantic, lineage, provenance, versioning, and
 persistence interfaces.
 
-No existing Data Fabric or runtime area is writable under this draft. Any need
-to change one requires an amended specification and owner approval.
+No existing Data Fabric or runtime area is writable under this specification.
+The phrase "minimum necessary" does not authorize another repository area.
+Any need to change one requires an amended specification and another owner
+decision.
 
 ## 7. Proposed Deliverables
 
@@ -158,33 +161,100 @@ to change one requires an amended specification and owner approval.
 - additive WP-003 manifest registration if an external contract is introduced;
 - architecture-conformance and implementation-evidence report.
 
-## 8. Owner Decisions Required Before Activation
+## 8. Owner Decisions
 
-The following are deliberately unresolved. No default is implied.
+Authority: Srikanth Mudaliar, Owner of Nexora
+Decision date: 2026-07-20
+Decision: Approved
 
-1. **Authority granularity:** entity family, entity type, attribute, source
-   system, or an approved combination.
-2. **Authority precedence:** how overlapping rules are rejected or explicitly
-   ordered, including effective-time behavior.
-3. **Steward roles:** accountable owner, permitted reviewer roles, assignment
-   model, and separation-of-duties rules.
-4. **Queue persistence:** isolated in-memory implementation, approved existing
-   persistence abstraction, or separately governed durable storage.
-5. **Workflow states:** final state names, transition authority, reopen policy,
-   escalation, expiry, and service-level expectations.
-6. **Freshness policy:** authoritative clock, per-domain thresholds, unknown
-   timestamps, and late-arriving evidence.
-7. **Coverage denominator:** eligible population, exclusions, inactive records,
-   unresolved identities, and missing-source handling.
-8. **Canonical action boundary:** whether steward dispositions remain proposals
-   only or may invoke an existing secured atomic write through a separately
-   approved adapter.
-9. **Lighthouse domains:** the bounded entity families and synthetic fixtures
-   used to prove the framework.
-10. **Implementation branch and final repository allowlist.**
+### 8.1 Governance authority and precedence
 
-R-003 from the Program G risk register—ambiguous source authority—remains a
-blocking risk until decisions 1 and 2 are recorded.
+The approved authority hierarchy is:
+
+```text
+Platform Owner
+      ↓
+Domain Steward
+      ↓
+Technical Steward
+      ↓
+Automated Stewardship Rules
+```
+
+- The Platform Owner has final approval of governance, the canonical model, and
+  exceptions.
+- Domain Stewards approve domain-specific stewardship decisions.
+- Technical Stewards execute implementation within approved governance.
+- Higher authority overrides lower authority.
+- Equal-authority conflicts require manual review.
+- Automation never overrides a human-approved decision.
+
+This hierarchy governs decisions. It does not make a person or automation a
+source-system authority. Each authority-matrix entry must still identify the
+governed subject and authoritative source explicitly; absence or conflict fails
+closed into manual review.
+
+### 8.2 Workflow lifecycle
+
+The approved lifecycle is:
+
+```text
+DISCOVERED → CLASSIFIED → UNDER_REVIEW → STEWARD_APPROVED → CANONICAL
+                                                        ↓
+                                                   SUPERSEDED → ARCHIVED
+```
+
+An item may transition to `REJECTED` through an authorized review decision.
+Every transition is auditable. Detailed transition permissions, reopen,
+escalation, and expiry rules must implement the hierarchy above and be proven by
+tests; they cannot broaden it.
+
+### 8.3 Lighthouse domains
+
+WP-005 is limited to **Technology** and **Applications**. Financial and Business
+Service governance are excluded.
+
+### 8.4 Canonical-write boundary
+
+Only an approved stewardship workflow may promote a proposed record into the
+canonical model. Connectors, ingestion, discovery, queues, and automated rules
+may propose changes but may not directly mutate canonical entities. Any
+promotion must use an already approved secured atomic Data Fabric write
+boundary. If that boundary cannot support the approved workflow without a Data
+Fabric, RPC, schema, or migration change, implementation stops for a separate
+governance decision.
+
+### 8.5 Queue persistence and audit
+
+Identity and quality queues must be durable and replayable, with immutable audit
+history. In-memory-only state is prohibited for the deliverable. This decision
+does not authorize a schema, migration, grant, RLS, Supabase, or database-object
+change. Implementation must use an approved existing persistence abstraction;
+otherwise it stops and returns to governance.
+
+### 8.6 Freshness policy
+
+Freshness is defined per governed domain. Technology and Applications each
+declare an expected refresh interval, stale threshold, and escalation
+threshold. Missing timestamps and late evidence remain explicit. Exact values
+must be recorded in the Activation Record before implementation.
+
+### 8.7 Coverage denominator
+
+Coverage is measured against the authoritative inventory for each governed
+domain, never only the discovered subset. The product separately reports
+eligible, excluded, inactive, unresolved, and missing-source populations.
+
+### 8.8 Repository and branch controls
+
+The exact allowlist is Section 6. The approved implementation branch is:
+
+```text
+feature/wp-005-enterprise-stewardship
+```
+
+It may be created only after this specification and a signed Activation Record
+are merged and explicit Owner Activation is recorded.
 
 ## 9. Definition of Ready
 
@@ -195,9 +265,15 @@ blocking risk until decisions 1 and 2 are recorded.
 - [x] Released foundation identified.
 - [x] Relevant P3 contracts and ADRs inventoried.
 - [x] Initial scope, exclusions, components, tests, and evidence proposed.
-- [ ] Every Section 8 owner decision recorded.
-- [ ] Source-authority matrix approved by governance/domain authority.
-- [ ] Exact repository allowlist approved.
+- [x] Every Section 8 owner decision recorded.
+- [x] Governance authority and conflict hierarchy approved.
+- [x] Exact repository allowlist approved.
+- [x] Technology and Applications lighthouse domains approved.
+- [x] Durable queue and canonical-write constraints approved.
+- [ ] Domain freshness intervals and thresholds recorded.
+- [ ] Initial Technology and Applications source-authority entries recorded.
+- [ ] Existing durable persistence abstraction confirmed sufficient without an
+  excluded change.
 - [ ] Activation specification reviewed and merged.
 - [ ] Separate Activation Record created, reviewed, and merged.
 - [ ] Explicit owner implementation authorization recorded.
@@ -300,12 +376,11 @@ or need for live data stops activation or implementation.
 
 ## 14. Governance Sequence
 
-1. Review this draft and answer every Section 8 decision.
-2. Update the specification with the Owner's exact decisions.
-3. Review and merge the documentation-only specification.
-4. Create a separate WP-005 Activation Record against the resulting `main`.
-5. Obtain explicit owner activation in that record.
-6. Only then create the approved implementation branch.
+1. Review and merge this documentation-only specification.
+2. Create a separate WP-005 Activation Record against the resulting `main`.
+3. Record the remaining readiness evidence identified in Section 9.
+4. Obtain explicit owner activation in that record.
+5. Only then create the approved implementation branch.
 
 Until that sequence completes, engineering remains blocked and WP-005 remains
 **READY, NOT ACTIVE**. WP-006 through WP-020 remain inactive.
