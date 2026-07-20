@@ -30,6 +30,26 @@
         {"name": "sequence", "type": "integer", "required": true}
       ],
       "deprecations": []
+    },
+    {
+      "contract_id": "connector.certification-observation",
+      "kind": "contract",
+      "version": "1.0.0",
+      "provider": "Connector Evidence Certification",
+      "fields": [
+        {"name": "profile_version", "type": "string", "required": true},
+        {"name": "connector_id", "type": "string", "required": true},
+        {"name": "source_system", "type": "string", "required": true},
+        {"name": "source_entity_type", "type": "string", "required": true},
+        {"name": "source_entity_id", "type": "string", "required": true},
+        {"name": "tenant_id", "type": "string", "required": true},
+        {"name": "organization_id", "type": "string", "required": true},
+        {"name": "observed_at", "type": "string", "required": true},
+        {"name": "checkpoint_reference", "type": "string", "required": true},
+        {"name": "operation", "type": "string", "required": true, "enum_values": ["upsert", "delete"]},
+        {"name": "evidence_hash", "type": "string", "required": true}
+      ],
+      "deprecations": []
     }
   ],
   "consumers": [
@@ -53,6 +73,24 @@
         "workflow_id": "string",
         "payload": "object",
         "sequence": "integer"
+      }
+    },
+    {
+      "consumer": "WP-004 Certification Gate",
+      "contract_id": "connector.certification-observation",
+      "minimum_version": "1.0.0",
+      "required_fields": {
+        "profile_version": "string",
+        "connector_id": "string",
+        "source_system": "string",
+        "source_entity_type": "string",
+        "source_entity_id": "string",
+        "tenant_id": "string",
+        "organization_id": "string",
+        "observed_at": "string",
+        "checkpoint_reference": "string",
+        "operation": "string",
+        "evidence_hash": "string"
       }
     }
   ]

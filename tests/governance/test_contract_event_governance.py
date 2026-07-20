@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from dataclasses import replace
@@ -158,4 +159,18 @@ def test_committed_provider_consumer_registry_passes_cli_gate():
     )
 
     assert result.returncode == 0, result.stderr
-    assert "2 providers, 2 consumers" in result.stdout
+    assert "3 providers, 3 consumers" in result.stdout
+
+
+def test_wp004_profile_is_additive_and_preserves_existing_registry_contracts():
+    root = Path(__file__).resolve().parents[2]
+    registry = json.loads((root / "governance" / "manifests.json").read_text(encoding="utf-8"))
+    providers = {item["contract_id"]: item for item in registry["providers"]}
+    consumers = {item["consumer"]: item for item in registry["consumers"]}
+
+    assert {"enterprise.correlation-event", "workflow.execution-event"} < set(providers)
+    assert {"Correlation Service", "Safe Execution"} < set(consumers)
+    profile = providers["connector.certification-observation"]
+    assert profile["kind"] == "contract"
+    assert profile["version"] == "1.0.0"
+    assert consumers["WP-004 Certification Gate"]["contract_id"] == profile["contract_id"]
