@@ -1,13 +1,13 @@
 # Nexora Work Package Catalog
 
-Status: Ratified Program G Planning Baseline  
-Normative: Yes — for Program G planning, sequencing, and work-package scope  
-Governance state: G1, G2, and G3 complete  
-Implementation Authorization: Per-work-package authorization only  
-Original planning date: 2026-07-19  
-Owner ratification: Srikanth Mudaliar  
-Ratification date: 2026-07-20  
-Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`  
+Status: Ratified Program G Planning Baseline
+Normative: Yes — for Program G planning, sequencing, and work-package scope
+Governance state: G1, G2, and G3 complete
+Implementation Authorization: Per-work-package authorization only
+Original planning date: 2026-07-19
+Owner ratification: Srikanth Mudaliar
+Ratification date: 2026-07-20
+Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
 Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
 
 ## Estimation model
@@ -43,4 +43,3 @@ Effort uses team-sprint ranges for comparative planning only: S `1-2`, M `3-5`, 
 - Conditional P4 packages cannot enter delivery before their ADRs are accepted.
 - Effort is re-estimated after discovery and representative benchmarks.
 - A WP cannot close with only mocks where live contract behavior is material.
-

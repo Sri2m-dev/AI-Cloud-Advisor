@@ -1,13 +1,13 @@
 # Nexora Release Roadmap
 
-Status: Ratified Program G Planning Baseline  
-Normative: Yes — for Program G planning, sequencing, and work-package scope  
-Governance state: G1, G2, and G3 complete  
-Implementation Authorization: Per-work-package authorization only  
-Original planning date: 2026-07-19  
-Owner ratification: Srikanth Mudaliar  
-Ratification date: 2026-07-20  
-Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`  
+Status: Ratified Program G Planning Baseline
+Normative: Yes — for Program G planning, sequencing, and work-package scope
+Governance state: G1, G2, and G3 complete
+Implementation Authorization: Per-work-package authorization only
+Original planning date: 2026-07-19
+Owner ratification: Srikanth Mudaliar
+Ratification date: 2026-07-20
+Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
 Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
 
 ## Roadmap model
@@ -54,4 +54,3 @@ Breaking public contract or canonical semantic changes require explicit version 
 ## Baseline protection
 
 The v1.2.0 release is not bundled with P5 planning or future architecture. No future work package may modify its historical certification evidence.
-

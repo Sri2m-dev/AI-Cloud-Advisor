@@ -1,13 +1,13 @@
 # Nexora Capability Dependency Map
 
-Status: Ratified Program G Planning Baseline  
-Normative: Yes — for Program G planning, sequencing, and work-package scope  
-Governance state: G1, G2, and G3 complete  
-Implementation Authorization: Per-work-package authorization only  
-Original planning date: 2026-07-19  
-Owner ratification: Srikanth Mudaliar  
-Ratification date: 2026-07-20  
-Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`  
+Status: Ratified Program G Planning Baseline
+Normative: Yes — for Program G planning, sequencing, and work-package scope
+Governance state: G1, G2, and G3 complete
+Implementation Authorization: Per-work-package authorization only
+Original planning date: 2026-07-19
+Owner ratification: Srikanth Mudaliar
+Ratification date: 2026-07-20
+Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
 Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
 
 ## Implementation DAG
@@ -95,4 +95,3 @@ AI is deliberately downstream of governed retrieval and Decision ownership. Expe
 ## Change control
 
 Any proposed edge removal or reorder must document affected acceptance criteria, architectural invariant, migration risk and value impact. Calendar pressure alone is not justification for bypassing a hard dependency.
-

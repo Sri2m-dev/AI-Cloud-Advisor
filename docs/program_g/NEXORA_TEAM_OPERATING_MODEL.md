@@ -1,13 +1,13 @@
 # Nexora Team Operating Model
 
-Status: Ratified Program G Planning Baseline  
-Normative: Yes — for Program G planning, sequencing, and work-package scope  
-Governance state: G1, G2, and G3 complete  
-Implementation Authorization: Per-work-package authorization only  
-Original planning date: 2026-07-19  
-Owner ratification: Srikanth Mudaliar  
-Ratification date: 2026-07-20  
-Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`  
+Status: Ratified Program G Planning Baseline
+Normative: Yes — for Program G planning, sequencing, and work-package scope
+Governance state: G1, G2, and G3 complete
+Implementation Authorization: Per-work-package authorization only
+Original planning date: 2026-07-19
+Owner ratification: Srikanth Mudaliar
+Ratification date: 2026-07-20
+Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
 Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
 
 ## Principles
@@ -65,4 +65,3 @@ Do not form every proposed team immediately. Begin with stable ownership cells a
 ## Team health measures
 
 Decision lead time, contract change failure, cross-team blocking time, operational toil, SLO attainment, escaped tenant/security defects, rework from unclear ownership and realized-value adoption. Feature volume is not a sufficient team success measure.
-

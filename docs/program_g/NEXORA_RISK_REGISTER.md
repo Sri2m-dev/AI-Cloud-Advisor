@@ -1,13 +1,13 @@
 # Nexora P5 Planning Risk Register
 
-Status: Ratified Program G Planning Baseline  
-Normative: Yes — for Program G planning, sequencing, and work-package scope  
-Governance state: G1, G2, and G3 complete  
-Implementation Authorization: Per-work-package authorization only  
-Original planning date: 2026-07-19  
-Owner ratification: Srikanth Mudaliar  
-Ratification date: 2026-07-20  
-Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`  
+Status: Ratified Program G Planning Baseline
+Normative: Yes — for Program G planning, sequencing, and work-package scope
+Governance state: G1, G2, and G3 complete
+Implementation Authorization: Per-work-package authorization only
+Original planning date: 2026-07-19
+Owner ratification: Srikanth Mudaliar
+Ratification date: 2026-07-20
+Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
 Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
 
 ## Scale
@@ -44,4 +44,3 @@ R-001, R-003, R-007, R-011, R-012 and R-018 prevent safe execution planning from
 ## Review cadence
 
 Review at G1 disposition, each increment readiness gate, material ADR change, security incident, failed outcome or major scope/capacity change. Closed risks retain evidence and may create reviewed Learning.
-

@@ -1,8 +1,8 @@
 # Program G Planning Baseline Ratification
 
-Status: Ratified planning baseline  
-Owner: Srikanth Mudaliar  
-Ratification date: 2026-07-20  
+Status: Ratified planning baseline
+Owner: Srikanth Mudaliar
+Ratification date: 2026-07-20
 Import baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
 
 ## Decision
