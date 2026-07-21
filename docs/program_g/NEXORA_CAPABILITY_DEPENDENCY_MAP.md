@@ -22,7 +22,7 @@ G1/G2/G3 governance and released baseline
          |      |
          |      +-> WP-005 Canonical coverage/stewardship
          |             |
-         |             +-> WP-006 Business Service registry
+         |             +-> WP-006 Enterprise Metadata & Registry Platform
          |             |      |
          |             |      +-> WP-007 Service posture
          |             |
@@ -55,6 +55,12 @@ G1/G2/G3 governance and released baseline
 WP-007/009/011/014/015 --------------------------> WP-019 Experiences
 Delivered slices --------------------------------> WP-020 Scale/operations
 ```
+
+Owner amendment dated 2026-07-21 expands WP-006 to the Enterprise Metadata &
+Registry Platform, with Business Service Registry as Phase 1. WP-005's
+engineering dependency is satisfied, permitting WP-006 engineering in
+parallel. The dependency edge remains a release gate: WP-006 cannot merge or
+release until WP-005 release validation completes and WP-005 closes.
 
 ## Critical path
 

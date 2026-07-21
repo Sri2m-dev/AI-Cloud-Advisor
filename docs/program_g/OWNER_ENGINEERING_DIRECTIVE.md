@@ -13,6 +13,7 @@
 | Released foundation | `v1.2.0-data-fabric` |
 | Decision | Approved |
 | Implementation authorization | Standing authority subject to this directive |
+| Latest amendment | 2026-07-21 — WP-006 EMRP scope and dependency reclassification |
 
 ## Purpose
 
@@ -56,7 +57,7 @@ Standing engineering authority covers these catalog work packages:
 
 ```text
 WP-005  Canonical coverage and stewardship
-WP-006  Business Service registry
+WP-006  Enterprise Metadata & Registry Platform (EMRP)
 WP-007  Business Service posture product
 WP-008  Knowledge projection control
 WP-009  Governed query/explainability contracts
@@ -178,8 +179,10 @@ proposals, deferred scope, and unexecuted live scenarios.
   and WP-004 are closed. Its previously identified freshness, authority, and
   durable stewardship requirements become implementation acceptance work, not
   separate activation paperwork.
-- WP-006 remains blocked until WP-005 is closed and ADR-024 is accepted and
-  available. This directive does not change that result.
+- Owner amendment dated 2026-07-21 accepts ADR-024 and reclassifies WP-006's
+  WP-005 dependency. WP-005 engineering is complete, so WP-006 engineering may
+  proceed in parallel. WP-006 merge and release remain blocked until WP-005
+  release validation completes and WP-005 closes.
 - Every later package remains subject to the exact dependency edges in the
   ratified catalog and dependency map.
 - Only one new package should be active at a time unless the dependency map
@@ -249,7 +252,8 @@ STANDING ENGINEERING AUTHORITY
 ELIGIBLE TO BEGIN ON A DEDICATED FEATURE BRANCH
 
 WP-006:
-BLOCKED BY WP-005 AND ADR-024
+ENGINEERING AUTHORIZED BY OWNER AMENDMENT AND ADR-024
+MERGE AND RELEASE BLOCKED BY WP-005 RELEASE VALIDATION AND CLOSURE
 
 WP-007–WP-020:
 AUTHORIZED BY STANDING DIRECTIVE
