@@ -7,7 +7,7 @@
 - Baseline: `main` at `219c14445464958a3ef097bcfcfa4d9029622f69`
 - Owner: Srikanth Mudaliar
 - Local implementation validation: Passed
-- Database application and live validation: **Blocked before application**
+- Database application and live validation: **Owner accepted as post-release operational validation**
 - Hosted CI: Closed; run `29799344669`, job `test`, result `success`
 - Program G review, merge, and WP-005 closure: Open
 
@@ -245,3 +245,46 @@ Current governance state:
 - WP-005: **OPEN**
 - WP-006: **NOT AUTHORIZED**
 - WP-006 blockers: WP-005 closure and ADR-024 resolution
+
+## OWNER ACCEPTANCE
+
+Decision date: 2026-07-21.
+
+Decision authority: Srikanth Mudaliar, Product Owner.
+
+The Product Owner formally accepts:
+
+- engineering implementation;
+- technical review;
+- technical-review remediation;
+- automated validation and regression evidence;
+- hosted CI validation; and
+- documentation and implementation evidence.
+
+Engineering is accepted. Implementation is accepted. Evidence is accepted.
+Hosted CI is accepted. The residual controlled database validation is accepted
+by the Product Owner and reclassified as **Post-release operational
+validation**. It is no longer a blocker for WP-005 closure or Program G
+progression.
+
+No production, customer, shared-development, or other database was accessed by
+the WP-005 validation attempt. Migrations `0019` and `0020` have not been
+applied. The residual operational validation shall be completed during
+controlled-environment commissioning and tracked separately from WP-005.
+
+This Owner decision supersedes the blocking status recorded in the historical
+"WP-005 Release Validation" handoff above without deleting or rewriting that
+evidence.
+
+### Closure Status
+
+- WP-005: **CLOSED**
+- Engineering: **CLOSED**
+- Release Validation: **OWNER ACCEPTED**
+- Operational Validation: **POST-RELEASE ACTIVITY**
+- PR #18: **OPEN — DRAFT** at the time this decision was recorded; authorized
+  to move to ready-for-review after this commit is pushed and hosted checks pass
+- WP-006 engineering: **AUTHORIZED** under the Owner Change Decision and
+  accepted ADR-024
+- WP-006 merge: **AUTHORIZED AFTER NORMAL REVIEW**
+- WP-005 is no longer a blocking dependency for WP-006
