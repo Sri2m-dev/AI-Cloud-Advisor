@@ -29,15 +29,16 @@ create table if not exists data_fabric.stewardship_audit_events (
  organization_id text not null, tenant_id text not null, event_type text not null,
  from_state text, to_state text not null, actor text not null, rationale text,
  evidence_references jsonb not null default '[]', correlation_id text not null,
- idempotency_key text not null, payload_hash text not null, occurred_at timestamptz not null default now(), schema_version integer not null default 1,
- unique(organization_id,tenant_id,idempotency_key),
+ idempotency_key text not null, payload_hash text not null, resulting_revision integer not null check (resulting_revision > 0),
+ occurred_at timestamptz not null default now(), schema_version integer not null default 1,
+ unique(organization_id,tenant_id,event_type,idempotency_key),
  foreign key(review_id,organization_id,tenant_id)
    references data_fabric.stewardship_review_items(review_id,organization_id,tenant_id));
 create index if not exists stewardship_audit_review_idx on data_fabric.stewardship_audit_events(organization_id,tenant_id,review_id,occurred_at);
 create or replace function data_fabric.prevent_stewardship_audit_mutation() returns trigger language plpgsql as $$ begin raise exception 'stewardship_audit_events is append-only'; end; $$;
 do $$ begin
- if not exists(select 1 from pg_trigger where tgname='prevent_stewardship_audit_update') then create trigger prevent_stewardship_audit_update before update on data_fabric.stewardship_audit_events for each row execute function data_fabric.prevent_stewardship_audit_mutation(); end if;
- if not exists(select 1 from pg_trigger where tgname='prevent_stewardship_audit_delete') then create trigger prevent_stewardship_audit_delete before delete on data_fabric.stewardship_audit_events for each row execute function data_fabric.prevent_stewardship_audit_mutation(); end if;
+ if not exists(select 1 from pg_trigger where tgname='prevent_stewardship_audit_update' and tgrelid='data_fabric.stewardship_audit_events'::regclass) then create trigger prevent_stewardship_audit_update before update on data_fabric.stewardship_audit_events for each row execute function data_fabric.prevent_stewardship_audit_mutation(); end if;
+ if not exists(select 1 from pg_trigger where tgname='prevent_stewardship_audit_delete' and tgrelid='data_fabric.stewardship_audit_events'::regclass) then create trigger prevent_stewardship_audit_delete before delete on data_fabric.stewardship_audit_events for each row execute function data_fabric.prevent_stewardship_audit_mutation(); end if;
 end $$;
 alter table data_fabric.stewardship_audit_events enable row level security;
 comment on table data_fabric.stewardship_audit_events is 'WP-005 immutable tenant-scoped stewardship audit history.';
@@ -55,8 +56,8 @@ begin
  return new;
 end $$;
 do $$ begin
- if not exists(select 1 from pg_trigger where tgname='enforce_stewardship_policy_revision') then create trigger enforce_stewardship_policy_revision before update on data_fabric.stewardship_policies for each row execute function data_fabric.enforce_stewardship_revision(); end if;
- if not exists(select 1 from pg_trigger where tgname='enforce_stewardship_review_revision') then create trigger enforce_stewardship_review_revision before update on data_fabric.stewardship_review_items for each row execute function data_fabric.enforce_stewardship_revision(); end if;
+ if not exists(select 1 from pg_trigger where tgname='enforce_stewardship_policy_revision' and tgrelid='data_fabric.stewardship_policies'::regclass) then create trigger enforce_stewardship_policy_revision before update on data_fabric.stewardship_policies for each row execute function data_fabric.enforce_stewardship_revision(); end if;
+ if not exists(select 1 from pg_trigger where tgname='enforce_stewardship_review_revision' and tgrelid='data_fabric.stewardship_review_items'::regclass) then create trigger enforce_stewardship_review_revision before update on data_fabric.stewardship_review_items for each row execute function data_fabric.enforce_stewardship_revision(); end if;
 end $$;
 
 comment on table data_fabric.stewardship_policies is 'WP-005 tenant-scoped versioned authority and freshness policies. RLS enabled with no anonymous policy.';
