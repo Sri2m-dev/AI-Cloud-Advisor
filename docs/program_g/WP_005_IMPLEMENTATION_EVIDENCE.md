@@ -7,8 +7,48 @@
 - Baseline: `main` at `219c14445464958a3ef097bcfcfa4d9029622f69`
 - Owner: Srikanth Mudaliar
 - Local implementation validation: Passed
-- Database application and live validation: **Not performed**
+- Database application and live validation: **Blocked before application**
 - Hosted CI, Program G review, merge, and closure: Pending
+
+## Controlled Database Validation Attempt
+
+On 2026-07-21, controlled validation stopped before database access or
+migration application because the required disposable-environment
+preconditions were not established.
+
+- `WP005_SUPABASE_TEST_URL`: absent
+- `WP005_SUPABASE_RUN_INTEGRATION`: absent
+- `WP005_SUPABASE_TEST_SERVICE_ROLE_KEY`: absent
+- The configured P3 validation endpoint was not treated as a substitute: it
+  was not independently confirmed to be disposable, free of customer data,
+  isolated from shared development, and supported by a verified reset or
+  restore procedure for this run.
+- Database reads: 0
+- Database writes: 0
+- RPC calls: 0
+- Migrations applied: no
+- Production, customer, and shared-development access: none
+
+The branch and implementation preconditions did pass:
+
+- Branch: `feature/wp-005-enterprise-stewardship`
+- HEAD: `69fe1a248641fe1e888b188b6aecba333f1403c4`
+- Python: 3.11.9
+- Worktree was clean at the start of the review.
+
+## Migration Hashes
+
+- Pre-validation draft `0019_create_stewardship_persistence.sql`:
+  `A8925BFB81B116682D9331647E87E0476DFE54F4FDF6D67C9A779AE9BAAE20EE`
+- Pre-validation draft `0020_create_stewardship_rpcs.sql`:
+  `A3B50402BF8B8C9CE5810EC83C69A3C3AC02CA8EE3340BC65E923BD7DB665311`
+- Remediated `0019_create_stewardship_persistence.sql`:
+  `37EE671532BFBF7E43F7543411B1F3EB6839D4B01A953EC576AC0EA56AA5A6C0`
+- Remediated `0020_create_stewardship_rpcs.sql`:
+  `5F9854A2E8E2CEE3EAD57F8289E2EBBAA92F7B9A124D83D1D48009704CD45301`
+
+The earlier hashes identify unapplied pre-validation drafts. Neither draft nor
+remediated migration has been applied to any database by this validation run.
 
 ## Scope Implemented
 
@@ -42,16 +82,66 @@ were modified.
 - `PUBLIC` execute is revoked and `service_role` execute is explicit.
 - Migrations are manual artifacts and were not executed by application code.
 
+### Technical-review findings
+
+The static review confirmed the approved three-table boundary, mandatory and
+indexed tenant scope, tenant-safe audit foreign key, lifecycle constraints,
+exact revision increment, immutable identities, append-only audit triggers,
+RLS without permissive policies, safe fixed `search_path`, no dynamic SQL,
+revoked `PUBLIC` execution, and explicit `service_role` execution.
+
+The review identified three release-blocking issues:
+
+1. Transition replay is not deterministic. On an idempotency-key replay,
+   `stewardship_transition_review` reads and returns the review item's *current*
+   state and revision. If later transitions occurred, this differs from the
+   original command result represented by the matched audit event.
+2. Concurrent use of the same idempotency key is not handled as deterministic
+   replay. Both RPCs perform a non-locking read before mutation. Racing requests
+   can reach unique-constraint or revision errors instead of returning the
+   already committed result when payload hashes match.
+3. Trigger installation checks only `pg_trigger.tgname`. An unrelated trigger
+   with the same name on another relation could cause the required WP-005
+   protection trigger to be skipped. The existence check must also bind to the
+   intended table.
+
+All three findings were remediated in place because the migrations remain
+unapplied:
+
+1. Immutable audit events now persist `resulting_revision`. Create and
+   transition responses, including replays, are reconstructed exclusively from
+   the matched immutable audit event and include the event identifier, original
+   from/to states, resulting revision, timestamp, idempotency key, request hash,
+   and replay indicator. Replay no longer reads the mutable current review row.
+2. Both RPCs acquire a transaction-level advisory lock derived from the
+   organization, tenant, operation type, and idempotency key before looking up
+   prior evidence or mutating state. Identical concurrent requests serialize
+   and replay the committed immutable result; a different hash remains an
+   idempotency conflict; a distinct key with a stale revision remains a revision
+   conflict. Idempotency uniqueness now includes operation type.
+3. Every trigger existence query now binds both `tgname` and the exact target
+   relation through `tgrelid = '<qualified table>'::regclass`. A same-named
+   trigger on another relation cannot suppress installation, and migration
+   reruns do not duplicate the intended trigger.
+
+Focused tests cover replay after a later lifecycle transition, 16 concurrent
+identical transition attempts converging on one mutation/audit event, hash
+conflict versus distinct-key revision conflict, immutable-result SQL structure,
+operation-scoped uniqueness, advisory locking, and all four table-qualified
+trigger checks. No migration was applied during remediation.
+
 ## Local Validation
 
 | Gate | Result |
 | --- | --- |
-| WP-005 focused tests | 7 passed |
-| WP-001–WP-005 combined focused gates | 53 passed |
-| Full suite | 373 passed, 5 expected skips, 0 failed |
+| WP-005 focused tests | 9 passed |
+| WP-001–WP-005 combined focused gates | 55 passed |
+| Full suite | 375 passed, 5 expected skips, 0 failed |
 | P3 non-secret gate | 94 passed, 0 failed |
+| Gated integration collection | 5 collected |
+| Secret-free gated integrations | 5 expected skips, 0 failed |
 | Ruff for changed Python | Passed |
-| Focused compile | Passed |
+| Active-source compile/import | 1,113 files compiled; imports passed |
 | `pip check` | Passed |
 | Git whitespace check | Passed |
 
@@ -80,3 +170,14 @@ WP-005 is not ready to merge or close until:
 6. final hosted CI passes, Program G approves merge, and post-merge CI/CD passes.
 
 No database operation should proceed merely because this document exists.
+
+## Disposable Environment Plan
+
+The preferred next target is an isolated local Supabase-compatible stack. A
+dedicated temporary Supabase project or faithful ephemeral PostgreSQL instance
+is acceptable only when it is exclusively assigned to WP-005, contains no
+customer or production data, has isolated credentials, supports a demonstrated
+reset or restore, and permits manual migration execution with application
+auto-migration disabled. Its non-secret identifier must be recorded before any
+connection. No suitable target is currently configured, so database validation
+remains blocked.
