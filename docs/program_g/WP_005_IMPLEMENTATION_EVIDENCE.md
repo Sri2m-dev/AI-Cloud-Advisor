@@ -8,7 +8,8 @@
 - Owner: Srikanth Mudaliar
 - Local implementation validation: Passed
 - Database application and live validation: **Blocked before application**
-- Hosted CI, Program G review, merge, and closure: Pending
+- Hosted CI: Closed; run `29799344669`, job `test`, result `success`
+- Program G review, merge, and WP-005 closure: Open
 
 ## Controlled Database Validation Attempt
 
@@ -181,3 +182,66 @@ reset or restore, and permits manual migration execution with application
 auto-migration disabled. Its non-secret identifier must be recorded before any
 connection. No suitable target is currently configured, so database validation
 remains blocked.
+
+## WP-005 Engineering Closure and Release Validation Handoff
+
+Engineering closure date: 2026-07-21.
+
+Final engineering HEAD:
+`baa44a2bb5aa56310e3a6fc11c7fab5bc2db8336`.
+
+Hosted CI run `29799344669`, job `test`, completed successfully against the
+final engineering HEAD. The feature branch and remote branch were synchronized
+at that commit. The following activities are **CLOSED**:
+
+1. Engineering implementation
+2. Technical review
+3. Technical-review remediation
+4. Local automated validation
+5. Hosted CI verification
+6. Documentation and implementation evidence
+7. Branch synchronization
+8. Engineering feature development
+9. GitHub authentication issue
+10. Migration offline review
+
+Feature development is frozen. Migrations `0019` and `0020` remain committed,
+reviewed, and unapplied. No database was accessed: zero reads, zero writes, and
+zero RPC calls. Historical findings and both the superseded and remediated
+migration hashes remain recorded above.
+
+### WP-005 Release Validation
+
+Status: **BLOCKED**.
+
+Blocker: no approved disposable non-production database environment is
+available.
+
+This consolidated milestone contains exactly the remaining activities:
+
+1. Establish an approved disposable non-production database environment.
+2. Apply migrations `0019` and `0020` manually.
+3. Validate RLS and database privileges.
+4. Validate tenant isolation.
+5. Validate replay and idempotency on PostgreSQL.
+6. Validate revision and lifecycle behavior.
+7. Validate concurrency behavior.
+8. Validate audit immutability.
+9. Validate reset, rollback, or environment destruction.
+10. Update implementation evidence with live validation results.
+11. Mark PR #18 ready for Program G review.
+12. Complete final Program G review.
+13. Authorize merge.
+14. Merge PR #18.
+15. Perform post-merge validation.
+16. Close WP-005.
+17. Resolve ADR-024.
+18. Authorize WP-006.
+
+Current governance state:
+
+- PR #18: **OPEN — DRAFT**
+- Merge: **NOT AUTHORIZED**
+- WP-005: **OPEN**
+- WP-006: **NOT AUTHORIZED**
+- WP-006 blockers: WP-005 closure and ADR-024 resolution
