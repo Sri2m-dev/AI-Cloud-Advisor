@@ -177,7 +177,7 @@ def test_migrations_have_exact_tables_rls_security_and_append_only_controls():
         "before update on data_fabric.stewardship_audit_events" in schema
         and "before delete on data_fabric.stewardship_audit_events" in schema
     )
-    assert rpc.count("security definer set search_path=data_fabric,pg_temp") == 2
+    assert rpc.count("security definer set search_path = data_fabric, pg_temp") == 2
     assert rpc.count("revoke all on function") == 2 and rpc.count("grant execute on function") == 2
 
 

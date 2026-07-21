@@ -1,6 +1,6 @@
 -- WP-005 atomic stewardship RPCs. Manual application only.
 create or replace function data_fabric.stewardship_create_review(p_request jsonb) returns jsonb
-language plpgsql security definer set search_path=data_fabric,pg_temp as $$
+language plpgsql security definer set search_path = data_fabric, pg_temp as $$
 declare v_org text:=p_request#>>'{tenant_context,organization_id}'; v_tenant text:=p_request#>>'{tenant_context,tenant_id}';
  v_actor text:=p_request#>>'{authorization,subject_id}'; v_key text:=p_request->>'idempotency_key'; v_hash text:=p_request->>'payload_hash';
  v_corr text:=p_request->>'correlation_id'; v_item jsonb:=p_request->'review_item'; v_id uuid; v_existing data_fabric.stewardship_audit_events%rowtype;
@@ -22,7 +22,7 @@ begin
 end $$;
 
 create or replace function data_fabric.stewardship_transition_review(p_request jsonb) returns jsonb
-language plpgsql security definer set search_path=data_fabric,pg_temp as $$
+language plpgsql security definer set search_path = data_fabric, pg_temp as $$
 declare v_org text:=p_request#>>'{tenant_context,organization_id}'; v_tenant text:=p_request#>>'{tenant_context,tenant_id}';
  v_actor text:=p_request#>>'{authorization,subject_id}'; v_key text:=p_request->>'idempotency_key'; v_hash text:=p_request->>'payload_hash'; v_corr text:=p_request->>'correlation_id';
  v_id uuid:=(p_request->>'review_id')::uuid; v_expected integer:=(p_request->>'expected_revision')::integer; v_target text:=p_request->>'target_state';
