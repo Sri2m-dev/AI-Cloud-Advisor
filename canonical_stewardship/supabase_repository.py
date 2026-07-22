@@ -6,6 +6,7 @@ from typing import Any
 from auth.tenant_authorization import TenantAuthorizationContext
 from data_fabric.adapters.supabase.client import SupabaseDataFabricClient
 
+from .exceptions import StewardshipRepositoryInvariantError
 from .models import ReviewItem, ReviewState
 
 
@@ -57,7 +58,12 @@ class SupabaseStewardshipRepository:
             },
         }
         row = self.client.rpc("stewardship_create_review", {"p_request": request}).data
-        return self.get(str(row["review_id"])) or item
+        persisted = self.get(str(row["review_id"]))
+        if persisted is None:
+            raise StewardshipRepositoryInvariantError(
+                "create RPC succeeded but the scoped review row could not be verified"
+            )
+        return persisted
 
     def get(self, review_id: str) -> ReviewItem | None:
         response = self.client.execute(
@@ -108,18 +114,12 @@ class SupabaseStewardshipRepository:
             "rationale": rationale,
         }
         row = self.client.rpc("stewardship_transition_review", {"p_request": request}).data
-        return self.get(str(row["review_id"])) or ReviewItem(
-            str(row["review_id"]),
-            self.context.organization_id,
-            self.context.tenant_id,
-            "",
-            "",
-            "",
-            "",
-            "",
-            ReviewState(row["state"]),
-            int(row["revision"]),
-        )
+        persisted = self.get(str(row["review_id"]))
+        if persisted is None:
+            raise StewardshipRepositoryInvariantError(
+                "transition RPC succeeded but the scoped review row could not be verified"
+            )
+        return persisted
 
     @staticmethod
     def _from_row(row: dict[str, Any]) -> ReviewItem:

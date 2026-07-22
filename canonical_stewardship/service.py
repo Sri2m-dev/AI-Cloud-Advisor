@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Iterable, Protocol
 
+from .exceptions import StewardshipPolicyScopeError
 from .models import AuthorityRule, CoverageResult, FreshnessPolicy, ReviewItem, ReviewState
 
 
@@ -69,6 +70,12 @@ class StewardshipService:
         now: datetime | None = None,
     ) -> CoverageResult:
         now = now or datetime.now(timezone.utc)
+        requested_scope = (organization_id, tenant_id, domain)
+        policy_scope = (policy.organization_id, policy.tenant_id, policy.domain)
+        if policy_scope != requested_scope:
+            raise StewardshipPolicyScopeError(
+                "freshness policy scope does not match requested organization, tenant, and domain"
+            )
         rows = list(inventory)
         eligible = [r for r in rows if not r.get("excluded") and r.get("active", True)]
         fresh = {k: 0 for k in ("fresh", "warning", "stale", "escalated", "unknown")}

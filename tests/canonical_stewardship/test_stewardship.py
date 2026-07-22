@@ -9,6 +9,10 @@ from threading import Lock
 import pytest
 
 from auth.tenant_authorization import TenantAuthorizationContext, TenantAuthorizationError
+from canonical_stewardship.exceptions import (
+    StewardshipPolicyScopeError,
+    StewardshipRepositoryInvariantError,
+)
 from canonical_stewardship.models import AuthorityRule, FreshnessPolicy, ReviewItem, ReviewState
 from canonical_stewardship.service import StewardshipService
 from canonical_stewardship.supabase_repository import SupabaseStewardshipRepository
@@ -160,6 +164,37 @@ def test_freshness_policy_rejects_non_monotonic_thresholds():
             timedelta(hours=1),
             timedelta(hours=3),
             timedelta(hours=4),
+        )
+
+
+@pytest.mark.parametrize(
+    ("organization_id", "tenant_id", "domain"),
+    [
+        ("other-org", "tenant-a", "technology"),
+        ("org", "tenant-b", "technology"),
+        ("org", "tenant-a", "applications"),
+    ],
+)
+def test_coverage_rejects_policy_outside_canonical_scope(
+    organization_id, tenant_id, domain
+):
+    policy = FreshnessPolicy(
+        "org",
+        "tenant-a",
+        "technology",
+        timedelta(hours=1),
+        timedelta(hours=2),
+        timedelta(hours=4),
+        timedelta(hours=8),
+    )
+    with pytest.raises(StewardshipPolicyScopeError, match="policy scope"):
+        StewardshipService.coverage(
+            organization_id=organization_id,
+            tenant_id=tenant_id,
+            domain=domain,
+            inventory=[],
+            policy=policy,
+            now=NOW,
         )
 
 
@@ -382,3 +417,43 @@ def test_supabase_adapter_denies_cross_tenant_before_rpc():
             item("tenant-b"), actor="steward", idempotency_key="k", correlation_id="c"
         )
     assert client.calls == []
+
+
+def test_supabase_adapter_fails_closed_when_created_row_cannot_be_verified():
+    context = TenantAuthorizationContext(
+        "org",
+        "tenant-a",
+        "steward",
+        "user",
+        permissions=frozenset({"stewardship.review.create"}),
+        source_boundary="stewardship",
+    )
+    client = Client({})
+    with pytest.raises(StewardshipRepositoryInvariantError, match="create RPC succeeded"):
+        SupabaseStewardshipRepository(client, context).create_review(
+            item(), actor="steward", idempotency_key="k", correlation_id="c"
+        )
+    assert [call[0] for call in client.calls] == ["stewardship_create_review"]
+
+
+def test_supabase_adapter_fails_closed_when_transitioned_row_cannot_be_verified():
+    context = TenantAuthorizationContext(
+        "org",
+        "tenant-a",
+        "steward",
+        "user",
+        permissions=frozenset({"stewardship.review.transition"}),
+        source_boundary="stewardship",
+    )
+    client = Client({})
+    with pytest.raises(StewardshipRepositoryInvariantError, match="transition RPC succeeded"):
+        SupabaseStewardshipRepository(client, context).transition(
+            "r1",
+            ReviewState.CLASSIFIED,
+            expected_revision=1,
+            actor="steward",
+            rationale="classify",
+            idempotency_key="k",
+            correlation_id="c",
+        )
+    assert [call[0] for call in client.calls] == ["stewardship_transition_review"]

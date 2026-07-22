@@ -135,14 +135,14 @@ trigger checks. No migration was applied during remediation.
 
 | Gate | Result |
 | --- | --- |
-| WP-005 focused tests | 9 passed |
-| WP-001–WP-005 combined focused gates | 55 passed |
-| Full suite | 375 passed, 5 expected skips, 0 failed |
+| WP-005 focused tests | 14 passed |
+| WP-001–WP-005 combined focused gates | 60 passed |
+| Full suite | 380 passed, 5 expected skips, 0 failed |
 | P3 non-secret gate | 94 passed, 0 failed |
 | Gated integration collection | 5 collected |
 | Secret-free gated integrations | 5 expected skips, 0 failed |
 | Ruff for changed Python | Passed |
-| Active-source compile/import | 1,113 files compiled; imports passed |
+| Active-source compile/import | 1,114 files compiled; imports passed |
 | `pip check` | Passed |
 | Git whitespace check | Passed |
 
@@ -288,3 +288,46 @@ evidence.
   accepted ADR-024
 - WP-006 merge: **AUTHORIZED AFTER NORMAL REVIEW**
 - WP-005 is no longer a blocking dependency for WP-006
+
+## Final Program G Review Remediation
+
+Review date: 2026-07-22.
+
+The formal Program G review identified two high-severity correctness defects
+and requested changes before merge:
+
+1. Coverage evaluation accepted organization, tenant, and domain separately
+   from `FreshnessPolicy` without verifying the policy's canonical scope.
+2. The Supabase repository returned input or synthetic domain objects when a
+   successful RPC could not be verified through the subsequent tenant-scoped
+   read.
+
+The remediation is limited to those findings:
+
+- Coverage evaluation now requires the policy's canonical organization,
+  tenant, and domain identity to exactly match the requested scope. Any mismatch
+  raises `StewardshipPolicyScopeError` before inventory evaluation.
+- Create and transition operations now require the post-RPC tenant-scoped read
+  to return the persisted review. Missing rows raise
+  `StewardshipRepositoryInvariantError`; no domain object is fabricated.
+- Three negative policy tests independently cover organization, tenant, and
+  domain mismatch.
+- Two repository tests prove create and transition fail closed after an RPC
+  when the persisted row is not visible.
+
+No migration, RPC, schema, connector, API, runtime, UI, authentication, AI, or
+database behavior was changed. No database was accessed. Migrations `0019` and
+`0020` remain unapplied.
+
+Validation after this remediation:
+
+- WP-005 focused: 14 passed
+- WP-001 through WP-005 combined: 60 passed
+- Full suite: 380 passed, 5 expected skips, 0 failures
+- P3 gate: 94 passed
+- Gated integrations: 5 collected and 5 expected secret-free skips
+- Ruff, active-source compile/import, `pip check`, and `git diff --check`:
+  passed
+
+WP-005 is resubmitted for final Program G review. This remediation record does
+not itself authorize merge.
