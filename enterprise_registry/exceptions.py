@@ -23,3 +23,15 @@ class BusinessServiceVersionConflictError(BusinessServiceRegistryError):
 
 class BusinessServiceRelationshipError(BusinessServiceValidationError):
     """Raised when a relationship is incompatible or crosses scope."""
+
+
+class EMRPValidationError(BusinessServiceRegistryError, ValueError):
+    """Raised when EMRP orchestration rejects canonical metadata."""
+
+
+class EMRPTaxonomyError(EMRPValidationError):
+    """Raised when a taxonomy assignment is invalid."""
+
+
+class EMRPRelationshipError(EMRPValidationError):
+    """Raised when canonical relationship topology is invalid."""
