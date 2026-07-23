@@ -22,6 +22,8 @@ P3 migration files are reviewed SQL artifacts. They are not executed automatical
 16. `0016_create_idempotency_state_rpcs.sql`
 17. `0017_create_atomic_entity_write_rpc.sql`
 18. `0018_create_atomic_relationship_write_rpc.sql`
+19. `0019_create_stewardship_persistence.sql`
+20. `0020_create_stewardship_rpcs.sql`
 
 ## Manual Application
 

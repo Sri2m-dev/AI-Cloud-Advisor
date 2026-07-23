@@ -52,6 +52,8 @@ EXPECTED_MIGRATIONS = [
     "0016_create_idempotency_state_rpcs.sql",
     "0017_create_atomic_entity_write_rpc.sql",
     "0018_create_atomic_relationship_write_rpc.sql",
+    "0019_create_stewardship_persistence.sql",
+    "0020_create_stewardship_rpcs.sql",
 ]
 
 TABLE_MIGRATIONS = {
@@ -75,6 +77,7 @@ PRIVILEGED_RPC_FILES = [
     "0016_create_idempotency_state_rpcs.sql",
     "0017_create_atomic_entity_write_rpc.sql",
     "0018_create_atomic_relationship_write_rpc.sql",
+    "0020_create_stewardship_rpcs.sql",
 ]
 
 
@@ -96,7 +99,7 @@ def test_expected_adapter_classes_import_and_match_contracts():
     assert hasattr(SupabaseAtomicWriteExecutor, "execute_relationship_write")
 
 
-def test_migration_sequence_complete_0001_through_0018():
+def test_migration_sequence_complete_0001_through_0020():
     assert sorted(path.name for path in MIGRATIONS.glob("*.sql")) == EXPECTED_MIGRATIONS
 
 
