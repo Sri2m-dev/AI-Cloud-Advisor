@@ -11,11 +11,11 @@ revoke truncate, references, trigger
 on all tables in schema public
 from anon, authenticated;
 
--- Prevent future tables created by the two Supabase public-schema owner roles
--- from restoring structural privileges through historical GRANT ALL defaults.
+-- Prevent future application tables created by the normal postgres migration
+-- owner from restoring structural privileges through historical GRANT ALL
+-- defaults. supabase_admin is Supabase-managed and cannot be altered by the
+-- supported linked migration role.
 alter default privileges for role postgres in schema public
-    revoke truncate, references, trigger on tables from anon, authenticated;
-alter default privileges for role supabase_admin in schema public
     revoke truncate, references, trigger on tables from anon, authenticated;
 
 -- DEV has RLS enabled across public application tables. Views are excluded

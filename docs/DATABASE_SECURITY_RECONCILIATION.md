@@ -94,10 +94,14 @@ grants and policies.
 `backup_unused/backup.sql` additionally records historical public-schema
 default privileges for both `postgres` and `supabase_admin` that grant all
 table privileges to `anon` and `authenticated` (lines 6319–6332). It also
-records broad defaults for sequences and functions. The security migration
-corrects only the confirmed table structural privileges; function and sequence
-privilege reconciliation remains a separate review item because current
-requirements are not fully documented.
+records broad defaults for sequences and functions. Normal linked Supabase
+migrations cannot modify `supabase_admin` default privileges: that role is
+Supabase-managed/internal and is not the normal owner for Nexora application
+objects. Nexora application objects must be created through normal migrations
+under `postgres` ownership, whose table defaults are hardened here. Any object
+unexpectedly owned or created by `supabase_admin` requires a separate ownership
+and security review. Function and sequence privilege reconciliation remains a
+separate review item because current requirements are not fully documented.
 
 ### Schema and bootstrap SQL
 
@@ -139,6 +143,9 @@ mechanisms:
    `backup_unused/backup.sql` records `ALTER DEFAULT PRIVILEGES ... GRANT ALL
    ON TABLES` for both `postgres` and `supabase_admin` in `public`. Objects
    created later by either owner inherit the same broad table privilege set.
+   Hosted evidence confirms Nexora's protected application tables are owned by
+   `postgres`; `supabase_admin` is an internal managed role outside the
+   supported linked-migration privilege boundary.
 
 Supabase managed defaults likely established or preserved those default ACLs,
 but the repository evidence is the pg_dump output, not an assumption about the
@@ -185,7 +192,10 @@ The migration is transactional and rerunnable. It:
 - revokes only `TRUNCATE`, `REFERENCES`, and `TRIGGER` from `anon` and
   `authenticated` on current public tables;
 - removes those structural privileges from future table defaults for
-  `postgres` and `supabase_admin`;
+  `postgres`, the normal Nexora application-migration owner;
+- does not attempt the unsupported mutation of Supabase-managed
+  `supabase_admin` defaults; objects unexpectedly created by that internal role
+  require separate ownership/security review;
 - enables RLS on public ordinary/partitioned tables;
 - removes repository-evidenced legacy permissive policies;
 - recreates the seven confirmed DEV tenant policies;
