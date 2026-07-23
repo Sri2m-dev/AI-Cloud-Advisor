@@ -16,6 +16,11 @@ from enterprise_registry.models import (
     canonical_business_service_id,
     create_business_service,
 )
+from enterprise_registry.repository import (
+    BusinessServiceRepository,
+    InMemoryBusinessServiceRepository,
+)
+from enterprise_registry.service import BusinessServiceRegistry
 
 __all__ = [
     "BusinessCriticality",
@@ -23,11 +28,14 @@ __all__ = [
     "BusinessServiceLifecycle",
     "BusinessServiceNotFoundError",
     "BusinessServiceRegistryError",
+    "BusinessServiceRegistry",
+    "BusinessServiceRepository",
     "BusinessServiceRelationshipError",
     "BusinessServiceType",
     "BusinessServiceValidationError",
     "BusinessServiceVersionConflictError",
     "DuplicateBusinessServiceError",
+    "InMemoryBusinessServiceRepository",
     "canonical_business_service_id",
     "create_business_service",
 ]
