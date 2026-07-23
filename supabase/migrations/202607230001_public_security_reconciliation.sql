@@ -113,20 +113,19 @@ on public.report_history
 for select
 to authenticated
 using (
-    org_id = (
+    org_id is not null
+    and tenant_id is not null
+    and org_id = (
         select u.org_id::text
         from public.users u
         where lower(u.email) = lower(auth.jwt() ->> 'email')
         limit 1
     )
-    and (
-        tenant_id is null
-        or tenant_id = (
-            select u.org_id::text
-            from public.users u
-            where lower(u.email) = lower(auth.jwt() ->> 'email')
-            limit 1
-        )
+    and tenant_id = (
+        select u.org_id::text
+        from public.users u
+        where lower(u.email) = lower(auth.jwt() ->> 'email')
+        limit 1
     )
 );
 
@@ -136,20 +135,19 @@ on public.report_history
 for insert
 to authenticated
 with check (
-    org_id = (
+    org_id is not null
+    and tenant_id is not null
+    and org_id = (
         select u.org_id::text
         from public.users u
         where lower(u.email) = lower(auth.jwt() ->> 'email')
         limit 1
     )
-    and (
-        tenant_id is null
-        or tenant_id = (
-            select u.org_id::text
-            from public.users u
-            where lower(u.email) = lower(auth.jwt() ->> 'email')
-            limit 1
-        )
+    and tenant_id = (
+        select u.org_id::text
+        from public.users u
+        where lower(u.email) = lower(auth.jwt() ->> 'email')
+        limit 1
     )
 );
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = (
     ROOT
@@ -46,13 +48,32 @@ def tenant_row_visible(
 def report_row_visible(
     *,
     email: str,
-    row_org_id: str,
+    row_org_id: str | None,
     row_tenant_id: str | None,
     users: list[dict[str, str]],
 ) -> bool:
     resolved = jwt_org(email, users)
-    return row_org_id == resolved and (
-        row_tenant_id is None or row_tenant_id == resolved
+    return (
+        resolved is not None
+        and row_org_id is not None
+        and row_tenant_id is not None
+        and row_org_id == resolved
+        and row_tenant_id == resolved
+    )
+
+
+def report_insert_allowed(
+    *,
+    email: str,
+    row_org_id: str | None,
+    row_tenant_id: str | None,
+    users: list[dict[str, str]],
+) -> bool:
+    return report_row_visible(
+        email=email,
+        row_org_id=row_org_id,
+        row_tenant_id=row_tenant_id,
+        users=users,
     )
 
 
@@ -83,6 +104,56 @@ def test_tenant_a_cannot_insert_recommendations_for_tenant_b() -> None:
         email="tenant-a@example.com",
         row_org_id="org-b",
         users=USERS,
+    )
+
+
+REPORT_HISTORY_SCOPE_CASES = [
+    pytest.param("org-a", None, False, id="valid-org-null-tenant"),
+    pytest.param(None, "org-a", False, id="null-org-valid-tenant"),
+    pytest.param(None, None, False, id="both-null"),
+    pytest.param("org-a", "org-b", False, id="valid-org-wrong-tenant"),
+    pytest.param("org-b", "org-a", False, id="wrong-org-valid-tenant"),
+    pytest.param("org-a", "org-a", True, id="both-valid-and-matching"),
+]
+
+
+@pytest.mark.parametrize(
+    ("row_org_id", "row_tenant_id", "expected"),
+    REPORT_HISTORY_SCOPE_CASES,
+)
+def test_report_history_select_scope(
+    row_org_id: str | None,
+    row_tenant_id: str | None,
+    expected: bool,
+) -> None:
+    assert (
+        report_row_visible(
+            email="tenant-a@example.com",
+            row_org_id=row_org_id,
+            row_tenant_id=row_tenant_id,
+            users=USERS,
+        )
+        is expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("row_org_id", "row_tenant_id", "expected"),
+    REPORT_HISTORY_SCOPE_CASES,
+)
+def test_report_history_insert_scope(
+    row_org_id: str | None,
+    row_tenant_id: str | None,
+    expected: bool,
+) -> None:
+    assert (
+        report_insert_allowed(
+            email="tenant-a@example.com",
+            row_org_id=row_org_id,
+            row_tenant_id=row_tenant_id,
+            users=USERS,
+        )
+        is expected
     )
 
 
