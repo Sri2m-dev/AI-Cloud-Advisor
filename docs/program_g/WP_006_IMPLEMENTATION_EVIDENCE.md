@@ -70,10 +70,10 @@ unchanged.
 
 | Gate | Result |
 | --- | --- |
-| WP-006 focused tests | 14 passed, 0 failed |
-| WP-001–WP-006 combined focused regression | 74 passed, 0 failed |
-| Full pytest collection | 399 collected, 0 errors |
-| Full pytest suite | 394 passed, 5 expected skips, 0 failed |
+| WP-006 focused tests | 16 passed, 0 failed |
+| WP-001–WP-006 combined focused regression | 76 passed, 0 failed |
+| Full pytest collection | 401 collected, 0 errors |
+| Full pytest suite | 396 passed, 5 expected skips, 0 failed |
 | P3 non-secret release gate | 94 passed, 0 failed |
 | Gated P3 integration collection | 5 collected |
 | Secret-free gated P3 integrations | 5 expected skips, 0 failed |
@@ -100,6 +100,7 @@ Focused tests prove:
 - source identity consistency;
 - cross-tenant and cross-organization read isolation;
 - cross-tenant registration rejection;
+- cross-tenant and cross-organization update rejection;
 - tenant-scoped alias and business-domain queries;
 - required ownership and scope validation;
 - ontology-compatible domain validation;

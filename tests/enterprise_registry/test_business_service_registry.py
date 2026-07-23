@@ -177,6 +177,28 @@ def test_cross_tenant_registration_is_rejected(
         registry.register(service(context))
 
 
+@pytest.mark.parametrize(
+    "other_context",
+    [
+        TenantContext("org-1", "tenant-b"),
+        TenantContext("org-2", "tenant-a"),
+    ],
+)
+def test_cross_scope_updates_are_rejected(
+    context: TenantContext,
+    repository: InMemoryBusinessServiceRepository,
+    other_context: TenantContext,
+) -> None:
+    registered = BusinessServiceRegistry(context, repository).register(service(context))
+    updated = replace(
+        registered,
+        entity=replace(registered.entity, version=2),
+    )
+
+    with pytest.raises(DataFabricTenantBoundaryError):
+        repository.update(other_context, updated, expected_version=1)
+
+
 def test_domain_query_and_alias_resolution_are_tenant_scoped(
     context: TenantContext,
     repository: InMemoryBusinessServiceRepository,
