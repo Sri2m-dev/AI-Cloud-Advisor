@@ -9,10 +9,10 @@ Decision authority: Srikanth Mudaliar, Owner, Chief Architect, Program Sponsor
 
 The completed P3 foundation provides canonical contracts, identity resolution,
 lineage, provenance, quality, ontology, versioning, and persistence boundaries.
-WP-005 engineering adds stewardship behavior while its controlled database
-release validation remains operationally pending. In this context, the former
-WP-006 Business Service Registry is too narrow to provide consistent registry
-semantics across enterprise technology domains.
+WP-005 adds stewardship behavior and is closed after its Owner-accepted
+operational follow-up and exact-main post-merge validation. In this context,
+the former WP-006 Business Service Registry is too narrow to provide consistent
+registry semantics across enterprise technology domains.
 
 Nexora requires one bounded metadata and registry capability that reuses P3
 canonical authority rather than creating isolated registries with competing
@@ -62,16 +62,12 @@ database implementation is selected by this decision.
 
 ## Dependency Impact
 
-WP-005 is split into two dependency states:
+The WP-005 engineering and release dependencies are satisfied. WP-005
+engineering, technical review, remediation, local validation, evidence, hosted
+CI/CD, and closure are complete.
 
-- **Engineering dependency: satisfied.** WP-005 engineering, technical review,
-  remediation, local validation, evidence, and hosted CI are complete.
-- **Release dependency: open.** WP-005 controlled database validation and
-  closure remain pending.
-
-WP-006 engineering may proceed from synchronized `main`. WP-006 merge and
-release are blocked until WP-005 release validation completes and WP-005
-closes. Later work packages retain their catalog dependencies.
+WP-006 engineering may proceed from synchronized `main`. Later work packages
+retain their catalog dependencies.
 
 ## Implementation Boundaries
 
@@ -116,7 +112,7 @@ is required.
 | Cross-tenant leakage | Mandatory tenant identifiers and WP-002 authorization patterns at applicable boundaries. |
 | Circular or invalid relationships | Direction, taxonomy, cardinality, broken-link, and cycle validation. |
 | Premature runtime coupling | No connectors, APIs, UI, graph runtime, persistence, or runtime wiring in WP-006. |
-| Release dependency bypass | WP-006 merge remains blocked until WP-005 closes. |
+| Dependency bypass | WP-006 work must start from the closed WP-005 baseline and retain all catalog dependencies. |
 
 ## Approval Record
 

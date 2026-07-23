@@ -8,7 +8,7 @@ Original planning date: 2026-07-19
 Owner ratification: Srikanth Mudaliar
 Ratification date: 2026-07-20
 Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
-Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
+Portfolio state: WP-001–WP-005 closed; WP-006 engineering authorized and not started; WP-007–WP-020 dependency-controlled
 
 ## Implementation DAG
 
@@ -57,10 +57,9 @@ Delivered slices --------------------------------> WP-020 Scale/operations
 ```
 
 Owner amendment dated 2026-07-21 expands WP-006 to the Enterprise Metadata &
-Registry Platform, with Business Service Registry as Phase 1. WP-005's
-engineering dependency is satisfied, permitting WP-006 engineering in
-parallel. The dependency edge remains a release gate: WP-006 cannot merge or
-release until WP-005 release validation completes and WP-005 closes.
+Registry Platform, with Business Service Registry as Phase 1. WP-005 is closed;
+the WP-005 dependency is satisfied. WP-006 engineering is authorized and has
+not started.
 
 ## Critical path
 

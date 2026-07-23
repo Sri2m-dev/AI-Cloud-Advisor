@@ -180,9 +180,8 @@ proposals, deferred scope, and unexecuted live scenarios.
   durable stewardship requirements become implementation acceptance work, not
   separate activation paperwork.
 - Owner amendment dated 2026-07-21 accepts ADR-024 and reclassifies WP-006's
-  WP-005 dependency. WP-005 engineering is complete, so WP-006 engineering may
-  proceed in parallel. WP-006 merge and release remain blocked until WP-005
-  release validation completes and WP-005 closes.
+  WP-005 dependency. WP-005 is closed and the dependency is satisfied. WP-006
+  engineering is authorized and has not started.
 - Every later package remains subject to the exact dependency edges in the
   ratified catalog and dependency map.
 - Only one new package should be active at a time unless the dependency map
@@ -253,7 +252,7 @@ ELIGIBLE TO BEGIN ON A DEDICATED FEATURE BRANCH
 
 WP-006:
 ENGINEERING AUTHORIZED BY OWNER AMENDMENT AND ADR-024
-MERGE AND RELEASE BLOCKED BY WP-005 RELEASE VALIDATION AND CLOSURE
+NOT STARTED
 
 WP-007–WP-020:
 AUTHORIZED BY STANDING DIRECTIVE

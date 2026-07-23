@@ -8,7 +8,7 @@ Original planning date: 2026-07-19
 Owner ratification: Srikanth Mudaliar
 Ratification date: 2026-07-20
 Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
-Portfolio state: WP-001–WP-004 closed; WP-005 engineering complete with release validation open; WP-006 engineering authorized with merge blocked by WP-005 closure; WP-007–WP-020 dependency-controlled
+Portfolio state: WP-001–WP-005 closed; WP-006 engineering authorized and not started; WP-007–WP-020 dependency-controlled
 
 ## Estimation model
 
@@ -52,10 +52,7 @@ WP-006 is amended from **Business Service registry** to **Enterprise Metadata &
 Registry Platform (EMRP)**. Business Service Registry remains Phase 1, and no
 previously planned functionality is removed.
 
-The WP-005 dependency is split for controlled parallel delivery:
+The WP-005 engineering and release dependencies are satisfied by WP-005
+closure.
 
-- engineering dependency: satisfied by completed WP-005 engineering;
-- release dependency: open until WP-005 release validation and closure.
-
-WP-006 engineering is authorized under ADR-024. WP-006 merge and release remain
-blocked until WP-005 release validation completes and WP-005 closes.
+WP-006 engineering is authorized under ADR-024 and has not started.
