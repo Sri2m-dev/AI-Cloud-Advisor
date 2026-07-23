@@ -8,7 +8,7 @@ Original planning date: 2026-07-19
 Owner ratification: Srikanth Mudaliar
 Ratification date: 2026-07-20
 Repository baseline: `02bae6453deddb4aaf605b81dedd0d1ee11cba17`
-Portfolio state: WP-001–WP-003 closed; WP-004–WP-020 inactive pending individual activation
+Portfolio state: WP-001–WP-005 closed; WP-006 engineering authorized and not started; WP-007–WP-020 dependency-controlled
 
 ## Estimation model
 
@@ -21,7 +21,7 @@ Effort uses team-sprint ranges for comparative planning only: S `1-2`, M `3-5`, 
 | WP-003 | Contract and event governance toolkit | ADR baseline, P3 contracts | versioning, schema checks, compatibility policy | WP-001, G1 | accidental breaking change | consumer/provider contract gates and deprecation evidence | M |
 | WP-004 | Connector evidence certification | connector framework | observation envelope, checkpoint/reconciliation certification | WP-002/003 | incomplete source data | replay, duplicate, pagination, deletion, secret tests | L |
 | WP-005 | Canonical coverage and stewardship | Data Fabric, ontology | authority matrix, identity/quality queues, coverage data product | WP-002/004 | unresolved identities | scoped quality/freshness and steward workflow accepted | L |
-| WP-006 | Business Service registry | business architecture, canonical registry | governed service aggregate and ownership lifecycle | WP-002/005, ADR-024 | mega-aggregate | lifecycle, authority, conflict and tenant tests | L |
+| WP-006 | Enterprise Metadata & Registry Platform (EMRP) | business architecture, P3 canonical contracts, identity, lineage, quality, ontology, WP-005 engineering artifacts | registry interfaces, canonical entity models, metadata and validation services, repository interfaces; Business Service Registry is Phase 1 | WP-002; WP-005 engineering complete; ADR-024 | mega-registry, duplicate canonical authority, scope leakage | tenant-safe interfaces, identity reconciliation, relationship/taxonomy validation, confidence/completeness scoring, backward compatibility, and unit evidence | XL |
 | WP-007 | Business Service posture product | service registry, cost/risk/health inputs | versioned service posture query/data product | WP-006, domain products | misleading composite | dimensional evidence, freshness and no-hidden-missing-data tests | L |
 | WP-008 | Knowledge projection control | canonical changes | rebuildable projection, checkpoints, reconciliation | WP-003/005, graph ADRs | graph becomes authority | replay/rebuild and canonical-no-bypass tests | XL |
 | WP-009 | Governed query/explainability contracts | projection, evidence | named dependency/impact/evidence query APIs | WP-008, ADR-018/019/024 | authorization path leakage | reproducible paths, cost limits, temporal/freshness disclosure | L |
@@ -43,3 +43,16 @@ Effort uses team-sprint ranges for comparative planning only: S `1-2`, M `3-5`, 
 - Conditional P4 packages cannot enter delivery before their ADRs are accepted.
 - Effort is re-estimated after discovery and representative benchmarks.
 - A WP cannot close with only mocks where live contract behavior is material.
+
+## WP-006 Owner Amendment
+
+Owner decision date: 2026-07-21.
+
+WP-006 is amended from **Business Service registry** to **Enterprise Metadata &
+Registry Platform (EMRP)**. Business Service Registry remains Phase 1, and no
+previously planned functionality is removed.
+
+The WP-005 engineering and release dependencies are satisfied by WP-005
+closure.
+
+WP-006 engineering is authorized under ADR-024 and has not started.
