@@ -232,10 +232,30 @@ def test_future_objects_do_not_restore_structural_privileges() -> None:
         "alter default privileges for role postgres in schema public "
         "revoke truncate, references, trigger on tables from anon, authenticated"
     ) in sql
-    assert (
-        "alter default privileges for role supabase_admin in schema public "
-        "revoke truncate, references, trigger on tables from anon, authenticated"
-    ) in sql
+    assert "alter default privileges for role supabase_admin" not in sql
+
+
+def test_migration_is_transactional_idempotent_and_fail_closed() -> None:
+    sql = normalized_sql()
+    policy_names = {
+        "clients_select_own_org",
+        "organizations_select_own",
+        "recommendations_select_own_org",
+        "recommendations_insert_own_org",
+        "report_history_select_own_org",
+        "report_history_insert_own_org",
+        "users_select_self",
+    }
+
+    assert "\nbegin;" in migration_sql().casefold()
+    assert migration_sql().strip().casefold().endswith("commit;")
+    for policy_name in policy_names:
+        assert f"drop policy if exists {policy_name}" in sql
+        assert f"create policy {policy_name}" in sql
+    assert "raise exception 'unsafe tenant policy remains:" in sql
+    assert "roles && array['public', 'anon']::name[]" in sql
+    assert "coalesce(qual, '') ~" in sql
+    assert "coalesce(with_check, '') ~" in sql
 
 
 def test_migration_does_not_revoke_or_grant_application_crud() -> None:
