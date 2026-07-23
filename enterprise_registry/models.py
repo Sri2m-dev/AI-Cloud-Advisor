@@ -13,7 +13,10 @@ from uuid import NAMESPACE_URL, uuid5
 from data_fabric.contracts import (
     EnterpriseEntity,
     EntityIdentity,
+    EntityLineage,
     EntityOwnership,
+    EntityProvenance,
+    EntityQuality,
     EntityType,
     EntityVersion,
 )
@@ -96,7 +99,7 @@ def canonical_business_service_id(
 
 @dataclass(frozen=True, slots=True)
 class BusinessService:
-    """WP-006 Phase 1 domain model backed by the canonical entity contract."""
+    """Business Service domain model backed by the canonical entity contract."""
 
     entity: EnterpriseEntity
     business_service_id: str
@@ -174,6 +177,15 @@ class BusinessService:
         if identity_values != entity_values:
             raise BusinessServiceValidationError(
                 "source identity must match the canonical entity identity"
+            )
+        lineage = self.entity.lineage
+        if (
+            lineage is not None
+            and lineage.canonical_entity_id is not None
+            and lineage.canonical_entity_id != self.entity.canonical_id
+        ):
+            raise BusinessServiceValidationError(
+                "lineage canonical_entity_id must match the business service"
             )
         ownership = self.entity.ownership
         if ownership is None or not str(ownership.owner_id or "").strip():
@@ -257,6 +269,9 @@ def create_business_service(
     cost_center: str | None = None,
     aliases: tuple[str, ...] = (),
     attributes: Mapping[str, Any] | None = None,
+    lineage: EntityLineage | None = None,
+    provenance: EntityProvenance | None = None,
+    quality: EntityQuality | None = None,
     now: datetime | None = None,
 ) -> BusinessService:
     """Create a deterministic canonical Business Service contract."""
@@ -314,6 +329,9 @@ def create_business_service(
         metadata=metadata,
         identity=identity,
         ownership=ownership,
+        lineage=lineage,
+        provenance=provenance,
+        quality=quality,
         entity_version=EntityVersion(version=1, effective_from=timestamp),
     )
     return BusinessService(
