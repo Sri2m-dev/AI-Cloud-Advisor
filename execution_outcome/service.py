@@ -467,7 +467,7 @@ class ExecutionOutcomeService:
                 "execution_authorization": {
                     "connector_id": plan.connector_id,
                     "connector_action": plan.connector_action,
-                    "target_path": plan.target_path,
+                    "target_path": _record(plan.target_path),
                     "target": _extract_target(plan.parameters, plan.target_path),
                 },
             },

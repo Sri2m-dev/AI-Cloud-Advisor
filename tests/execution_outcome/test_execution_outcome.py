@@ -422,10 +422,27 @@ def test_reconstruction_preserves_exact_chain_and_command_outcome_boundary():
     second = service.reconstruct(ctx, "exec-1")
     assert first == second
     assert first["authority_chain"]["decision"] == {"id": "dec-1", "version": 1}
+    assert first["authority_chain"]["recommendation"] == {"id": "rec-1", "version": 1}
+    assert first["authority_chain"]["evidence_package"]["id"] == "pkg-1"
+    assert len(first["authority_chain"]["evidence_package"]["hash"]) == 64
     assert first["authority_chain"]["policy_evaluation"]["result"] == "allow"
+    assert first["authority_chain"]["policy_evaluation"]["policy_id"] == "policy-1"
     assert first["authority_chain"]["authority"]["id"] == "approval-1"
+    assert first["authority_chain"]["execution_authorization"] == {
+        "connector_id": "mock",
+        "connector_action": "remediate",
+        "target_path": ["resource_id"],
+        "target": "app-1",
+    }
+    assert first["plan"]["executor"]["actor_id"] == "executor"
+    assert first["plan"]["compensation_plan"]["rollback_steps"]
+    assert first["execution"]["adapter"] == "mock"
+    assert first["execution"]["command_status"] == "Completed"
+    assert first["execution"]["result_details"]["details"]["external_calls"] == 0
     assert first["execution"]["state"] == "outcome_verified"
     assert first["outcome_verification"]["state"] == "verified"
+    assert first["outcome_verification"]["observations"][0]["evidence_id"] == "outcome-ev"
+    assert first["outcome_verification"]["observations"][0]["tenant_id"] == "tenant-a"
     assert first["command_success_is_not_outcome"]
     assert len(first["reconstruction_hash"]) == 64
 
