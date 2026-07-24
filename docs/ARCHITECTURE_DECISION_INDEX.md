@@ -34,6 +34,8 @@ ADRs remain the source of truth for the detailed decision, context, consequences
 | ADR-018 | Governed Query Contracts | Accepted | Program G / WP-009 | `docs/architecture/ADR-018-Governed-Query-Contracts.md` |
 | ADR-019 | Explainability and Evidence Disclosure | Accepted | Program G / WP-009/WP-010 | `docs/architecture/ADR-019-Explainability-and-Evidence-Disclosure.md` |
 | ADR-020 | Recommendation and Decision Authority | Accepted | Program G / WP-011 | `docs/architecture/ADR-020-Recommendation-and-Decision-Authority.md` |
+| ADR-022 | Policy Evaluation and Authorization | Accepted | Program G / WP-012 | `docs/architecture/ADR-022-Policy-Evaluation-and-Authorization.md` |
+| ADR-023 | Approval and Exception Authority | Accepted | Program G / WP-012 | `docs/architecture/ADR-023-Approval-and-Exception-Authority.md` |
 | ADR-024 | Enterprise Metadata & Registry Platform | Accepted | Program G / WP-006 | `docs/architecture/ADR-024-Enterprise-Metadata-Registry-Platform.md` |
 
 ## Release Mapping
@@ -77,6 +79,8 @@ Governed intelligence decisions:
 - Governed Query Contracts
 - Explainability and Evidence Disclosure
 - Recommendation and Decision Authority
+- Policy Evaluation and Authorization
+- Approval and Exception Authority
 - Enterprise Metadata & Registry Platform
 
 ## Governance Rules
