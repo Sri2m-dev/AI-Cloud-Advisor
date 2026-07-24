@@ -25,31 +25,70 @@ REQUIRED_POSTURE_DIMENSIONS = tuple(PostureDimension)
 
 
 @dataclass(frozen=True, slots=True)
+class PostureEvidenceReference:
+    """Tenant-scoped trace from posture to an existing domain fact."""
+
+    evidence_id: str
+    organization_id: str
+    tenant_id: str
+    source_system: str
+    source_identifier: str
+    lineage_ref: str | None = None
+    provenance_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        required = {
+            "evidence_id": self.evidence_id,
+            "organization_id": self.organization_id,
+            "tenant_id": self.tenant_id,
+            "source_system": self.source_system,
+            "source_identifier": self.source_identifier,
+        }
+        missing = [name for name, value in required.items() if not str(value).strip()]
+        if missing:
+            raise ValueError(
+                "posture evidence is missing required field(s): "
+                + ", ".join(missing)
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class PostureSignal:
     """One tenant-owned domain input with source and evidence attribution."""
 
     dimension: PostureDimension
     organization_id: str
     tenant_id: str
+    business_service_id: str
     source_system: str
     observed_at: datetime
-    score: float
+    score: float | None
     value: Mapping[str, Any] = field(default_factory=dict)
-    evidence_ids: tuple[str, ...] = ()
+    evidence: tuple[PostureEvidenceReference, ...] = ()
     confidence: float = 1.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "dimension", PostureDimension(self.dimension))
         object.__setattr__(self, "value", MappingProxyType(dict(self.value)))
-        object.__setattr__(self, "evidence_ids", tuple(sorted(set(self.evidence_ids))))
+        object.__setattr__(
+            self,
+            "evidence",
+            tuple(sorted(self.evidence, key=lambda item: item.evidence_id)),
+        )
         if self.observed_at.tzinfo is None:
             raise ValueError("observed_at must be timezone-aware")
-        if not 0.0 <= float(self.score) <= 100.0:
+        if self.score is not None and not 0.0 <= float(self.score) <= 100.0:
             raise ValueError("score must be between 0 and 100")
         if not 0.0 <= float(self.confidence) <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
         if not self.source_system.strip():
             raise ValueError("source_system is required")
+        if not self.business_service_id.strip():
+            raise ValueError("business_service_id is required")
+
+    @property
+    def evidence_ids(self) -> tuple[str, ...]:
+        return tuple(item.evidence_id for item in self.evidence)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +101,7 @@ class PostureDimensionResult:
     source_system: str | None
     observed_at: datetime | None
     age_seconds: int | None
-    evidence_ids: tuple[str, ...]
+    evidence: tuple[PostureEvidenceReference, ...]
     value: Mapping[str, Any]
     confidence: float | None
     reason: str
@@ -74,10 +113,14 @@ class PostureDimensionResult:
             "availability",
             PostureAvailability(self.availability),
         )
-        object.__setattr__(self, "evidence_ids", tuple(self.evidence_ids))
+        object.__setattr__(self, "evidence", tuple(self.evidence))
         object.__setattr__(self, "value", MappingProxyType(dict(self.value)))
         if self.availability is PostureAvailability.MISSING and self.score is not None:
             raise ValueError("missing posture cannot expose a synthetic score")
+
+    @property
+    def evidence_ids(self) -> tuple[str, ...]:
+        return tuple(item.evidence_id for item in self.evidence)
 
 
 @dataclass(frozen=True, slots=True)

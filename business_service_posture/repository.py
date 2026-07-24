@@ -27,6 +27,13 @@ class BusinessServicePostureRepository(Protocol):
         business_service_id: str,
     ) -> list[BusinessServicePosture]: ...
 
+    def get_version(
+        self,
+        context: TenantContext,
+        business_service_id: str,
+        posture_version: int,
+    ) -> BusinessServicePosture | None: ...
+
 
 class InMemoryBusinessServicePostureRepository:
     """Test/reference store; no database or runtime adoption."""
@@ -72,6 +79,27 @@ class InMemoryBusinessServicePostureRepository:
                 self._key(context, business_service_id),
                 [],
             )
+        )
+
+    def get_version(
+        self,
+        context: TenantContext,
+        business_service_id: str,
+        posture_version: int,
+    ) -> BusinessServicePosture | None:
+        if posture_version < 1:
+            return None
+        versions = self._versions.get(
+            self._key(context, business_service_id),
+            [],
+        )
+        return next(
+            (
+                item
+                for item in versions
+                if item.posture_version == posture_version
+            ),
+            None,
         )
 
     @staticmethod

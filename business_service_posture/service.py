@@ -65,24 +65,33 @@ class BusinessServicePostureService:
             self.context.assert_record_matches(signal, "posture signal")
             if signal.dimension not in REQUIRED_POSTURE_DIMENSIONS:
                 raise ValueError("unsupported posture dimension")
+            if signal.business_service_id != service.canonical_id:
+                raise ValueError("posture signal is attributed to another business service")
+            for evidence in signal.evidence:
+                self.context.assert_record_matches(evidence, "posture evidence")
         previous = self.repository.latest(self.context, service.canonical_id)
-        posture = BusinessServicePosture(
+        dimensions = {
+            dimension: self._dimension_result(
+                dimension,
+                normalized.get(dimension),
+                now=now,
+            )
+            for dimension in REQUIRED_POSTURE_DIMENSIONS
+        }
+        candidate = BusinessServicePosture(
             organization_id=self.context.organization_id,
             tenant_id=self.context.tenant_id,
             business_service_id=service.canonical_id,
             business_service_version=service.version,
             posture_version=1 if previous is None else previous.posture_version + 1,
             generated_at=now,
-            dimensions={
-                dimension: self._dimension_result(
-                    dimension,
-                    normalized.get(dimension),
-                    now=now,
-                )
-                for dimension in REQUIRED_POSTURE_DIMENSIONS
-            },
+            dimensions=dimensions,
         )
-        return self.repository.publish(self.context, posture)
+        if previous is not None and self._semantic_key(previous) == self._semantic_key(
+            candidate
+        ):
+            return previous
+        return self.repository.publish(self.context, candidate)
 
     def latest(self, business_service_id: str) -> BusinessServicePosture | None:
         service = self.services.get_by_canonical_id(
@@ -97,6 +106,21 @@ class BusinessServicePostureService:
             include_inactive=True,
         )
         return self.repository.history(self.context, service.canonical_id)
+
+    def get_version(
+        self,
+        business_service_id: str,
+        posture_version: int,
+    ) -> BusinessServicePosture | None:
+        service = self.services.get_by_canonical_id(
+            business_service_id,
+            include_inactive=True,
+        )
+        return self.repository.get_version(
+            self.context,
+            service.canonical_id,
+            posture_version,
+        )
 
     def _dimension_result(
         self,
@@ -113,7 +137,7 @@ class BusinessServicePostureService:
                 source_system=None,
                 observed_at=None,
                 age_seconds=None,
-                evidence_ids=(),
+                evidence=(),
                 value={},
                 confidence=None,
                 reason="domain_input_missing",
@@ -135,8 +159,33 @@ class BusinessServicePostureService:
             source_system=signal.source_system,
             observed_at=signal.observed_at,
             age_seconds=int(age.total_seconds()),
-            evidence_ids=signal.evidence_ids,
+            evidence=signal.evidence,
             value=signal.value,
             confidence=signal.confidence,
             reason="freshness_limit_exceeded" if stale else "domain_input_available",
+        )
+
+    @staticmethod
+    def _semantic_key(posture: BusinessServicePosture) -> tuple[object, ...]:
+        dimensions = tuple(
+            (
+                dimension.value,
+                result.availability.value,
+                result.score,
+                result.source_system,
+                result.observed_at,
+                result.evidence,
+                tuple(sorted(result.value.items())),
+                result.confidence,
+                result.reason,
+            )
+            for dimension, result in sorted(
+                posture.dimensions.items(),
+                key=lambda item: item[0].value,
+            )
+        )
+        return (
+            posture.business_service_id,
+            posture.business_service_version,
+            dimensions,
         )

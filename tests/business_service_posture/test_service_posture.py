@@ -9,12 +9,15 @@ from business_service_posture import (
     InMemoryBusinessServicePostureRepository,
     PostureAvailability,
     PostureDimension,
+    PostureEvidenceReference,
     PostureSignal,
 )
 from data_fabric.foundation import DataFabricTenantBoundaryError, TenantContext
 from enterprise_registry import (
+    BusinessServiceNotFoundError,
     BusinessServiceRegistry,
     InMemoryBusinessServiceRepository,
+    canonical_business_service_id,
     create_business_service,
 )
 
@@ -91,11 +94,20 @@ def signal(
         dimension=dimension,
         organization_id=context.organization_id,
         tenant_id=context.tenant_id,
+        business_service_id=canonical_business_service_id(context, "payments"),
         source_system=f"{dimension.value}-domain",
         observed_at=now - age,
         score=score,
         value={"measurement": score},
-        evidence_ids=(f"{dimension.value}-evidence",),
+        evidence=(
+            PostureEvidenceReference(
+                evidence_id=f"{dimension.value}-evidence",
+                organization_id=context.organization_id,
+                tenant_id=context.tenant_id,
+                source_system=f"{dimension.value}-domain",
+                source_identifier=f"{dimension.value}-source",
+            ),
+        ),
         confidence=0.95,
     )
 
@@ -224,12 +236,10 @@ def test_posture_versions_and_history_are_deterministic(
     )
 
     assert first.posture_version == 1
-    assert second.posture_version == 2
-    assert [item.posture_version for item in service.history(canonical_id)] == [
-        1,
-        2,
-    ]
-    assert service.latest(canonical_id) == second
+    assert second == first
+    assert [item.posture_version for item in service.history(canonical_id)] == [1]
+    assert service.get_version(canonical_id, 1) == first
+    assert service.latest(canonical_id) == first
 
 
 def test_cross_tenant_domain_signal_is_rejected(
@@ -276,4 +286,118 @@ def test_future_or_naive_observation_times_are_rejected(
                 )
             },
             generated_at=now,
+        )
+
+
+def test_completely_missing_posture_is_explicit(
+    posture_service: tuple[BusinessServicePostureService, str],
+) -> None:
+    service, canonical_id = posture_service
+    now = datetime(2026, 7, 24, 2, 0, tzinfo=timezone.utc)
+
+    posture = service.publish(canonical_id, {}, generated_at=now)
+
+    assert posture.completeness == 0.0
+    assert posture.missing_dimensions == tuple(PostureDimension)
+    assert all(result.score is None for result in posture.dimensions.values())
+
+
+@pytest.mark.parametrize(
+    ("dimension", "threshold"),
+    [
+        (PostureDimension.COST, timedelta(hours=26)),
+        (PostureDimension.RISK, timedelta(hours=24)),
+        (PostureDimension.HEALTH, timedelta(minutes=15)),
+    ],
+)
+def test_freshness_boundary_and_stale_transition_are_versioned(
+    context: TenantContext,
+    posture_service: tuple[BusinessServicePostureService, str],
+    dimension: PostureDimension,
+    threshold: timedelta,
+) -> None:
+    service, canonical_id = posture_service
+    observed = datetime(2026, 7, 24, 2, 0, tzinfo=timezone.utc)
+    domain_signal = signal(context, dimension, now=observed)
+
+    boundary = service.publish(
+        canonical_id,
+        {dimension: domain_signal},
+        generated_at=observed + threshold,
+    )
+    stale = service.publish(
+        canonical_id,
+        {dimension: domain_signal},
+        generated_at=observed + threshold + timedelta(seconds=1),
+    )
+
+    assert (
+        boundary.dimensions[dimension].availability
+        is PostureAvailability.AVAILABLE
+    )
+    assert stale.dimensions[dimension].availability is PostureAvailability.STALE
+    assert boundary.posture_version == 1
+    assert stale.posture_version == 2
+
+
+@pytest.mark.parametrize("changed_dimension", list(PostureDimension))
+def test_dimension_changes_create_one_deterministic_new_version(
+    context: TenantContext,
+    posture_service: tuple[BusinessServicePostureService, str],
+    changed_dimension: PostureDimension,
+) -> None:
+    service, canonical_id = posture_service
+    now = datetime(2026, 7, 24, 2, 0, tzinfo=timezone.utc)
+    original = {
+        dimension: signal(context, dimension, now=now, score=90)
+        for dimension in PostureDimension
+    }
+    changed = dict(original)
+    changed[changed_dimension] = signal(
+        context,
+        changed_dimension,
+        now=now,
+        score=75,
+    )
+
+    first = service.publish(canonical_id, original, generated_at=now)
+    second = service.publish(canonical_id, changed, generated_at=now)
+
+    assert second.posture_version == first.posture_version + 1
+    assert second.dimensions[changed_dimension].score == 75
+    for dimension in set(PostureDimension) - {changed_dimension}:
+        assert second.dimensions[dimension] == first.dimensions[dimension]
+
+
+def test_cross_tenant_business_service_is_not_visible(
+    context: TenantContext,
+) -> None:
+    repository = InMemoryBusinessServiceRepository()
+    other_context = TenantContext("org-1", "tenant-b")
+    other_registry = BusinessServiceRegistry(other_context, repository)
+    foreign = other_registry.register(
+        create_business_service(
+            context=other_context,
+            business_service_id="foreign",
+            name="Foreign",
+            description="Other tenant",
+            business_domain="other",
+            service_type="shared",
+            criticality="medium",
+            owner_id="owner-2",
+            source_system="catalog",
+            source_id="foreign",
+        )
+    )
+    service = BusinessServicePostureService(
+        context,
+        services=BusinessServiceRegistry(context, repository),
+        repository=InMemoryBusinessServicePostureRepository(),
+    )
+
+    with pytest.raises(BusinessServiceNotFoundError):
+        service.publish(
+            foreign.canonical_id,
+            {},
+            generated_at=datetime(2026, 7, 24, 2, 0, tzinfo=timezone.utc),
         )
