@@ -145,3 +145,71 @@ production, customer, Supabase, or disposable database was accessed.
 - explicit merge authorization.
 
 This evidence does not authorize merge or close WP-006.
+
+## Final Closure Increment
+
+Starting baseline: `8d94457627cd8a3acc6ee99dd5ccaae031b74330`
+
+Branch: `feature/wp-006-final-closure`
+
+The Owner-authorized final increment closes the remaining EMRP acceptance
+gaps through a single tenant-bound orchestration service over released Data
+Fabric contracts. It adds no persistence, runtime wiring, or parallel registry
+framework.
+
+The bounded `EnterpriseMetadataRegistryService` coordinates the existing:
+
+- `EntityRegistry`;
+- `IdentityResolver`;
+- `RelationshipRegistry`;
+- `TaxonomyService` and `OntologyRegistry`;
+- `DataQualityEvaluator`;
+- `TenantContext`.
+
+The final increment provides deterministic evidence for:
+
+- canonical, source, and alias identity reconciliation;
+- duplicate-candidate and `NO_MATCH` decisions with confidence;
+- taxonomy membership, approved concept type, and business-domain
+  compatibility;
+- relationship endpoint, direction, cardinality, duplication, self-reference,
+  and cycle validation;
+- explicit identity-confidence, metadata-completeness,
+  ownership-completeness, relationship-completeness/validity, topology, and
+  taxonomy acceptance checks;
+- cross-tenant rejection across reconciliation, taxonomy, relationships, and
+  metadata acceptance.
+
+Final increment files:
+
+- `enterprise_registry/emrp.py`;
+- `enterprise_registry/exceptions.py`;
+- `enterprise_registry/__init__.py`;
+- `tests/enterprise_registry/test_emrp_closure.py`;
+- `docs/program_g/WP_006_IMPLEMENTATION_EVIDENCE.md`.
+
+Validation on the final local source state:
+
+| Gate | Result |
+| --- | --- |
+| WP-006 focused tests | 48 passed, 0 failed |
+| WP-001–WP-006 combined focused regression | 108 passed, 0 failed |
+| P3 non-secret release gate | 94 passed, 0 failed |
+| Full repository suite | 454 passed, 5 expected skips, 0 failed |
+| Governance/certification tests | 38 passed, 0 failed |
+| Contract/event governance CLI | Passed; 3 providers, 3 consumers |
+| Connector evidence certification CLI | Passed; 2 profiles, 4 pages, 4 observations |
+| Ruff | Passed |
+| Active-source compile/import | 1,124 files; representative imports passed |
+| Dependency validation | `pip check` passed |
+| Git whitespace validation | `git diff --check` passed |
+
+Migration required: **No**
+
+Database access: **No**
+
+The final closure increment satisfies the remaining WP-006 catalog and
+ADR-024 acceptance requirements without adding schema, migrations, public
+APIs, UI, connectors, AI/Knowledge Graph behavior, or application runtime
+changes. Merge and formal closure remain subject to Program G review and
+explicit Owner decisions.
