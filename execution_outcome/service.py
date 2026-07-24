@@ -18,11 +18,24 @@ from execution_outcome.models import (
     OutcomePlan,
     OutcomeState,
     OutcomeVerification,
+    deep_freeze,
 )
 from policy_approval import PolicyApprovalError, PolicyApprovalService
 from recommendation_decision import Actor, ActorType, Decision, DecisionDisposition
 
 _SERIALIZER = DefaultDeterministicSerializer()
+_TARGET_FIELDS = frozenset(
+    {
+        "resource_id",
+        "target_id",
+        "application_id",
+        "instance_id",
+        "subscription_id",
+        "service_id",
+        "technology_id",
+        "entity_id",
+    }
+)
 
 
 class ExecutionOutcomeError(ValueError):
@@ -57,6 +70,7 @@ class ExecutionOutcomeService:
         scope,
         connector_id: str,
         connector_action: str,
+        target_path: tuple[str, ...],
         requested_by: Actor,
         executor: Actor,
         parameters: dict[str, Any],
@@ -73,6 +87,15 @@ class ExecutionOutcomeService:
             raise ExecutionOutcomeError("AI cannot self-authorize execution")
         if scope.action != connector_action:
             raise ExecutionOutcomeError("connector action must exactly match authority scope")
+        self._validate_connector(connector_id)
+        try:
+            frozen_parameters = deep_freeze(parameters)
+        except ValueError as exc:
+            raise ExecutionOutcomeError(f"invalid execution parameters: {exc}") from exc
+        target = _extract_target(frozen_parameters, target_path)
+        if target != scope.resource_id:
+            raise ExecutionOutcomeError("execution target must exactly match authority scope")
+        _reject_ambiguous_targets(frozen_parameters, target_path, target)
         now = created_at or datetime.now(timezone.utc)
         check = self._check_authority(
             context,
@@ -98,15 +121,20 @@ class ExecutionOutcomeService:
             "plan_id": plan_id,
             "decision_id": decision.decision_id,
             "decision_version": decision.recommendation_version,
+            "recommendation_id": decision.recommendation_id,
+            "recommendation_version": decision.recommendation_version,
+            "evidence_package_id": evaluation.evidence_package_id,
+            "evidence_package_hash": evaluation.evidence_package_hash,
             "evaluation_id": evaluation_id,
             "authority_type": authority_type,
             "authority_id": authority_id,
             "scope": scope,
             "connector_id": connector_id,
             "connector_action": connector_action,
+            "target_path": target_path,
             "requested_by": requested_by,
             "executor": executor,
-            "parameters": parameters,
+            "parameters": frozen_parameters,
             "outcome_plan": outcome_plan,
             "compensation_plan": compensation_plan,
         }
@@ -116,15 +144,20 @@ class ExecutionOutcomeService:
             tenant_id=context.tenant_id,
             decision_id=decision.decision_id,
             decision_version=decision.recommendation_version,
+            recommendation_id=decision.recommendation_id,
+            recommendation_version=decision.recommendation_version,
+            evidence_package_id=evaluation.evidence_package_id,
+            evidence_package_hash=evaluation.evidence_package_hash,
             evaluation_id=evaluation_id,
             authority_type=authority_type,
             authority_id=authority_id,
             scope=scope,
             connector_id=connector_id,
             connector_action=connector_action,
+            target_path=target_path,
             requested_by=requested_by,
             executor=executor,
-            parameters=parameters,
+            parameters=frozen_parameters,
             outcome_plan=outcome_plan,
             compensation_plan=compensation_plan,
             created_at=now,
@@ -163,6 +196,11 @@ class ExecutionOutcomeService:
             )
         if not self._adapter.enabled:
             raise ExecutionOutcomeError("execution adapter is disabled")
+        self._validate_connector(plan.connector_id)
+        target = _extract_target(plan.parameters, plan.target_path)
+        if target != plan.scope.resource_id:
+            raise ExecutionOutcomeError("execution target must exactly match authority scope")
+        _reject_ambiguous_targets(plan.parameters, plan.target_path, target)
         self._event(plan, execution_id, "execution_started", actor, now, {})
         result = self._adapter.execute_stage(
             {"Name": plan.connector_action},
@@ -232,13 +270,25 @@ class ExecutionOutcomeService:
             )
         if verifier.actor_type is ActorType.AI:
             raise ExecutionOutcomeError("AI cannot independently attest execution outcome")
+        tenant_scope = (context.organization_id, context.tenant_id)
+        if (
+            (plan.organization_id, plan.tenant_id) != tenant_scope
+            or (execution.organization_id, execution.tenant_id) != tenant_scope
+            or any(
+                (item.organization_id, item.tenant_id) != tenant_scope
+                for item in observations
+            )
+        ):
+            raise ExecutionOutcomeError("outcome observation crosses tenant boundary")
         now = verified_at or datetime.now(timezone.utc)
         reasons: list[str] = []
         state = OutcomeState.VERIFIED
         if now > plan.outcome_plan.verification_window_ends_at:
             state = OutcomeState.INDETERMINATE
             reasons.append("verification window expired")
-        by_metric = {item.metric: item for item in observations}
+        by_metric: dict[str, list[OutcomeObservation]] = {}
+        for observation in observations:
+            by_metric.setdefault(observation.metric, []).append(observation)
         missing_metrics = sorted(
             criterion.metric
             for criterion in plan.outcome_plan.criteria
@@ -263,8 +313,9 @@ class ExecutionOutcomeService:
             failures = [
                 criterion.criterion_id
                 for criterion in plan.outcome_plan.criteria
-                if not _criterion_passes(
-                    criterion.operator, by_metric[criterion.metric].value, criterion.target
+                if not all(
+                    _criterion_passes(criterion.operator, observation.value, criterion.target)
+                    for observation in by_metric[criterion.metric]
                 )
             ]
             if failures:
@@ -272,6 +323,21 @@ class ExecutionOutcomeService:
                 reasons.append(f"outcome criteria failed: {', '.join(sorted(failures))}")
             else:
                 reasons.append("independent governed outcome criteria passed")
+        ordered_observations = tuple(
+            sorted(
+                observations,
+                key=lambda item: (
+                    item.metric,
+                    item.evidence_id,
+                    item.evidence_hash,
+                    item.value,
+                    item.source_connector_id,
+                    item.observed_at.isoformat(),
+                    item.lineage_ref or "",
+                    item.provenance_ref or "",
+                ),
+            )
+        )
         content = {
             "execution_id": execution_id,
             "plan_hash": plan.plan_hash,
@@ -279,7 +345,7 @@ class ExecutionOutcomeService:
             "verified_at": now,
             "state": state,
             "reasons": tuple(reasons),
-            "observations": observations,
+            "observations": ordered_observations,
         }
         verification = OutcomeVerification(
             verification_id=verification_id,
@@ -290,7 +356,7 @@ class ExecutionOutcomeService:
             verified_at=now,
             state=state,
             reasons=tuple(reasons),
-            observations=observations,
+            observations=ordered_observations,
             verification_hash=_SERIALIZER.content_hash(content),
         )
         key = self._verification_key(context, verification_id)
@@ -379,6 +445,14 @@ class ExecutionOutcomeService:
                     "id": plan.decision_id,
                     "version": plan.decision_version,
                 },
+                "recommendation": {
+                    "id": plan.recommendation_id,
+                    "version": plan.recommendation_version,
+                },
+                "evidence_package": {
+                    "id": plan.evidence_package_id,
+                    "hash": plan.evidence_package_hash,
+                },
                 "policy_evaluation": {
                     "id": evaluation.evaluation_id,
                     "result": evaluation.result.value,
@@ -389,6 +463,12 @@ class ExecutionOutcomeService:
                     "type": plan.authority_type,
                     "id": plan.authority_id,
                     "scope": _record(plan.scope),
+                },
+                "execution_authorization": {
+                    "connector_id": plan.connector_id,
+                    "connector_action": plan.connector_action,
+                    "target_path": plan.target_path,
+                    "target": _extract_target(plan.parameters, plan.target_path),
                 },
             },
             "plan": _record(plan),
@@ -476,6 +556,18 @@ class ExecutionOutcomeService:
             raise ExecutionOutcomeError(f"exact execution authority denied: {exc}") from exc
         raise ExecutionOutcomeError("unknown policy authority type")
 
+    def _validate_connector(self, connector_id: str) -> None:
+        adapter_name = getattr(self._adapter, "adapter_name", None)
+        if (
+            not isinstance(adapter_name, str)
+            or not adapter_name
+            or not connector_id
+            or connector_id != adapter_name
+        ):
+            raise ExecutionOutcomeError(
+                "connector identity must exactly match the execution adapter"
+            )
+
     def _event(
         self,
         plan: ExecutionPlan,
@@ -515,6 +607,42 @@ def _criterion_passes(operator: str, actual: float, target: float) -> bool:
     if operator == "<=":
         return actual <= target
     return actual == target
+
+
+def _extract_target(parameters: Mapping[str, Any], target_path: tuple[str, ...]) -> str:
+    if not target_path or any(not isinstance(part, str) or not part for part in target_path):
+        raise ExecutionOutcomeError("execution target path must be explicit")
+    value: Any = parameters
+    for part in target_path:
+        if not isinstance(value, Mapping) or part not in value:
+            raise ExecutionOutcomeError("execution target is missing from parameters")
+        value = value[part]
+    if not isinstance(value, str) or not value:
+        raise ExecutionOutcomeError("execution target must be a non-empty string")
+    return value
+
+
+def _reject_ambiguous_targets(
+    parameters: Mapping[str, Any],
+    target_path: tuple[str, ...],
+    target: str,
+) -> None:
+    discovered: list[tuple[tuple[str, ...], Any]] = []
+
+    def walk(value: Any, path: tuple[str, ...] = ()) -> None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                child_path = (*path, key)
+                if key in _TARGET_FIELDS:
+                    discovered.append((child_path, item))
+                walk(item, child_path)
+        elif isinstance(value, tuple):
+            for index, item in enumerate(value):
+                walk(item, (*path, str(index)))
+
+    walk(parameters)
+    if any(path != target_path for path, _ in discovered):
+        raise ExecutionOutcomeError("execution parameters contain ambiguous targets")
 
 
 def _record(record: Any) -> Any:

@@ -59,6 +59,16 @@ parallel provider execution implementation.
 - tenant-safe lookup, execution, verification, compensation, and
   reconstruction;
 - deterministic full authority/action/outcome reconstruction;
+- order-independent conservative evaluation of duplicate or contradictory
+  observations: every applicable observation must satisfy its criterion;
+- immutable organization and tenant identity on every outcome observation,
+  with mixed or foreign evidence rejected rather than filtered;
+- explicit reconstruction references for Recommendation, governed Evidence
+  Package/hash, and connector/target execution authorization;
+- stable adapter identity and explicit resource target-path validation before
+  any connector invocation;
+- canonical deep freezing of nested execution parameters so authorization,
+  hashing, reconstruction, and execution consume one immutable logical value;
 - no authority bypass, forced authorization, database persistence, or
   production/external adapter activation.
 
@@ -77,14 +87,14 @@ execution remains governed by later WP-018 controls.
 
 | Gate | Result |
 | --- | --- |
-| WP-013 focused | 19 passed |
-| Program G combined | 218 passed |
+| WP-013 focused | 40 passed |
+| Program G combined | 223 passed |
 | P3 non-secret release gate | 94 passed |
-| Full repository | 594 passed, 5 expected skips |
-| Governance/security/certification | 68 passed |
+| Full repository | 615 passed, 5 expected skips |
+| Governance/security/certification | 73 passed |
 | Contract/event governance CLI | Passed; 3 providers, 3 consumers |
 | Connector certification CLI | Passed; 2 profiles, 4 pages, 4 observations |
-| Ruff | Passed |
+| Ruff | Changed files and CI critical active-source checks passed; repository-wide full rule set retains unrelated baseline findings |
 | Compile/import | Passed; 1,158 active tracked Python files |
 | `pip check` | Passed |
 | `git diff --check` | Passed |

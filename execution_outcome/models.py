@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -79,14 +80,19 @@ class ExecutionPlan:
     plan_id: str
     organization_id: str
     tenant_id: str
+    recommendation_id: str
+    recommendation_version: int
     decision_id: str
     decision_version: int
+    evidence_package_id: str
+    evidence_package_hash: str
     evaluation_id: str
     authority_type: str
     authority_id: str
     scope: AuthorityScope
     connector_id: str
     connector_action: str
+    target_path: tuple[str, ...]
     requested_by: Actor
     executor: Actor
     parameters: Mapping[str, Any]
@@ -96,13 +102,15 @@ class ExecutionPlan:
     plan_hash: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "parameters", MappingProxyType(dict(sorted(self.parameters.items())))
-        )
+        object.__setattr__(self, "parameters", deep_freeze(self.parameters))
+        object.__setattr__(self, "target_path", tuple(self.target_path))
         _aware(self.created_at, "plan creation")
         required = (
             self.plan_id,
+            self.recommendation_id,
             self.decision_id,
+            self.evidence_package_id,
+            self.evidence_package_hash,
             self.evaluation_id,
             self.authority_type,
             self.authority_id,
@@ -114,10 +122,14 @@ class ExecutionPlan:
             raise ValueError("execution plan identity and authority binding are required")
         if self.authority_type not in {"approval", "exception"}:
             raise ValueError("execution requires explicit Approval or Exception authority")
+        if not self.target_path or any(not segment for segment in self.target_path):
+            raise ValueError("explicit target binding path is required")
 
 
 @dataclass(frozen=True, slots=True)
 class OutcomeObservation:
+    organization_id: str
+    tenant_id: str
     metric: str
     value: float
     evidence_id: str
@@ -132,6 +144,8 @@ class OutcomeObservation:
         if not all(
             (
                 self.metric,
+                self.organization_id,
+                self.tenant_id,
                 self.evidence_id,
                 self.evidence_hash,
                 self.source_connector_id,
@@ -216,3 +230,35 @@ class ExecutionEvent:
 def _aware(value: datetime, label: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{label} must be timezone-aware")
+
+
+def deep_freeze(value: Any) -> Any:
+    """Return a canonical deeply immutable parameter value."""
+
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) or not key for key in value):
+            raise ValueError("execution parameter keys must be non-empty strings")
+        return MappingProxyType(
+            {
+                key: deep_freeze(item)
+                for key, item in sorted(value.items(), key=lambda pair: pair[0])
+            }
+        )
+    if isinstance(value, list | tuple):
+        return tuple(deep_freeze(item) for item in value)
+    if isinstance(value, set | frozenset):
+        frozen = [deep_freeze(item) for item in value]
+        return tuple(sorted(frozen, key=_stable_parameter_key))
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("non-finite execution parameters are unsupported")
+    if value is None or isinstance(value, str | bool | int | float):
+        return value
+    raise ValueError(f"unsupported execution parameter type: {type(value).__name__}")
+
+
+def _stable_parameter_key(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return repr(tuple((key, _stable_parameter_key(item)) for key, item in value.items()))
+    if isinstance(value, tuple):
+        return repr(tuple(_stable_parameter_key(item) for item in value))
+    return f"{type(value).__name__}:{value!r}"

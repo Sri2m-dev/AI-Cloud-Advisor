@@ -1,4 +1,4 @@
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -176,8 +176,9 @@ def create_plan(service, ctx, decision, **overrides):
         "authority_type": "approval",
         "authority_id": "approval-1",
         "scope": SCOPE,
-        "connector_id": "mock-connector",
+        "connector_id": "mock",
         "connector_action": "remediate",
+        "target_path": ("resource_id",),
         "requested_by": actor("requester"),
         "executor": actor("executor"),
         "parameters": {"resource_id": "app-1"},
@@ -191,11 +192,13 @@ def create_plan(service, ctx, decision, **overrides):
 
 def observation(value=30, **overrides):
     values = {
+        "organization_id": "org-a",
+        "tenant_id": "tenant-a",
         "metric": "risk_score",
         "value": value,
         "evidence_id": "outcome-ev",
         "evidence_hash": "outcome-hash",
-        "source_connector_id": "mock-connector",
+        "source_connector_id": "mock",
         "observed_at": NOW + timedelta(hours=1),
         "lineage_ref": "outcome-lineage",
         "provenance_ref": "outcome-provenance",
@@ -433,3 +436,294 @@ def test_no_database_persistence_or_authority_bypass_interface():
     assert not hasattr(service, "force_authorized")
     assert not hasattr(service, "persist")
     assert not hasattr(service, "grant_authority")
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ((30, 30), OutcomeState.VERIFIED),
+        ((30, 80), OutcomeState.NOT_VERIFIED),
+        ((80, 30), OutcomeState.NOT_VERIFIED),
+        ((80, 80), OutcomeState.NOT_VERIFIED),
+    ],
+)
+def test_duplicate_outcome_evidence_is_conservatively_aggregated(values, expected):
+    ctx, _, service, _, decision, _, _ = harness()
+    create_plan(service, ctx, decision)
+    execute(service, ctx)
+    result = service.verify_outcome(
+        ctx,
+        "exec-1",
+        verification_id="verify-duplicates",
+        verifier=actor("verifier"),
+        observations=tuple(
+            observation(value=value, evidence_hash=f"hash-{index}")
+            for index, value in enumerate(values)
+        ),
+        verified_at=NOW + timedelta(hours=1),
+    )
+    assert result.state is expected
+
+
+def test_missing_outcome_observation_is_indeterminate():
+    ctx, _, service, _, decision, _, _ = harness()
+    create_plan(service, ctx, decision)
+    execute(service, ctx)
+    result = service.verify_outcome(
+        ctx,
+        "exec-1",
+        verification_id="verify-missing",
+        verifier=actor("verifier"),
+        observations=(),
+        verified_at=NOW + timedelta(hours=1),
+    )
+    assert result.state is OutcomeState.INDETERMINATE
+
+
+def test_duplicate_evidence_order_cannot_change_outcome():
+    results = []
+    hashes = []
+    for values in ((30, 80), (80, 30)):
+        ctx, _, service, _, decision, _, _ = harness()
+        create_plan(service, ctx, decision)
+        execute(service, ctx)
+        verification = service.verify_outcome(
+            ctx,
+            "exec-1",
+            verification_id="verify-order",
+            verifier=actor("verifier"),
+            observations=tuple(observation(value=value) for value in values),
+            verified_at=NOW + timedelta(hours=1),
+        )
+        results.append(verification.state)
+        hashes.append(verification.verification_hash)
+    assert results == [OutcomeState.NOT_VERIFIED, OutcomeState.NOT_VERIFIED]
+    assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize(
+    ("organization_id", "tenant_id"),
+    [("org-b", "tenant-a"), ("org-a", "tenant-b")],
+)
+def test_foreign_outcome_observations_are_rejected(organization_id, tenant_id):
+    ctx, _, service, _, decision, _, _ = harness()
+    create_plan(service, ctx, decision)
+    execute(service, ctx)
+    with pytest.raises(ExecutionOutcomeError, match="tenant boundary"):
+        service.verify_outcome(
+            ctx,
+            "exec-1",
+            verification_id="verify-foreign",
+            verifier=actor("verifier"),
+            observations=(
+                observation(organization_id=organization_id, tenant_id=tenant_id),
+            ),
+            verified_at=NOW + timedelta(hours=1),
+        )
+
+
+def test_mixed_tenant_observations_are_rejected():
+    ctx, _, service, _, decision, _, _ = harness()
+    create_plan(service, ctx, decision)
+    execute(service, ctx)
+    with pytest.raises(ExecutionOutcomeError, match="tenant boundary"):
+        service.verify_outcome(
+            ctx,
+            "exec-1",
+            verification_id="verify-mixed",
+            verifier=actor("verifier"),
+            observations=(observation(), observation(tenant_id="tenant-b")),
+            verified_at=NOW + timedelta(hours=1),
+        )
+
+
+@pytest.mark.parametrize("tampered_record", ["plan", "execution"])
+def test_stored_plan_and_execution_tenant_mismatch_is_rejected(tampered_record):
+    ctx, _, service, _, decision, _, _ = harness()
+    plan = create_plan(service, ctx, decision)
+    execution = execute(service, ctx)
+    if tampered_record == "plan":
+        service._plans[service._plan_key(ctx, "plan-1")] = replace(plan, tenant_id="tenant-b")
+    else:
+        service._executions[service._execution_key(ctx, "exec-1")] = replace(
+            execution, tenant_id="tenant-b"
+        )
+    with pytest.raises(ExecutionOutcomeError, match="tenant boundary"):
+        service.verify_outcome(
+            ctx,
+            "exec-1",
+            verification_id="verify-tampered",
+            verifier=actor("verifier"),
+            observations=(observation(),),
+            verified_at=NOW + timedelta(hours=1),
+        )
+
+
+class CountingAdapter(MockExecutionAdapter):
+    def __init__(self):
+        self.calls = 0
+        self.tasks = None
+
+    def execute_stage(self, stage, tasks, context):
+        self.calls += 1
+        self.tasks = tasks
+        return super().execute_stage(stage, tasks, context)
+
+
+class MissingIdentityAdapter(CountingAdapter):
+    adapter_name = ""
+
+
+@pytest.mark.parametrize(
+    ("adapter", "connector_id"),
+    [(CountingAdapter(), "wrong"), (MissingIdentityAdapter(), "mock")],
+)
+def test_connector_identity_failure_blocks_before_adapter_execution(adapter, connector_id):
+    ctx, _, service, _, decision, _, _ = harness(adapter=adapter)
+    with pytest.raises(ExecutionOutcomeError, match="connector identity"):
+        create_plan(service, ctx, decision, connector_id=connector_id)
+    assert adapter.calls == 0
+
+
+def test_explicit_nested_target_path_is_supported():
+    ctx, _, service, _, decision, _, _ = harness()
+    plan = create_plan(
+        service,
+        ctx,
+        decision,
+        parameters={"target": {"resource_id": "app-1"}},
+        target_path=("target", "resource_id"),
+    )
+    assert plan.target_path == ("target", "resource_id")
+    assert execute(service, ctx).state is ExecutionState.AWAITING_VERIFICATION
+
+
+@pytest.mark.parametrize(
+    ("parameters", "target_path", "message"),
+    [
+        ({"resource_id": "app-2"}, ("resource_id",), "exactly match"),
+        ({"other": "app-1"}, ("resource_id",), "missing"),
+        (
+            {"resource_id": "app-1", "target_id": "app-2"},
+            ("resource_id",),
+            "ambiguous",
+        ),
+    ],
+)
+def test_wrong_missing_or_ambiguous_target_is_rejected(parameters, target_path, message):
+    ctx, _, service, _, decision, _, _ = harness()
+    with pytest.raises(ExecutionOutcomeError, match=message):
+        create_plan(
+            service,
+            ctx,
+            decision,
+            parameters=parameters,
+            target_path=target_path,
+        )
+
+
+def test_parameters_are_deeply_immutable_and_hash_bound_to_execution():
+    adapter = CountingAdapter()
+    ctx, _, service, _, decision, _, _ = harness(adapter=adapter)
+    parameters = {
+        "resource_id": "app-1",
+        "nested": {"items": [1, {"flag": True}], "labels": {"b", "a"}},
+    }
+    plan = create_plan(service, ctx, decision, parameters=parameters)
+    original_hash = plan.plan_hash
+    parameters["nested"]["items"][1]["flag"] = False
+    parameters["nested"]["items"].append(3)
+    assert plan.parameters["nested"]["items"] == (1, {"flag": True})
+    assert plan.parameters["nested"]["labels"] == ("a", "b")
+    with pytest.raises(TypeError):
+        plan.parameters["nested"]["items"][1]["flag"] = False
+    execute(service, ctx)
+    assert plan.plan_hash == original_hash
+    assert adapter.tasks[0]["Parameters"]["nested"]["items"] == (1, {"flag": True})
+    assert service.reconstruct(ctx, "exec-1")["plan"]["parameters"]["nested"]["items"] == [
+        1,
+        {"flag": True},
+    ]
+
+
+def test_unsupported_parameter_object_is_rejected():
+    ctx, _, service, _, decision, _, _ = harness()
+    with pytest.raises(ExecutionOutcomeError, match="unsupported"):
+        create_plan(
+            service,
+            ctx,
+            decision,
+            parameters={"resource_id": "app-1", "unsafe": object()},
+        )
+
+
+def test_reconstruction_contains_complete_authority_and_evidence_chain():
+    ctx, _, service, _, decision, _, _ = harness()
+    create_plan(service, ctx, decision)
+    execute(service, ctx)
+    result = service.reconstruct(ctx, "exec-1")
+    chain = result["authority_chain"]
+    assert chain["recommendation"] == {"id": "rec-1", "version": 1}
+    assert chain["evidence_package"]["id"] == "pkg-1"
+    assert len(chain["evidence_package"]["hash"]) == 64
+    assert chain["execution_authorization"]["target"] == "app-1"
+    assert result["plan"]["compensation_plan"]["rollback_steps"]
+
+
+def test_integrated_wp013_safety_path_and_critical_fail_closed_variants():
+    ctx, _, service, _, decision, _, _ = harness()
+    plan = create_plan(
+        service,
+        ctx,
+        decision,
+        parameters={"resource_id": "app-1", "nested": {"steps": ["remediate"]}},
+    )
+    command = execute(service, ctx)
+    assert command.state is ExecutionState.AWAITING_VERIFICATION
+    verified = service.verify_outcome(
+        ctx,
+        "exec-1",
+        verification_id="verify-integrated",
+        verifier=actor("independent-verifier"),
+        observations=(observation(),),
+        verified_at=NOW + timedelta(hours=1),
+    )
+    assert verified.state is OutcomeState.VERIFIED
+    assert plan.parameters["nested"]["steps"] == ("remediate",)
+
+    with pytest.raises(ExecutionOutcomeError, match="tenant scope"):
+        service.get_plan(context("foreign"), "plan-1")
+
+    ctx, _, service, _, decision, _, _ = harness()
+    with pytest.raises(ExecutionOutcomeError, match="connector identity"):
+        create_plan(service, ctx, decision, connector_id="wrong")
+
+    ctx, _, service, _, decision, _, _ = harness()
+    with pytest.raises(ExecutionOutcomeError, match="exactly match"):
+        create_plan(service, ctx, decision, parameters={"resource_id": "app-2"})
+
+    ctx, _, service, _, decision, _, _ = harness(
+        authority_expires=NOW + timedelta(minutes=5)
+    )
+    create_plan(service, ctx, decision)
+    with pytest.raises(ExecutionOutcomeError, match="not active"):
+        service.execute(
+            ctx,
+            "plan-1",
+            execution_id="exec-expired",
+            actor=actor("executor"),
+            executed_at=NOW + timedelta(minutes=10),
+        )
+
+    ctx, _, service, _, decision, _, _ = harness()
+    create_plan(service, ctx, decision)
+    execute(service, ctx)
+    contradictory = service.verify_outcome(
+        ctx,
+        "exec-1",
+        verification_id="verify-contradictory",
+        verifier=actor("independent-verifier"),
+        observations=(observation(30), observation(80)),
+        verified_at=NOW + timedelta(hours=1),
+    )
+    assert contradictory.state is OutcomeState.NOT_VERIFIED
