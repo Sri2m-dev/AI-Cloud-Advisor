@@ -33,6 +33,7 @@ ADRs remain the source of truth for the detailed decision, context, consequences
 | ADR-017 | Production Data Fabric Persistence Adapter | Accepted | P3 Enterprise Data Fabric | `docs/architecture/ADR-017-Production-Data-Fabric-Persistence-Adapter.md` |
 | ADR-018 | Governed Query Contracts | Accepted | Program G / WP-009 | `docs/architecture/ADR-018-Governed-Query-Contracts.md` |
 | ADR-019 | Explainability and Evidence Disclosure | Accepted | Program G / WP-009/WP-010 | `docs/architecture/ADR-019-Explainability-and-Evidence-Disclosure.md` |
+| ADR-020 | Recommendation and Decision Authority | Accepted | Program G / WP-011 | `docs/architecture/ADR-020-Recommendation-and-Decision-Authority.md` |
 | ADR-024 | Enterprise Metadata & Registry Platform | Accepted | Program G / WP-006 | `docs/architecture/ADR-024-Enterprise-Metadata-Registry-Platform.md` |
 
 ## Release Mapping
@@ -75,6 +76,7 @@ Governed intelligence decisions:
 
 - Governed Query Contracts
 - Explainability and Evidence Disclosure
+- Recommendation and Decision Authority
 - Enterprise Metadata & Registry Platform
 
 ## Governance Rules
