@@ -13,6 +13,7 @@ from business_service_posture import (
     DomainPostureAdapters,
     InMemoryBusinessServicePostureRepository,
     MissingPostureAttributionError,
+    PostureAttributionError,
     PostureDimension,
     PostureEvidenceReference,
     UnsupportedPostureAttributionError,
@@ -237,6 +238,32 @@ def test_missing_ambiguous_and_unsupported_attribution_are_rejected(
     )
     with pytest.raises(AmbiguousPostureAttributionError):
         ambiguous.resolve_technology(technology.id)
+
+
+def test_invalid_business_service_identity_is_rejected(adapter_setup) -> None:
+    context, services, entities, _, _, technology, _ = adapter_setup
+    invalid_relationships = InMemoryRelationshipRegistry()
+    invalid_relationships.register_relationship(
+        EnterpriseRelationship(
+            id="invalid-service-source",
+            relationship_type=RelationshipType.RUNS_ON,
+            source_entity_id="business-service:not-registered",
+            target_entity_id=technology.id,
+            organization_id=context.organization_id,
+            tenant_id=context.tenant_id,
+            source_system="catalog",
+            source_identifier="invalid-service-source",
+        )
+    )
+    resolver = BusinessServiceAttributionResolver(
+        context,
+        services=services,
+        entities=entities,
+        relationships=invalid_relationships,
+    )
+
+    with pytest.raises(PostureAttributionError, match="not a canonical"):
+        resolver.resolve_technology(technology.id)
 
 
 def test_cross_tenant_attribution_and_evidence_are_rejected(adapter_setup) -> None:

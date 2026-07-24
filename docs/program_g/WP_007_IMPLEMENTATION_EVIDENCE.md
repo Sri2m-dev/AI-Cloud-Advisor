@@ -99,6 +99,7 @@ Focused tests cover:
 - changed cost, risk, and health versioning;
 - cost, risk, and health attribution;
 - missing, ambiguous, and unsupported attribution;
+- invalid Business Service attribution identity;
 - invalid and cross-tenant Business Service access;
 - cross-tenant domain inputs, relationships, and evidence;
 - source/evidence/timestamp/freshness traceability;
@@ -109,10 +110,10 @@ Validation on the completed local source state:
 
 | Gate | Result |
 | --- | --- |
-| WP-007 focused | 18 passed, 0 failed |
-| Program G combined focused regression | 126 passed, 0 failed |
+| WP-007 focused | 19 passed, 0 failed |
+| Program G combined focused regression | 127 passed, 0 failed |
 | P3 non-secret release gate | 94 passed, 0 failed |
-| Full repository suite | 472 passed, 5 expected skips, 0 failed |
+| Full repository suite | 473 passed, 5 expected skips, 0 failed |
 | Governance/certification tests | 38 passed, 0 failed |
 | Contract/event governance CLI | Passed; 3 providers, 3 consumers |
 | Connector evidence certification CLI | Passed; 2 profiles, 4 pages, 4 observations |
