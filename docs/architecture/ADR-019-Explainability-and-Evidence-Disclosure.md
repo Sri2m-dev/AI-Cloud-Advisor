@@ -121,4 +121,3 @@ Evidence must cover authorized evidence retrieval, cross-tenant rejection,
 freshness and temporal disclosure, missing/stale evidence, partial results,
 projection/checkpoint/version disclosure, reproducibility, and the absence of
 fabricated evidence or canonical write-back.
-

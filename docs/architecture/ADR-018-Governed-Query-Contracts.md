@@ -125,4 +125,3 @@ Implementation evidence must cover deterministic dependency and impact paths,
 tenant and evidence isolation, depth/result/fan-out/budget limits, cycles,
 deterministic truncation, temporal disclosure, projection/checkpoint/version
 disclosure, reproducibility, and absence of canonical write-back.
-
