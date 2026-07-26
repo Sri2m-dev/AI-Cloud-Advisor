@@ -7,11 +7,14 @@ import pytest
 from data_fabric.foundation import TenantContext
 from data_fabric.foundation.exceptions import DataFabricTenantBoundaryError
 from services.aws_cur_ingestion_engine import (
+    CUR_FIELD_ALIASES,
     DEFAULT_CHUNK_SIZE,
     AccountMapping,
     AwsCurIngestionEngine,
     CurIngestionError,
     CurState,
+    canonical_header_map,
+    detect_profile,
     file_sha256,
 )
 
@@ -30,6 +33,22 @@ HEADERS = [
     "lineItem/BlendedCost",
     "reservation/ReservationARN",
     "savingsPlan/SavingsPlanARN",
+]
+UNDERSCORE_HEADERS = [
+    "bill_payer_account_id",
+    "line_item_usage_account_id",
+    "bill_billing_period_start_date",
+    "bill_billing_period_end_date",
+    "line_item_usage_start_date",
+    "line_item_usage_end_date",
+    "product_servicecode",
+    "line_item_product_code",
+    "line_item_line_item_type",
+    "line_item_unblended_cost",
+    "line_item_currency_code",
+    "line_item_blended_cost",
+    "reservation_reservation_a_r_n",
+    "savings_plan_savings_plan_a_r_n",
 ]
 
 
@@ -55,6 +74,15 @@ def row(member="MEMBER-A", cost="1.25", payer="PAYER-A"):
 def cur(rows):
     return (
         ",".join(HEADERS) + "\n" + "\n".join(",".join(values) for values in rows) + "\n"
+    ).encode()
+
+
+def underscore_cur(rows):
+    return (
+        ",".join(UNDERSCORE_HEADERS)
+        + "\n"
+        + "\n".join(",".join(values) for values in rows)
+        + "\n"
     ).encode()
 
 
@@ -156,6 +184,83 @@ def test_gzip_is_supported_and_unsupported_type_is_rejected(context, store):
     )
     with pytest.raises(CurIngestionError, match="unsupported CUR format"):
         engine(Store()).ingest(context, io.BytesIO(b"x"), "cur.xlsx")
+
+
+@pytest.mark.parametrize("filename,compress", [("bom.csv", False), ("bom.csv.gz", True)])
+def test_utf8_bom_never_corrupts_first_header(context, store, filename, compress):
+    payload = b"\xef\xbb\xbf" + underscore_cur([row()])
+    payload = gzip.compress(payload) if compress else payload
+    result = engine(store).ingest(context, io.BytesIO(payload), filename)
+    assert result.status is CurState.COMPLETED
+    assert next(iter(store.imports.values()))["payer_account_id"] == "PAYER-A"
+
+
+def test_slash_and_underscore_headers_are_semantically_equivalent(context, store):
+    slash_store = store
+    underscore_store = Store(store.mappings)
+    slash = engine(slash_store).ingest(context, io.BytesIO(cur([row()])), "slash.csv")
+    underscore = engine(underscore_store).ingest(
+        context,
+        io.BytesIO(underscore_cur([row()])),
+        "underscore.csv",
+    )
+    slash_fact = next(iter(slash_store.facts.values()))
+    underscore_fact = next(iter(underscore_store.facts.values()))
+    comparable = {
+        "payer_account_id",
+        "member_account_id",
+        "billing_period_start",
+        "billing_period_end",
+        "usage_start_at",
+        "usage_end_at",
+        "service_name",
+        "product_code",
+        "line_item_type",
+        "currency_code",
+        "unblended_cost",
+        "blended_cost",
+        "reservation_arn",
+        "savings_plan_arn",
+        "source_row_hash",
+    }
+    assert {key: slash_fact[key] for key in comparable} == {
+        key: underscore_fact[key] for key in comparable
+    }
+    assert slash.normalized_total == underscore.normalized_total
+
+
+def test_unmapped_optional_fields_remain_raw_and_protect_source_identity(context, store):
+    headers = HEADERS + ["pricing_custom_optional"]
+    first = row() + ["one"]
+    second = row() + ["two"]
+    payload = (
+        ",".join(headers)
+        + "\n"
+        + ",".join(first)
+        + "\n"
+        + ",".join(second)
+        + "\n"
+    ).encode()
+    result = engine(store).ingest(context, io.BytesIO(payload), "raw-identity.csv")
+    assert result.duplicate_rows == 0
+    assert len(store.facts) == 2
+    assert {
+        fact["raw_fields"]["pricing_custom_optional"]
+        for fact in store.facts.values()
+    } == {"one", "two"}
+
+
+def test_actual_131_column_header_fixture_passes_profile_validation():
+    fixture = Path(
+        "tests/cur_ingestion/fixtures/aws_cur_normalized_131_headers.csv"
+    )
+    headers = fixture.read_text(encoding="utf-8-sig").strip().split(",")
+    assert len(headers) == 131
+    mapping = canonical_header_map(headers)
+    profile = detect_profile(mapping)
+    assert profile.payer == "payer_account_id"
+    assert profile.currency == "currency_code"
+    assert len(CUR_FIELD_ALIASES) == 28
 
 
 def test_profile_validation_and_billing_period_are_from_cur_not_upload_date(context, store):

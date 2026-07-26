@@ -23,10 +23,11 @@ pytestmark = pytest.mark.skipif(
 )
 MIGRATION = Path(__file__).parents[2] / "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
 HEADERS = [
-    "bill/PayerAccountId", "lineItem/UsageAccountId", "bill/BillingPeriodStartDate",
-    "bill/BillingPeriodEndDate", "lineItem/UsageStartDate", "lineItem/UsageEndDate",
-    "product/ProductName", "lineItem/ProductCode", "lineItem/LineItemType",
-    "lineItem/UnblendedCost", "lineItem/CurrencyCode",
+    "bill_payer_account_id", "line_item_usage_account_id",
+    "bill_billing_period_start_date", "bill_billing_period_end_date",
+    "line_item_usage_start_date", "line_item_usage_end_date",
+    "product_servicecode", "line_item_product_code", "line_item_line_item_type",
+    "line_item_unblended_cost", "line_item_currency_code",
 ]
 
 
@@ -36,7 +37,9 @@ def _cur(member: str = "member-a", cost: str = "1.25") -> bytes:
         "2026-07-02T00:00:00Z", "2026-07-02T01:00:00Z", "EC2", "AmazonEC2",
         "Usage", cost, "USD",
     ]
-    return (",".join(HEADERS) + "\n" + ",".join(row) + "\n").encode()
+    return b"\xef\xbb\xbf" + (
+        ",".join(HEADERS) + "\n" + ",".join(row) + "\n"
+    ).encode()
 
 
 class PostgresStore:
@@ -105,7 +108,7 @@ class PostgresStore:
             columns = list(fact)
             with self.connection.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("insert into public.cloud_cost_fact ({}) values ({}) on conflict (organization_id, tenant_id, source_row_key) do nothing").format(
+                    sql.SQL("insert into public.cloud_cost_fact ({}) values ({}) on conflict (organization_id, tenant_id, import_id, source_row_hash) do nothing").format(
                         sql.SQL(", ").join(map(sql.Identifier, columns)),
                         sql.SQL(", ").join(sql.Placeholder() for _ in columns),
                     ),

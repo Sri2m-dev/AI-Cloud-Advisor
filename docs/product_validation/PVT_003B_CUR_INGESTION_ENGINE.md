@@ -12,10 +12,14 @@ dashboard integration; PVT-003C owns propagation.
 
 ## Parser profile
 
-The `aws-cur-v1` profile accepts `.csv` and `.csv.gz`. It validates AWS CUR
-headers before creating an import, derives the billing window in UTC from CUR
-billing timestamps, and rejects unsupported formats, missing fields, invalid
-timestamps, empty payers, and mixed-payer files.
+The `aws-cur-v1` profile accepts `.csv` and `.csv.gz`, including UTF-8 BOM.
+One explicit alias table maps slash-form AWS headers and the observed
+underscore-normalized export headers to internal semantic names before profile
+validation. Ambiguous aliases fail closed. Downstream processing uses only the
+internal names, while the complete original source row remains in `raw_fields`.
+The engine derives the billing window in UTC from CUR billing timestamps and
+rejects unsupported formats, missing fields, invalid timestamps, empty payers,
+and mixed-payer files.
 
 The parser streams with `csv.DictReader` in deterministic 10,000-row chunks
 (bounded to 10,000–25,000). File hashing reads 1 MiB blocks and rewinds a
