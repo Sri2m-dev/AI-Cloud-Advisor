@@ -86,7 +86,7 @@ class SupabaseAwsCurIngestionRepository:
         # The PVT-003A unique source identities make this a replay-safe batch.
         response = self._table("cloud_cost_fact").upsert(
             [dict(fact) for fact in facts],
-            on_conflict="organization_id,tenant_id,source_row_key",
+            on_conflict="organization_id,tenant_id,import_id,source_row_hash",
         ).execute()
         return len(response.data or facts)
 

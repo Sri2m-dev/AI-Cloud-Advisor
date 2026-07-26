@@ -1,5 +1,6 @@
 import gzip
 import io
+from pathlib import Path
 
 import pytest
 
@@ -194,6 +195,11 @@ def test_duplicate_source_rows_are_idempotent_and_checkpointed(context, store):
     assert result.duplicate_rows == 1 and len(store.facts) == 1
     part = next(iter(store.parts.values()))
     assert part["checkpoint_row"] == 2 and part["status"] == "completed"
+
+
+def test_service_adapter_uses_the_pvt003a_source_hash_idempotency_constraint():
+    source = Path("repositories/aws_cur_ingestion_repository.py").read_text(encoding="utf-8")
+    assert "organization_id,tenant_id,import_id,source_row_hash" in source
 
 
 def test_batch_failure_marks_import_failed_and_is_reconstructable(context, store):
