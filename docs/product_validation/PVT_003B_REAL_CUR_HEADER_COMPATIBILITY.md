@@ -1,7 +1,7 @@
 # PVT-003B Real CUR Header Compatibility
 
-Status: header remediation certified locally; exact-head hosted CI pending.
-No real CUR data was written to DEV.
+Status: header remediation certified; ready for review. No real CUR data was
+written to DEV.
 
 ## Canonicalization
 

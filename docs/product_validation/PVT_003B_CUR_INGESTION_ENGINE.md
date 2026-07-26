@@ -1,7 +1,7 @@
 # PVT-003B — AWS CUR Ingestion Engine
 
-Status: engineering complete; pending hosted CI and review. No real CUR is
-loaded by this increment.
+Status: engineering complete; ready for review. No real CUR is loaded by this
+increment.
 
 ## Boundary
 
