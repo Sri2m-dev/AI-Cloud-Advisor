@@ -4,6 +4,20 @@
 
 begin;
 
+-- The current platform convention uses organization_id as tenant_id. Persist
+-- that convention as explicit scope rows so future tenant identities can be
+-- added to one organization without allowing unrelated tenant references.
+create table if not exists public.cloud_cost_tenant_scope (
+    organization_id uuid not null references public.organizations(id),
+    tenant_id uuid not null references public.organizations(id),
+    created_at timestamptz not null default now(),
+    primary key (organization_id, tenant_id)
+);
+
+insert into public.cloud_cost_tenant_scope (organization_id, tenant_id)
+select id, id from public.organizations
+on conflict (organization_id, tenant_id) do nothing;
+
 create table if not exists public.cloud_cost_import (
     import_id uuid primary key,
     organization_id uuid not null references public.organizations(id),
@@ -25,24 +39,28 @@ create table if not exists public.cloud_cost_import (
     source_cost_total numeric(24, 10),
     normalized_cost_total numeric(24, 10),
     currency_code text,
-    supersedes_import_id uuid references public.cloud_cost_import(import_id),
+    supersedes_import_id uuid,
     created_by_user_id uuid,
     created_at timestamptz not null default now(),
     completed_at timestamptz,
     failure_code text,
     failure_detail text,
     source_evidence jsonb not null default '{}'::jsonb,
-    constraint cloud_cost_import_tenant_matches_organization check (tenant_id = organization_id),
+    foreign key (organization_id, tenant_id)
+        references public.cloud_cost_tenant_scope (organization_id, tenant_id),
+    foreign key (organization_id, tenant_id, supersedes_import_id)
+        references public.cloud_cost_import (organization_id, tenant_id, import_id),
     constraint cloud_cost_import_period_valid check (billing_period_end >= billing_period_start),
     constraint cloud_cost_import_key_unique unique (organization_id, tenant_id, import_key),
-    constraint cloud_cost_import_file_unique unique (organization_id, tenant_id, payer_account_id, source_file_sha256)
+    constraint cloud_cost_import_file_unique unique (organization_id, tenant_id, payer_account_id, source_file_sha256),
+    constraint cloud_cost_import_scope_identity_unique unique (organization_id, tenant_id, import_id)
 );
 
 create table if not exists public.cloud_cost_import_part (
     import_part_id uuid primary key,
     organization_id uuid not null references public.organizations(id),
     tenant_id uuid not null references public.organizations(id),
-    import_id uuid not null references public.cloud_cost_import(import_id) on delete restrict,
+    import_id uuid not null,
     part_key text not null,
     part_name text not null,
     part_sha256 text not null check (part_sha256 ~ '^[0-9a-f]{64}$'),
@@ -57,9 +75,13 @@ create table if not exists public.cloud_cost_import_part (
     error_sample jsonb not null default '[]'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    constraint cloud_cost_import_part_tenant_matches_organization check (tenant_id = organization_id),
+    foreign key (organization_id, tenant_id)
+        references public.cloud_cost_tenant_scope (organization_id, tenant_id),
+    foreign key (organization_id, tenant_id, import_id)
+        references public.cloud_cost_import (organization_id, tenant_id, import_id) on delete restrict,
     constraint cloud_cost_import_part_key_unique unique (organization_id, tenant_id, import_id, part_key),
-    constraint cloud_cost_import_part_hash_unique unique (organization_id, tenant_id, import_id, part_sha256)
+    constraint cloud_cost_import_part_hash_unique unique (organization_id, tenant_id, import_id, part_sha256),
+    constraint cloud_cost_import_part_scope_identity_unique unique (organization_id, tenant_id, import_part_id)
 );
 
 create table if not exists public.cloud_account_mapping (
@@ -77,7 +99,8 @@ create table if not exists public.cloud_account_mapping (
     mapping_source text not null,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    constraint cloud_account_mapping_tenant_matches_organization check (tenant_id = organization_id),
+    foreign key (organization_id, tenant_id)
+        references public.cloud_cost_tenant_scope (organization_id, tenant_id),
     constraint cloud_account_mapping_period_valid check (effective_to is null or effective_to >= effective_from),
     constraint cloud_account_mapping_unique unique (organization_id, tenant_id, provider, payer_account_id, account_id, effective_from)
 );
@@ -86,11 +109,11 @@ create table if not exists public.cloud_cost_fact (
     cloud_cost_fact_id uuid primary key,
     organization_id uuid not null references public.organizations(id),
     tenant_id uuid not null references public.organizations(id),
-    import_id uuid not null references public.cloud_cost_import(import_id) on delete restrict,
-    import_part_id uuid not null references public.cloud_cost_import_part(import_part_id) on delete restrict,
+    import_id uuid not null,
+    import_part_id uuid not null,
     source_row_key text not null,
     source_row_hash text not null check (source_row_hash ~ '^[0-9a-f]{64}$'),
-    supersedes_fact_id uuid references public.cloud_cost_fact(cloud_cost_fact_id),
+    supersedes_fact_id uuid,
     fact_status text not null check (fact_status in ('active', 'superseded', 'quarantined', 'rejected')),
     payer_account_id text not null,
     member_account_id text not null,
@@ -126,8 +149,16 @@ create table if not exists public.cloud_cost_fact (
     raw_fields jsonb not null default '{}'::jsonb,
     source_evidence jsonb not null default '{}'::jsonb,
     ingested_at timestamptz not null default now(),
-    constraint cloud_cost_fact_tenant_matches_organization check (tenant_id = organization_id),
+    foreign key (organization_id, tenant_id)
+        references public.cloud_cost_tenant_scope (organization_id, tenant_id),
+    foreign key (organization_id, tenant_id, import_id)
+        references public.cloud_cost_import (organization_id, tenant_id, import_id) on delete restrict,
+    foreign key (organization_id, tenant_id, import_part_id)
+        references public.cloud_cost_import_part (organization_id, tenant_id, import_part_id) on delete restrict,
+    foreign key (organization_id, tenant_id, supersedes_fact_id)
+        references public.cloud_cost_fact (organization_id, tenant_id, cloud_cost_fact_id),
     constraint cloud_cost_fact_period_valid check (billing_period_end >= billing_period_start),
+    constraint cloud_cost_fact_scope_identity_unique unique (organization_id, tenant_id, cloud_cost_fact_id),
     constraint cloud_cost_fact_source_unique unique (organization_id, tenant_id, source_row_key),
     constraint cloud_cost_fact_hash_unique unique (organization_id, tenant_id, import_id, source_row_hash)
 );
@@ -136,7 +167,7 @@ create table if not exists public.cloud_cost_reconciliation (
     cloud_cost_reconciliation_id uuid primary key,
     organization_id uuid not null references public.organizations(id),
     tenant_id uuid not null references public.organizations(id),
-    import_id uuid not null references public.cloud_cost_import(import_id) on delete restrict,
+    import_id uuid not null,
     billing_period_start date not null,
     billing_period_end date not null,
     payer_account_id text not null,
@@ -152,7 +183,10 @@ create table if not exists public.cloud_cost_reconciliation (
     evidence jsonb not null default '{}'::jsonb,
     reconciled_at timestamptz,
     created_at timestamptz not null default now(),
-    constraint cloud_cost_reconciliation_tenant_matches_organization check (tenant_id = organization_id),
+    foreign key (organization_id, tenant_id)
+        references public.cloud_cost_tenant_scope (organization_id, tenant_id),
+    foreign key (organization_id, tenant_id, import_id)
+        references public.cloud_cost_import (organization_id, tenant_id, import_id) on delete restrict,
     constraint cloud_cost_reconciliation_period_valid check (billing_period_end >= billing_period_start),
     constraint cloud_cost_reconciliation_import_unique unique (organization_id, tenant_id, import_id)
 );
@@ -172,11 +206,16 @@ create index if not exists cloud_cost_reconciliation_tenant_period_idx
 
 revoke all on public.cloud_cost_import, public.cloud_cost_import_part,
     public.cloud_account_mapping, public.cloud_cost_fact,
-    public.cloud_cost_reconciliation from anon, authenticated;
+    public.cloud_cost_reconciliation, public.cloud_cost_tenant_scope from anon, authenticated;
 
 grant select on public.cloud_cost_import, public.cloud_cost_import_part,
     public.cloud_account_mapping, public.cloud_cost_reconciliation to authenticated;
 
+grant select, insert, update on public.cloud_cost_import, public.cloud_cost_import_part,
+    public.cloud_account_mapping, public.cloud_cost_fact,
+    public.cloud_cost_reconciliation, public.cloud_cost_tenant_scope to service_role;
+
+alter table public.cloud_cost_tenant_scope enable row level security;
 alter table public.cloud_cost_import enable row level security;
 alter table public.cloud_cost_import_part enable row level security;
 alter table public.cloud_account_mapping enable row level security;
@@ -187,28 +226,40 @@ drop policy if exists cloud_cost_import_select_own_org on public.cloud_cost_impo
 create policy cloud_cost_import_select_own_org on public.cloud_cost_import
 for select to authenticated using (
     organization_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
-    and tenant_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    and tenant_id = coalesce(
+        nullif(auth.jwt() ->> 'tenant_id', '')::uuid,
+        (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    )
 );
 
 drop policy if exists cloud_cost_import_part_select_own_org on public.cloud_cost_import_part;
 create policy cloud_cost_import_part_select_own_org on public.cloud_cost_import_part
 for select to authenticated using (
     organization_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
-    and tenant_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    and tenant_id = coalesce(
+        nullif(auth.jwt() ->> 'tenant_id', '')::uuid,
+        (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    )
 );
 
 drop policy if exists cloud_account_mapping_select_own_org on public.cloud_account_mapping;
 create policy cloud_account_mapping_select_own_org on public.cloud_account_mapping
 for select to authenticated using (
     organization_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
-    and tenant_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    and tenant_id = coalesce(
+        nullif(auth.jwt() ->> 'tenant_id', '')::uuid,
+        (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    )
 );
 
 drop policy if exists cloud_cost_reconciliation_select_own_org on public.cloud_cost_reconciliation;
 create policy cloud_cost_reconciliation_select_own_org on public.cloud_cost_reconciliation
 for select to authenticated using (
     organization_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
-    and tenant_id = (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    and tenant_id = coalesce(
+        nullif(auth.jwt() ->> 'tenant_id', '')::uuid,
+        (select u.org_id from public.users u where lower(u.email) = lower(auth.jwt() ->> 'email') limit 1)
+    )
 );
 
 -- No authenticated write policy is created. Import writes are backend/service
@@ -223,8 +274,8 @@ begin
         where schemaname = 'public'
           and tablename in ('cloud_cost_import', 'cloud_cost_import_part', 'cloud_account_mapping', 'cloud_cost_fact', 'cloud_cost_reconciliation')
           and (roles && array['public', 'anon']::name[]
-               or coalesce(qual, '') ~ '^\\s*\\(?true\\)?\\s*$'
-               or coalesce(with_check, '') ~ '^\\s*\\(?true\\)?\\s*$')
+               or lower(trim(coalesce(qual, ''))) in ('true', '(true)')
+               or lower(trim(coalesce(with_check, ''))) in ('true', '(true)'))
     loop
         raise exception 'Unsafe CUR policy remains: %.% policy %', unsafe_policy.schemaname, unsafe_policy.tablename, unsafe_policy.policyname;
     end loop;

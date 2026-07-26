@@ -17,6 +17,7 @@ def _sql() -> str:
 def test_pvt003a_creates_the_approved_additive_foundation_objects():
     sql = _sql()
     for table in (
+        "cloud_cost_tenant_scope",
         "cloud_cost_import",
         "cloud_cost_import_part",
         "cloud_account_mapping",
@@ -42,9 +43,15 @@ def test_pvt003a_preserves_tenant_ownership_and_deterministic_identities():
         "payer_account_id",
         "source_evidence jsonb",
         "cloud_cost_fact_source_unique",
+        "cloud_cost_fact_scope_identity_unique",
+        "references public.cloud_cost_tenant_scope (organization_id, tenant_id)",
+        "references public.cloud_cost_import (organization_id, tenant_id, import_id)",
+        "references public.cloud_cost_import_part (organization_id, tenant_id, import_part_id)",
+        "references public.cloud_cost_fact (organization_id, tenant_id, cloud_cost_fact_id)",
     ):
         assert required in sql
-    assert sql.count("tenant_id = organization_id") >= 5
+    assert "tenant_id = organization_id" not in sql
+    assert sql.count("nullif(auth.jwt() ->> 'tenant_id', '')::uuid") == 4
 
 
 def test_pvt003a_denies_anon_and_authenticated_writes_by_default():
@@ -52,6 +59,7 @@ def test_pvt003a_denies_anon_and_authenticated_writes_by_default():
     assert "revoke all on public.cloud_cost_import" in sql
     assert "from anon, authenticated" in sql
     assert "grant select on public.cloud_cost_import" in sql
+    assert "to service_role" in sql
     assert "for insert to authenticated" not in sql
     assert "for update to authenticated" not in sql
     assert "for delete to authenticated" not in sql

@@ -13,12 +13,15 @@ Scope: persistence/security foundation only.
 | `cloud_account_mapping` | Authorized payer/member-account ownership and quarantine state |
 | `cloud_cost_fact` | Normalized, source-row-identifiable CUR facts with explicit cost/commitment/adjustment semantics |
 | `cloud_cost_reconciliation` | Source-to-normalized totals, counts, variance, and reconciliation evidence |
+| `cloud_cost_tenant_scope` | Minimal organization-to-tenant scope relation; seeded from the current convention and used by composite foreign keys |
 
 ## Security model
 
-- Each object has `organization_id` and `tenant_id`; the foundation intentionally
-  requires equality until the platform’s organization/tenant identity model gains
-  independently resolvable tenant identifiers.
+- Each object has independently stored `organization_id` and `tenant_id`. Current
+  JWTs fall back to the certified `users.org_id` convention; a future `tenant_id`
+  JWT claim is enforced when present. `cloud_cost_tenant_scope` is seeded with
+  the current convention and its composite foreign keys reject unrelated tenant
+  references without encoding `tenant_id == organization_id` permanently.
 - RLS is enabled on every new table.
 - `anon` and `authenticated` receive no structural or write privileges.
 - Authenticated users may read only their own import/history/account-resolution/
