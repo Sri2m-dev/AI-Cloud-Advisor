@@ -25,6 +25,13 @@ The parser streams with `csv.DictReader` in deterministic 10,000-row chunks
 (bounded to 10,000–25,000). File hashing reads 1 MiB blocks and rewinds a
 seekable upload; rows are never assembled as a whole-file dataframe.
 
+Each 10,000-row parser checkpoint is persisted in deterministic sub-batches.
+The defaults are 500 rows and 3 MiB of compact UTF-8 JSON, whichever boundary
+is reached first; both bounds are constructor-configurable. A single unusually
+wide row is emitted alone. Batch telemetry records checkpoint/batch number,
+rows, serialized payload bytes, duration, retry status, and failure detail.
+The checkpoint advances only after every sub-batch succeeds.
+
 ## Preserved fields
 
 Normalized facts preserve payer/member account, billing and usage windows,
@@ -40,6 +47,8 @@ The PVT-003A `status` contract is used directly: `received`, `validating`,
 replays a terminal import. A failed nonterminal import resumes using its same
 import ID and deterministic part/fact IDs. Different hashes create a new import
 and may reference `supersedes_import_id`; prior evidence is retained.
+If a sub-batch fails, prior successful upserts remain replay-safe under the
+PVT-003A source identity constraint and the part checkpoint remains incomplete.
 
 ## Account safety and reconciliation
 

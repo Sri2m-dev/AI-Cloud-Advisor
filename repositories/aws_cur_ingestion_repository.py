@@ -4,6 +4,7 @@ The client is injected by backend composition.  It must be created with the
 service-role credential; this module deliberately does not import a browser
 Supabase client or expose a UI-facing constructor.
 """
+
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
@@ -71,9 +72,7 @@ class SupabaseAwsCurIngestionRepository:
             on_conflict="organization_id,tenant_id,import_id,part_key",
         ).execute()
 
-    def update_part(
-        self, context: TenantContext, part_id: str, payload: Mapping[str, Any]
-    ) -> None:
+    def update_part(self, context: TenantContext, part_id: str, payload: Mapping[str, Any]) -> None:
         self._table("cloud_cost_import_part").update(dict(payload)).eq(
             "organization_id", context.organization_id
         ).eq("tenant_id", context.tenant_id).eq("import_part_id", part_id).execute()
@@ -84,11 +83,11 @@ class SupabaseAwsCurIngestionRepository:
         if not facts:
             return 0
         # The PVT-003A unique source identities make this a replay-safe batch.
-        response = self._table("cloud_cost_fact").upsert(
+        self._table("cloud_cost_fact").upsert(
             [dict(fact) for fact in facts],
             on_conflict="organization_id,tenant_id,import_id,source_row_hash",
         ).execute()
-        return len(response.data or facts)
+        return len(facts)
 
     def upsert_reconciliation(self, context: TenantContext, payload: Mapping[str, Any]) -> None:
         self._scope(context, payload)

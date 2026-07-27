@@ -1,8 +1,9 @@
 """Opt-in PVT-003B engine certification against disposable PostgreSQL only."""
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import io
-import json
 import os
 import uuid
 from pathlib import Path
@@ -15,40 +16,63 @@ from psycopg2.extras import Json, RealDictCursor
 from data_fabric.foundation import TenantContext
 from services.aws_cur_ingestion_engine import AccountMapping, AwsCurIngestionEngine, CurState
 
-
 DATABASE_URL = os.getenv("PVT003B_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL,
     reason="requires an explicitly supplied disposable PVT003B_DATABASE_URL",
 )
-MIGRATION = Path(__file__).parents[2] / "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
+MIGRATION = (
+    Path(__file__).parents[2] / "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
+)
 HEADERS = [
-    "bill_payer_account_id", "line_item_usage_account_id",
-    "bill_billing_period_start_date", "bill_billing_period_end_date",
-    "line_item_usage_start_date", "line_item_usage_end_date",
-    "product_servicecode", "line_item_product_code", "line_item_line_item_type",
-    "line_item_unblended_cost", "line_item_currency_code",
+    "bill_payer_account_id",
+    "line_item_usage_account_id",
+    "bill_billing_period_start_date",
+    "bill_billing_period_end_date",
+    "line_item_usage_start_date",
+    "line_item_usage_end_date",
+    "product_servicecode",
+    "line_item_product_code",
+    "line_item_line_item_type",
+    "line_item_unblended_cost",
+    "line_item_currency_code",
 ]
 
 
-def _cur(member: str = "member-a", cost: str = "1.25") -> bytes:
-    row = [
-        "payer-a", member, "2026-07-01T00:00:00Z", "2026-07-31T23:59:59Z",
-        "2026-07-02T00:00:00Z", "2026-07-02T01:00:00Z", "EC2", "AmazonEC2",
-        "Usage", cost, "USD",
+def _cur(member: str = "member-a", cost: str = "1.25", rows: int = 1) -> bytes:
+    values = [
+        [
+            "payer-a",
+            member,
+            "2026-07-01T00:00:00Z",
+            "2026-07-31T23:59:59Z",
+            "2026-07-02T00:00:00Z",
+            "2026-07-02T01:00:00Z",
+            "EC2",
+            "AmazonEC2",
+            "Usage",
+            f"{cost}{index:05d}",
+            "USD",
+        ]
+        for index in range(rows)
     ]
-    return b"\xef\xbb\xbf" + (
-        ",".join(HEADERS) + "\n" + ",".join(row) + "\n"
-    ).encode()
+    return (
+        b"\xef\xbb\xbf"
+        + (",".join(HEADERS) + "\n" + "\n".join(",".join(row) for row in values) + "\n").encode()
+    )
 
 
 class PostgresStore:
     def __init__(self, connection):
         self.connection = connection
+        self.write_calls = 0
+        self.fail_on_call = None
 
     @staticmethod
     def _values(payload):
-        return [Json(value) if isinstance(value, (dict, list)) else value for value in payload.values()]
+        return [
+            Json(value) if isinstance(value, (dict, list)) else value for value in payload.values()
+        ]
 
     def _insert(self, table, payload, conflict=None):
         columns = list(payload)
@@ -62,7 +86,8 @@ class PostgresStore:
                 sql.SQL(", ").join(map(sql.Identifier, conflict)),
                 sql.SQL(", ").join(
                     sql.SQL("{} = excluded.{}").format(sql.Identifier(col), sql.Identifier(col))
-                    for col in columns if col not in conflict
+                    for col in columns
+                    if col not in conflict
                 ),
             )
         with self.connection.cursor() as cursor:
@@ -84,11 +109,21 @@ class PostgresStore:
             )
             return tuple(AccountMapping(**dict(row)) for row in cursor.fetchall())
 
-    def create_import(self, context, payload): self._insert("cloud_cost_import", payload)
-    def create_part(self, context, payload): self._insert("cloud_cost_import_part", payload, ("organization_id", "tenant_id", "import_id", "part_key"))
+    def create_import(self, context, payload):
+        self._insert("cloud_cost_import", payload)
 
-    def update_import(self, context, import_id, payload): self._update("cloud_cost_import", "import_id", import_id, payload)
-    def update_part(self, context, part_id, payload): self._update("cloud_cost_import_part", "import_part_id", part_id, payload)
+    def create_part(self, context, payload):
+        self._insert(
+            "cloud_cost_import_part",
+            payload,
+            ("organization_id", "tenant_id", "import_id", "part_key"),
+        )
+
+    def update_import(self, context, import_id, payload):
+        self._update("cloud_cost_import", "import_id", import_id, payload)
+
+    def update_part(self, context, part_id, payload):
+        self._update("cloud_cost_import_part", "import_part_id", part_id, payload)
 
     def _update(self, table, key, value, payload):
         columns = list(payload)
@@ -96,19 +131,26 @@ class PostgresStore:
             cursor.execute(
                 sql.SQL("update {} set {} where {} = %s").format(
                     sql.Identifier("public", table),
-                    sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(col)) for col in columns),
+                    sql.SQL(", ").join(
+                        sql.SQL("{} = %s").format(sql.Identifier(col)) for col in columns
+                    ),
                     sql.Identifier(key),
                 ),
                 self._values(payload) + [value],
             )
 
     def write_facts(self, context, facts):
+        self.write_calls += 1
+        if self.write_calls == self.fail_on_call:
+            raise psycopg2.errors.QueryCanceled("injected statement timeout")
         written = 0
         for fact in facts:
             columns = list(fact)
             with self.connection.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("insert into public.cloud_cost_fact ({}) values ({}) on conflict (organization_id, tenant_id, import_id, source_row_hash) do nothing").format(
+                    sql.SQL(
+                        "insert into public.cloud_cost_fact ({}) values ({}) on conflict (organization_id, tenant_id, import_id, source_row_hash) do nothing"
+                    ).format(
                         sql.SQL(", ").join(map(sql.Identifier, columns)),
                         sql.SQL(", ").join(sql.Placeholder() for _ in columns),
                     ),
@@ -118,7 +160,9 @@ class PostgresStore:
         return written
 
     def upsert_reconciliation(self, context, payload):
-        self._insert("cloud_cost_reconciliation", payload, ("organization_id", "tenant_id", "import_id"))
+        self._insert(
+            "cloud_cost_reconciliation", payload, ("organization_id", "tenant_id", "import_id")
+        )
 
 
 def test_pvt003b_engine_disposable_postgres_certification():
@@ -128,12 +172,22 @@ def test_pvt003b_engine_disposable_postgres_certification():
     try:
         with connection.cursor() as cursor:
             cursor.execute("create schema if not exists auth")
-            cursor.execute("do $$ begin create role anon nologin; exception when duplicate_object then null; end $$")
-            cursor.execute("do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$")
-            cursor.execute("do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$")
+            cursor.execute(
+                "do $$ begin create role anon nologin; exception when duplicate_object then null; end $$"
+            )
+            cursor.execute(
+                "do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$"
+            )
+            cursor.execute(
+                "do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$"
+            )
             cursor.execute("create table public.organizations (id uuid primary key)")
-            cursor.execute("create table public.users (id uuid primary key, email text not null, org_id uuid not null references public.organizations(id))")
-            cursor.execute("create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$")
+            cursor.execute(
+                "create table public.users (id uuid primary key, email text not null, org_id uuid not null references public.organizations(id))"
+            )
+            cursor.execute(
+                "create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$"
+            )
             cursor.execute("insert into public.organizations values (%s)", (org,))
             cursor.execute(MIGRATION.read_text(encoding="utf-8"))
             cursor.execute(MIGRATION.read_text(encoding="utf-8"))
@@ -143,15 +197,32 @@ def test_pvt003b_engine_disposable_postgres_certification():
             )
         context = TenantContext(org, org)
         store = PostgresStore(connection)
-        first = AwsCurIngestionEngine(store).ingest(context, io.BytesIO(_cur()), "synthetic.csv")
-        replay = AwsCurIngestionEngine(store).ingest(context, io.BytesIO(_cur()), "synthetic.csv")
-        quarantine = AwsCurIngestionEngine(store).ingest(context, io.BytesIO(_cur("unknown")), "unknown.csv")
+        payload = _cur(rows=10_000)
+        engine = AwsCurIngestionEngine(store)
+        store.fail_on_call = 10
+        with pytest.raises(psycopg2.errors.QueryCanceled):
+            engine.ingest(context, io.BytesIO(payload), "synthetic-10k.csv")
+        assert len(engine.last_persistence_metrics) == 10
+        assert engine.last_persistence_metrics[-1].failure
+        store.fail_on_call = None
+        first = engine.ingest(context, io.BytesIO(payload), "synthetic-10k.csv")
+        replay = engine.ingest(context, io.BytesIO(payload), "synthetic-10k.csv")
+        quarantine = AwsCurIngestionEngine(store).ingest(
+            context, io.BytesIO(_cur("unknown")), "unknown.csv"
+        )
         assert first.status is CurState.COMPLETED and replay.replayed
         assert quarantine.status is CurState.AWAITING_ACCOUNT_RESOLUTION
+        assert len(first.persistence_metrics) == 20
+        assert all(metric.rows <= 500 for metric in first.persistence_metrics)
         with connection.cursor() as cursor:
             cursor.execute("select count(*) from public.cloud_cost_fact")
-            assert cursor.fetchone() == (2,)
+            assert cursor.fetchone() == (10_001,)
             cursor.execute("select count(*) from public.cloud_cost_reconciliation")
             assert cursor.fetchone() == (2,)
+            cursor.execute(
+                "select count(*) from public.cloud_cost_fact where organization_id <> %s",
+                (org,),
+            )
+            assert cursor.fetchone() == (0,)
     finally:
         connection.close()

@@ -12,6 +12,8 @@ import hashlib
 import io
 import itertools
 import json
+import logging
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -28,6 +30,11 @@ from data_fabric.foundation.exceptions import (
 
 DEFAULT_CHUNK_SIZE = 10_000
 MAX_CHUNK_SIZE = 25_000
+DEFAULT_PERSISTENCE_BATCH_ROWS = 500
+DEFAULT_PERSISTENCE_BATCH_BYTES = 3 * 1024 * 1024
+MIN_PERSISTENCE_BATCH_BYTES = 1024
+
+logger = logging.getLogger(__name__)
 
 CUR_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "payer_account_id": ("bill/PayerAccountId", "bill_payer_account_id"),
@@ -152,6 +159,18 @@ class CurImportResult:
     duplicate_rows: int
     normalized_total: Decimal
     replayed: bool = False
+    persistence_metrics: tuple["PersistenceBatchMetric", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PersistenceBatchMetric:
+    checkpoint: int
+    batch: int
+    rows: int
+    payload_bytes: int
+    duration_seconds: float
+    retry: bool
+    failure: str | None = None
 
 
 class CurPersistence(Protocol):
@@ -176,9 +195,7 @@ class CurPersistence(Protocol):
 def canonical_header_map(headers: Iterable[str]) -> dict[str, str]:
     """Map explicit source aliases to internal fields and reject ambiguity."""
     alias_to_canonical = {
-        alias: canonical
-        for canonical, aliases in CUR_FIELD_ALIASES.items()
-        for alias in aliases
+        alias: canonical for canonical, aliases in CUR_FIELD_ALIASES.items() for alias in aliases
     }
     resolved: dict[str, str] = {}
     for raw_header in headers:
@@ -237,11 +254,7 @@ def _sha256(value: bytes) -> str:
 
 
 def _canonical_identity(row: Mapping[str, Any]) -> dict[str, str]:
-    identity = {
-        key: str(value)
-        for key, value in row.items()
-        if not key.startswith("__")
-    }
+    identity = {key: str(value) for key, value in row.items() if not key.startswith("__")}
     raw_fields = row.get("__raw_fields__", {})
     mapped_headers = set(row.get("__mapped_source_headers__", ()))
     identity.update(
@@ -291,8 +304,7 @@ def iter_cur_chunks(
         chunk: list[dict[str, Any]] = []
         for source_row in reader:
             raw_row = {
-                (key or "").lstrip("\ufeff"): value or ""
-                for key, value in source_row.items()
+                (key or "").lstrip("\ufeff"): value or "" for key, value in source_row.items()
             }
             canonical_row = {
                 canonical: raw_row.get(source_header, "")
@@ -312,10 +324,28 @@ def iter_cur_chunks(
 
 class AwsCurIngestionEngine:
     def __init__(
-        self, persistence: CurPersistence, *, chunk_size: int = DEFAULT_CHUNK_SIZE
+        self,
+        persistence: CurPersistence,
+        *,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        persistence_batch_rows: int = DEFAULT_PERSISTENCE_BATCH_ROWS,
+        persistence_batch_bytes: int = DEFAULT_PERSISTENCE_BATCH_BYTES,
     ) -> None:
+        if persistence_batch_rows < 1:
+            raise CurIngestionError("persistence_batch_rows must be positive")
+        if persistence_batch_bytes < MIN_PERSISTENCE_BATCH_BYTES:
+            raise CurIngestionError(
+                f"persistence_batch_bytes must be at least {MIN_PERSISTENCE_BATCH_BYTES}"
+            )
         self._persistence = persistence
         self._chunk_size = chunk_size
+        self._persistence_batch_rows = persistence_batch_rows
+        self._persistence_batch_bytes = persistence_batch_bytes
+        self._last_persistence_metrics: list[PersistenceBatchMetric] = []
+
+    @property
+    def last_persistence_metrics(self) -> tuple[PersistenceBatchMetric, ...]:
+        return tuple(self._last_persistence_metrics)
 
     def ingest(
         self,
@@ -326,6 +356,7 @@ class AwsCurIngestionEngine:
         source_uri: str | None = None,
         supersedes_import_id: str | None = None,
     ) -> CurImportResult:
+        self._last_persistence_metrics = []
         if not isinstance(context, TenantContext):
             raise CurIngestionError("TenantContext is required")
         file_hash = file_sha256(source)
@@ -357,26 +388,27 @@ class AwsCurIngestionEngine:
                 replayed=True,
             )
 
+        is_retry = existing is not None
         import_id = str(existing["import_id"]) if existing else str(uuid.uuid4())
         import_key = _sha256(
             f"{context.organization_id}:{context.tenant_id}:{payer}:{file_hash}".encode()
         )
         import_payload = {
-                "import_id": import_id,
-                "organization_id": context.organization_id,
-                "tenant_id": context.tenant_id,
-                "import_key": import_key,
-                "payer_account_id": payer,
-                "billing_period_start": str(period_start),
-                "billing_period_end": str(period_end),
-                "source_file_name": filename,
-                "source_file_sha256": file_hash,
-                "source_uri": source_uri,
-                "compression": "gzip" if filename.lower().endswith(".gz") else "csv",
-                "parser_profile": "aws-cur-v1",
-                "status": CurState.VALIDATING.value,
-                "supersedes_import_id": supersedes_import_id,
-                "source_evidence": {"file_sha256": file_hash},
+            "import_id": import_id,
+            "organization_id": context.organization_id,
+            "tenant_id": context.tenant_id,
+            "import_key": import_key,
+            "payer_account_id": payer,
+            "billing_period_start": str(period_start),
+            "billing_period_end": str(period_end),
+            "source_file_name": filename,
+            "source_file_sha256": file_hash,
+            "source_uri": source_uri,
+            "compression": "gzip" if filename.lower().endswith(".gz") else "csv",
+            "parser_profile": "aws-cur-v1",
+            "status": CurState.VALIDATING.value,
+            "supersedes_import_id": supersedes_import_id,
+            "source_evidence": {"file_sha256": file_hash},
         }
         if existing:
             self._persistence.update_import(
@@ -391,13 +423,13 @@ class AwsCurIngestionEngine:
             self._validate_mapping_scope(context, mappings)
             accepted = quarantined = duplicates = source_rows = 0
             normalized_total = Decimal("0")
+            persistence_metrics: list[PersistenceBatchMetric] = []
             all_chunks = itertools.chain((first_chunk,), chunks)
             for number, chunk in enumerate(all_chunks, start=1):
                 part_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{import_id}:part:{number}"))
                 part_hash = _sha256(
                     "\n".join(
-                        json.dumps(_canonical_identity(row), sort_keys=True)
-                        for row in chunk
+                        json.dumps(_canonical_identity(row), sort_keys=True) for row in chunk
                     ).encode()
                 )
                 self._persistence.create_part(
@@ -419,8 +451,18 @@ class AwsCurIngestionEngine:
                 facts, part_accepted, part_quarantined = self._normalise_chunk(
                     context, import_id, part_id, chunk, profile, payer, mappings
                 )
-                written = self._persistence.write_facts(context, facts)
-                duplicates += len(facts) - written
+                unique_facts = []
+                seen_source_hashes: set[str] = set()
+                for fact in facts:
+                    source_hash = str(fact["source_row_hash"])
+                    if source_hash in seen_source_hashes:
+                        duplicates += 1
+                    else:
+                        seen_source_hashes.add(source_hash)
+                        unique_facts.append(fact)
+                persistence_metrics.extend(
+                    self._write_persistence_batches(context, number, unique_facts, retry=is_retry)
+                )
                 accepted += part_accepted
                 quarantined += part_quarantined
                 source_rows += len(chunk)
@@ -434,7 +476,7 @@ class AwsCurIngestionEngine:
                         "checkpoint_row": source_rows,
                         "accepted_row_count": part_accepted,
                         "rejected_row_count": part_quarantined,
-                        "duplicate_row_count": len(facts) - written,
+                        "duplicate_row_count": len(facts) - len(unique_facts),
                         "status": "completed",
                     },
                 )
@@ -480,7 +522,14 @@ class AwsCurIngestionEngine:
                 {"status": final.value, "completed_at": datetime.now(timezone.utc).isoformat()},
             )
             return CurImportResult(
-                import_id, final, source_rows, accepted, quarantined, duplicates, normalized_total
+                import_id,
+                final,
+                source_rows,
+                accepted,
+                quarantined,
+                duplicates,
+                normalized_total,
+                persistence_metrics=tuple(persistence_metrics),
             )
         except Exception as exc:
             self._persistence.update_import(
@@ -493,6 +542,79 @@ class AwsCurIngestionEngine:
                 },
             )
             raise
+
+    @staticmethod
+    def _serialized_fact_bytes(fact: Mapping[str, Any]) -> int:
+        return len(
+            json.dumps(fact, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+                "utf-8"
+            )
+        )
+
+    def _persistence_batches(
+        self, facts: list[Mapping[str, Any]]
+    ) -> Iterator[tuple[list[Mapping[str, Any]], int]]:
+        batch: list[Mapping[str, Any]] = []
+        payload_bytes = 2
+        for fact in facts:
+            fact_bytes = self._serialized_fact_bytes(fact)
+            added_bytes = fact_bytes + int(bool(batch))
+            if batch and (
+                len(batch) >= self._persistence_batch_rows
+                or payload_bytes + added_bytes > self._persistence_batch_bytes
+            ):
+                yield batch, payload_bytes
+                batch = []
+                payload_bytes = 2
+                added_bytes = fact_bytes
+            batch.append(fact)
+            payload_bytes += added_bytes
+        if batch:
+            yield batch, payload_bytes
+
+    def _write_persistence_batches(
+        self,
+        context: TenantContext,
+        checkpoint: int,
+        facts: list[Mapping[str, Any]],
+        *,
+        retry: bool,
+    ) -> list[PersistenceBatchMetric]:
+        metrics: list[PersistenceBatchMetric] = []
+        for batch_number, (batch, payload_bytes) in enumerate(
+            self._persistence_batches(facts), start=1
+        ):
+            started = time.perf_counter()
+            failure: str | None = None
+            try:
+                self._persistence.write_facts(context, batch)
+            except Exception as exc:
+                failure = f"{type(exc).__name__}: {exc}"
+                raise
+            finally:
+                metric = PersistenceBatchMetric(
+                    checkpoint=checkpoint,
+                    batch=batch_number,
+                    rows=len(batch),
+                    payload_bytes=payload_bytes,
+                    duration_seconds=time.perf_counter() - started,
+                    retry=retry,
+                    failure=failure,
+                )
+                metrics.append(metric)
+                self._last_persistence_metrics.append(metric)
+                logger.info(
+                    "cur_persistence_batch checkpoint=%s batch=%s rows=%s "
+                    "payload_bytes=%s duration_seconds=%.6f retry=%s failure=%r",
+                    metric.checkpoint,
+                    metric.batch,
+                    metric.rows,
+                    metric.payload_bytes,
+                    metric.duration_seconds,
+                    metric.retry,
+                    metric.failure,
+                )
+        return metrics
 
     @staticmethod
     def _validate_mapping_scope(context: TenantContext, mappings: Iterable[AccountMapping]) -> None:
@@ -580,8 +702,7 @@ class AwsCurIngestionEngine:
                     "reservation_arn": row.get("reservation_arn") or None,
                     "reservation_effective_cost": row.get("reservation_effective_cost") or None,
                     "savings_plan_arn": row.get("savings_plan_arn") or None,
-                    "savings_plan_effective_cost": row.get("savings_plan_effective_cost")
-                    or None,
+                    "savings_plan_effective_cost": row.get("savings_plan_effective_cost") or None,
                     "discount_amount": row.get("discount_amount") or None,
                     "credit_amount": row.get("credit_amount") or None,
                     "refund_amount": row.get("refund_amount") or None,
