@@ -6,6 +6,8 @@ import pandas as pd
 
 from services.enterprise_financial_model import EnterpriseFinancialModel
 from services.supabase_client import supabase
+from auth.authenticated_tenant import AuthenticatedTenantContext
+from services.enterprise_spend_service import EnterpriseSpendService
 
 
 def _safe_float(value: Any) -> float:
@@ -22,19 +24,32 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
-def _fetch_rows(table_name: str, limit: int | None = None) -> list[dict[str, Any]]:
-    try:
-        query = supabase.table(table_name).select("*")
-        if limit:
-            query = query.limit(limit)
-        response = query.execute()
-        return response.data or []
-    except Exception:
-        return []
+def _fetch_rows(
+    table_name: str,
+    context: AuthenticatedTenantContext,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    for scope_column in ("organization_id", "org_id"):
+        try:
+            query = (
+                supabase.table(table_name)
+                .select("*")
+                .eq(scope_column, context.organization_id)
+            )
+            if limit:
+                query = query.limit(limit)
+            response = query.execute()
+            return response.data or []
+        except Exception:
+            continue
+    return []
 
 
-def _fetch_one(table_name: str) -> dict[str, Any]:
-    rows = _fetch_rows(table_name, limit=1)
+def _fetch_one(
+    table_name: str,
+    context: AuthenticatedTenantContext,
+) -> dict[str, Any]:
+    rows = _fetch_rows(table_name, context, limit=1)
     return rows[0] if rows else {}
 
 
@@ -57,11 +72,49 @@ class ExecutiveDashboardCertificationService:
     """
 
     @staticmethod
-    def get_dashboard() -> dict[str, Any]:
-        legacy_metrics = ExecutiveDashboardCertificationService._legacy_metrics()
-        enterprise_summary = EnterpriseFinancialModel.get_enterprise_summary()
-        reconciliation = EnterpriseFinancialModel.get_reconciliation_status()
-        variance_layers = reconciliation.get("variance_layers", [])
+    def get_dashboard(
+        context: AuthenticatedTenantContext,
+        spend_service: EnterpriseSpendService,
+    ) -> dict[str, Any]:
+        posture = spend_service.get_financial_posture(context)
+        legacy_metrics = {
+            "summary": {},
+            "spend_breakdown": {},
+            "recommendations": [],
+            "cloud_cost": float(posture.cloud_spend),
+            "saas_cost": 0.0,
+            "msp_cost": 0.0,
+            "license_cost": 0.0,
+            "total_spend": float(posture.cloud_spend),
+            "potential_savings": 0.0,
+            "savings_realized": 0.0,
+            "governance_score": 0,
+            "critical_risks": 0,
+            "pending_approvals": 0,
+            "budget_health": 0,
+            "optimization_health": 0,
+            "risk_posture": 0,
+            "opportunities_found": 0,
+        }
+        enterprise_summary = {
+            "enterprise_total": posture.total_ingested_spend,
+            "cloud_spend": posture.cloud_spend,
+            "allocated_spend": posture.allocated_spend,
+            "unallocated_spend": posture.unallocated_resolved_spend,
+            "quarantined_spend": posture.quarantined_spend,
+            "potential_savings": 0,
+            "generated_at": posture.generated_at,
+        }
+        reconciliation = {
+            "status": posture.reconciliation_status,
+            "allocation_coverage": posture.allocation_coverage_percentage,
+            "unallocated_spend": posture.unallocated_resolved_spend,
+            "variance": posture.reconciliation_variance,
+            "unknown_accounts": posture.unknown_account_count,
+            "source_rows": posture.source_rows,
+            "persisted_facts": posture.persisted_facts,
+        }
+        variance_layers = []
         status = str(reconciliation.get("status") or "Unknown")
         allocation_coverage = _safe_float(reconciliation.get("allocation_coverage"))
         unallocated_spend = _safe_float(reconciliation.get("unallocated_spend"))
@@ -81,8 +134,12 @@ class ExecutiveDashboardCertificationService:
             },
             "financial_model": enterprise_summary,
             "reconciliation": reconciliation,
+            "financial_posture": posture,
+            "tenant": context,
             "evidence": {
-                "source_data": ExecutiveDashboardCertificationService._source_data(),
+                "source_data": [
+                    {"Section": "Cloud Spend", "Source": "EnterpriseSpendService", "Mode": "Tenant-scoped RPC"},
+                ],
                 "data_coverage": ExecutiveDashboardCertificationService._data_coverage(reconciliation),
                 "financial_reconciliation": [
                     {
@@ -117,10 +174,10 @@ class ExecutiveDashboardCertificationService:
         return _money(value)
 
     @staticmethod
-    def _legacy_metrics() -> dict[str, Any]:
-        summary = _fetch_one("mart_executive_summary")
-        spend_breakdown = _fetch_one("mart_enterprise_spend_v2")
-        recommendations = _fetch_rows("recommendations")
+    def _legacy_metrics(context: AuthenticatedTenantContext) -> dict[str, Any]:
+        summary = _fetch_one("mart_executive_summary", context)
+        spend_breakdown = _fetch_one("mart_enterprise_spend_v2", context)
+        recommendations = _fetch_rows("recommendations", context)
 
         cloud_cost = _spend_value(spend_breakdown, "cloud_spend", "cloud_cost")
         saas_cost = _spend_value(spend_breakdown, "saas_spend", "saas_cost")

@@ -7,6 +7,7 @@ ROLE_PAGES = {
         "Technology Portfolio Overview",
         "FinOps Dashboard",
         "Enterprise Spend",
+        "Cloud Cost Imports",
         "Cloud Connections",
         "Cost Upload Center",
         "Service Explorer",
@@ -137,6 +138,7 @@ ROLE_PAGES = {
     "executive": [
         "Executive Dashboard",
         "Enterprise Spend",
+        "Cloud Cost Imports",
         "Technology Knowledge Graph",
         "Technology Copilot",
         "AI Copilot",
@@ -186,6 +188,7 @@ ROLE_PAGES = {
 
     "cio": [
         "Technology Portfolio Overview",
+        "Cloud Cost Imports",
         "Technology Portfolio",
         "Business Service Portfolio",
         "Technology Graph",
@@ -251,6 +254,7 @@ ROLE_PAGES = {
     "finance": [
         "FinOps Dashboard",
         "Enterprise Spend",
+        "Cloud Cost Imports",
         "Technology Copilot",
         "Twin Explorer",
         "Enterprise Digital Twin",
@@ -333,6 +337,7 @@ PAGE_PATHS = {
     "Technology Portfolio Overview": "pages/cio_dashboard.py",
     "FinOps Dashboard": "pages/finance_dashboard.py",
     "Enterprise Spend": "pages/enterprise_spend.py",
+    "Cloud Cost Imports": "pages/cloud_cost_imports.py",
     "Cloud Connections": "pages/cloud_connections.py",
     "Cost Upload Center": "pages/cost_upload_center.py",
     "Service Explorer": "pages/service_explorer.py",

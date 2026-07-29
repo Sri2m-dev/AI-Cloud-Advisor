@@ -17,6 +17,11 @@ from services.executive_dashboard_certification_service import (
 )
 from shared.auth import require_role
 from shared.session import init_session
+from auth.authenticated_tenant import AuthenticatedTenantError
+from services.enterprise_spend_composition import (
+    authenticated_tenant_context,
+    enterprise_spend_service,
+)
 
 
 st.set_page_config(
@@ -32,6 +37,16 @@ require_role([
     "super_admin",
 ])
 
+try:
+    tenant_context = authenticated_tenant_context(st.session_state)
+    certification = ExecutiveDashboardCertificationService.get_dashboard(
+        tenant_context,
+        enterprise_spend_service(),
+    )
+except AuthenticatedTenantError as exc:
+    st.error(f"Financial data unavailable: {exc}")
+    st.stop()
+
 role = st.session_state.get("role", "Unknown")
 render_enterprise_sidebar(
     role,
@@ -39,8 +54,6 @@ render_enterprise_sidebar(
     role_pages=ROLE_PAGES,
     active_page=PAGE_PATHS["Executive Dashboard"],
 )
-
-certification = ExecutiveDashboardCertificationService.get_dashboard()
 legacy_metrics = certification["legacy_metrics"]
 reconciliation_cards = certification["reconciliation_cards"]
 financial_model = certification["financial_model"]
@@ -98,6 +111,14 @@ def inject_executive_dashboard_styles():
 
 def render_dashboard_content():
     inject_executive_dashboard_styles()
+    posture = certification["financial_posture"]
+    if posture.quarantined_spend:
+        st.warning(
+            f"Cloud spend of {posture.quarantined_spend:,.2f} {posture.currency} "
+            "has been ingested and reconciled. The spend remains unclassified "
+            f"because {posture.unknown_account_count} cloud accounts require "
+            "tenant ownership approval."
+        )
 
     render_section(
         "Executive Summary",

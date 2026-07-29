@@ -19,6 +19,11 @@ from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.enterprise_spend_certification_service import EnterpriseSpendCertificationService
+from auth.authenticated_tenant import AuthenticatedTenantError
+from services.enterprise_spend_composition import (
+    authenticated_tenant_context,
+    enterprise_spend_service,
+)
 
 
 configure_page(
@@ -35,6 +40,19 @@ require_role([
     "super_admin",
 ])
 
+current_role = st.session_state.get("role", "").lower()
+is_ceo_view = current_role == "executive"
+
+try:
+    tenant_context = authenticated_tenant_context(st.session_state)
+    dashboard = EnterpriseSpendCertificationService.get_dashboard(
+        tenant_context,
+        enterprise_spend_service(),
+    )
+except AuthenticatedTenantError as exc:
+    st.error(f"Financial data unavailable: {exc}")
+    st.stop()
+
 role = st.session_state.get("role", "Unknown")
 render_enterprise_sidebar(
     role,
@@ -42,12 +60,6 @@ render_enterprise_sidebar(
     role_pages=ROLE_PAGES,
     active_page=PAGE_PATHS["Enterprise Spend"],
 )
-
-current_role = st.session_state.get("role", "").lower()
-is_ceo_view = current_role == "executive"
-
-# Enterprise Spend uses global mart snapshots in the current data model.
-dashboard = EnterpriseSpendCertificationService.get_dashboard()
 metrics = dashboard["metrics"]
 dataframes = dashboard["dataframes"]
 financial_model = dashboard["financial_model"]
@@ -81,6 +93,14 @@ license_waste = metrics["license_waste"]
 contract_renewals_at_risk = metrics["contract_renewals_at_risk"]
 
 def render_spend_content():
+    posture = dashboard["financial_posture"]
+    if posture.quarantined_spend:
+        st.warning(
+            f"{posture.quarantined_spend:,.2f} {posture.currency} of cloud spend "
+            f"is reconciled but quarantined because {posture.unknown_account_count} "
+            "cloud accounts require ownership approval. It is not included in "
+            "business allocation."
+        )
     render_section(
         "Executive Summary",
         "Executive view of enterprise spend, allocation confidence, and optimization opportunity.",

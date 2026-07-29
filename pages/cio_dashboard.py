@@ -35,6 +35,11 @@ from components.shared import (
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.cio_dashboard_certification_service import CioDashboardCertificationService
 from services.cio_workspace_service import CIOWorkspaceService
+from auth.authenticated_tenant import AuthenticatedTenantError
+from services.enterprise_spend_composition import (
+    authenticated_tenant_context,
+    enterprise_spend_service,
+)
 from shared.auth import require_role
 from shared.layout import render_page_header
 from shared.session import init_session
@@ -75,6 +80,13 @@ require_role([
     "super_admin",
 ])
 
+try:
+    tenant_context = authenticated_tenant_context(st.session_state)
+    workspace = CIOWorkspaceService.get_workspace(tenant_context, enterprise_spend_service())
+except AuthenticatedTenantError as exc:
+    st.error(f"Financial data unavailable: {exc}")
+    st.stop()
+
 role = st.session_state.get("role", "Unknown")
 render_enterprise_sidebar(
     role,
@@ -82,8 +94,6 @@ render_enterprise_sidebar(
     role_pages=ROLE_PAGES,
     active_page=PAGE_PATHS["Technology Portfolio Overview"],
 )
-
-workspace = CIOWorkspaceService.get_workspace()
 dashboard = workspace["dashboard"]
 metrics = dashboard["metrics"]
 dataframes = dashboard["dataframes"]
@@ -133,6 +143,14 @@ def risk_status(value):
 
 
 def render_certification_summary():
+    posture = dashboard["financial_posture"]
+    if posture.quarantined_spend:
+        st.warning(
+            "Cloud cost data has been fully ingested and financially reconciled. "
+            f"Account ownership remains unresolved for {posture.unknown_account_count} "
+            "cloud accounts, so the spend is quarantined and not yet available "
+            "for business allocation."
+        )
     render_executive_summary(workspace["summary"])
     render_reconciliation_panel(reconciliation_cards)
     render_business_context(business_context)
