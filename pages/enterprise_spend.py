@@ -11,20 +11,24 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from shared.session import init_session
-from shared.styles import configure_page
-from shared.auth import require_role
-from components.cards import render_insight_card, render_kpi_card, render_metric_card, render_risk_card
+from auth.authenticated_tenant import AuthenticatedTenantError
+from components.cards import (
+    render_insight_card,
+    render_kpi_card,
+    render_metric_card,
+    render_risk_card,
+)
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.enterprise_spend_certification_service import EnterpriseSpendCertificationService
-from auth.authenticated_tenant import AuthenticatedTenantError
 from services.enterprise_spend_composition import (
     authenticated_tenant_context,
     enterprise_spend_service,
 )
-
+from shared.auth import require_role
+from shared.session import init_session
+from shared.styles import configure_page
 
 configure_page(
     page_title="Enterprise Spend | Nexora",
@@ -121,35 +125,52 @@ def render_spend_content():
         divider=True,
     )
 
-    r1, r2, r3, r4 = st.columns(4)
+    r1, r2, r3 = st.columns(3)
     with r1:
         render_insight_card(
             "Reconciliation Status",
-            reconciliation_cards["status"],
-            subtitle="Enterprise Financial Model",
+            reconciliation_cards["status"].title(),
+            subtitle=f"Variance: {posture.reconciliation_variance:,.2f} {posture.currency}",
             icon="governance",
-            status="warning" if reconciliation_cards["status"] == "Variance Detected" else "healthy",
+            status="healthy" if reconciliation_cards["status"] == "reconciled" else "warning",
         )
     with r2:
+        render_risk_card(
+            "Quarantined Spend",
+            f"{posture.quarantined_spend:,.2f} {posture.currency}",
+            subtitle=f"{posture.unknown_account_count} unknown cloud accounts",
+            icon="risk",
+            status="warning" if posture.quarantined_spend else "healthy",
+        )
+    with r3:
         render_metric_card(
             "Allocation Coverage",
             reconciliation_cards["allocation_coverage_display"],
             icon="finance",
             status="healthy" if reconciliation_cards["allocation_coverage"] >= 90 else "warning",
         )
-    with r3:
+
+    r4, r5, r6 = st.columns(3)
+    with r4:
         render_kpi_card(
             "Allocated Spend",
             format_compact_currency(financial_model.get("allocated_spend")),
             icon="cost",
             status="healthy",
         )
-    with r4:
-        render_risk_card(
-            "Unallocated Spend",
+    with r5:
+        render_kpi_card(
+            "Unallocated Resolved Spend",
             format_compact_currency(financial_model.get("unallocated_spend")),
-            icon="risk",
+            icon="cost",
             status="warning" if reconciliation_cards["unallocated_spend"] else "healthy",
+        )
+    with r6:
+        render_risk_card(
+            "Unknown Cloud Accounts",
+            posture.unknown_account_count,
+            icon="risk",
+            status="warning" if posture.unknown_account_count else "healthy",
         )
 
     render_section(

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
 from decimal import Decimal
+from typing import Any
 
 import pandas as pd
 
-from services.supabase_client import supabase
 from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.enterprise_spend_service import EnterpriseSpendService
+from services.supabase_client import supabase
 
 
 def _safe_float(value: Any) -> float:
@@ -169,8 +169,12 @@ class EnterpriseSpendCertificationService:
             "quarantined_spend": posture.quarantined_spend,
             "generated_at": posture.generated_at,
         }
+        reconciliation_complete = (
+            posture.reconciliation_variance == 0
+            and posture.reconciled_spend == posture.total_ingested_spend
+        )
         reconciliation = {
-            "status": posture.reconciliation_status,
+            "status": "reconciled" if reconciliation_complete else "unreconciled",
             "allocation_coverage": posture.allocation_coverage_percentage,
             "variance": posture.reconciliation_variance,
             "unknown_accounts": posture.unknown_account_count,

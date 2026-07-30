@@ -4,14 +4,13 @@ from typing import Any
 
 import pandas as pd
 
+from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.business_capability_service import BusinessCapabilityService
 from services.business_process_service import BusinessProcessService
 from services.business_service_service import BusinessServiceService
 from services.business_unit_service import BusinessUnitService
-from services.supabase_client import supabase
-from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.enterprise_spend_service import EnterpriseSpendService
-
+from services.supabase_client import supabase
 
 AI_PLATFORM_TERMS = (
     "openai",
@@ -192,8 +191,12 @@ class CioDashboardCertificationService:
             "quarantined_spend": posture.quarantined_spend,
             "generated_at": posture.generated_at,
         }
+        reconciliation_complete = (
+            posture.reconciliation_variance == 0
+            and posture.reconciled_spend == posture.total_ingested_spend
+        )
         reconciliation = {
-            "status": posture.reconciliation_status,
+            "status": "reconciled" if reconciliation_complete else "unreconciled",
             "allocation_coverage": posture.allocation_coverage_percentage,
             "variance": posture.reconciliation_variance,
             "source_rows": posture.source_rows,

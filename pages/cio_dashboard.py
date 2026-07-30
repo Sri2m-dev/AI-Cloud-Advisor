@@ -16,6 +16,7 @@ ROOT_DIR = os.path.abspath(
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+from auth.authenticated_tenant import AuthenticatedTenantError
 from components.cards import (
     render_health_card,
     render_insight_card,
@@ -30,12 +31,10 @@ from components.shared import (
     render_business_context,
     render_evidence_panel,
     render_executive_summary,
-    render_reconciliation_panel,
 )
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.cio_dashboard_certification_service import CioDashboardCertificationService
 from services.cio_workspace_service import CIOWorkspaceService
-from auth.authenticated_tenant import AuthenticatedTenantError
 from services.enterprise_spend_composition import (
     authenticated_tenant_context,
     enterprise_spend_service,
@@ -152,7 +151,45 @@ def render_certification_summary():
             "for business allocation."
         )
     render_executive_summary(workspace["summary"])
-    render_reconciliation_panel(reconciliation_cards)
+    render_section(
+        "Financial Control Status",
+        "Separate reconciliation, governance, and allocation posture.",
+    )
+    control_cols = st.columns(3)
+    with control_cols[0]:
+        render_insight_card(
+            "Reconciliation",
+            str(reconciliation_cards["status"]).title(),
+            subtitle=(
+                "Variance: "
+                f"{posture.reconciliation_variance:,.2f} {posture.currency}"
+            ),
+            icon="governance",
+            status=(
+                "healthy"
+                if reconciliation_cards["status"] == "reconciled"
+                else "warning"
+            ),
+        )
+    with control_cols[1]:
+        render_risk_card(
+            "Quarantined Spend",
+            f"{posture.quarantined_spend:,.2f} {posture.currency}",
+            subtitle=f"{posture.unknown_account_count} unknown cloud accounts",
+            icon="risk",
+            status="warning" if posture.quarantined_spend else "healthy",
+        )
+    with control_cols[2]:
+        render_health_card(
+            "Allocation Coverage",
+            f"{posture.allocation_coverage_percentage:.1f}%",
+            subtitle=f"Allocated: {posture.allocated_spend:,.2f} {posture.currency}",
+            status=(
+                "healthy"
+                if posture.allocation_coverage_percentage >= 90
+                else "warning"
+            ),
+        )
     render_business_context(business_context)
     render_ai_narrative(
         "AI CIO Workspace Interpretation",

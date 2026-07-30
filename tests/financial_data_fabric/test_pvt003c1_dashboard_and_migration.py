@@ -7,6 +7,12 @@ from types import SimpleNamespace
 import pytest
 
 from models.contracts.enterprise_financial_posture import EnterpriseFinancialPosture
+from services.cio_dashboard_certification_service import (
+    CioDashboardCertificationService,
+)
+from services.enterprise_spend_certification_service import (
+    EnterpriseSpendCertificationService,
+)
 from services.executive_dashboard_certification_service import (
     ExecutiveDashboardCertificationService,
 )
@@ -41,6 +47,10 @@ class StubSpendService:
     def get_financial_posture(self, tenant):
         assert tenant.organization_id == self.posture.organization_id
         return self.posture
+
+    def get_spend_by_service(self, tenant):
+        assert tenant.organization_id == self.posture.organization_id
+        return ()
 
 
 def test_executive_dashboard_uses_canonical_quarantined_spend_not_legacy_zero():
@@ -90,6 +100,19 @@ def test_executive_reconciliation_governance_and_allocation_are_separate():
     assert result["governance"]["unknown_accounts"] == 2
     assert result["allocation"]["coverage"] == Decimal("0")
     assert result["allocation"]["allocated_spend"] == Decimal("0")
+
+
+@pytest.mark.parametrize(
+    "service",
+    [EnterpriseSpendCertificationService, CioDashboardCertificationService],
+)
+def test_financial_pages_do_not_treat_quarantine_as_reconciliation_failure(service):
+    posture = EnterpriseFinancialPosture.from_mapping(posture_row(ORG_A, "100"))
+    result = service.get_dashboard(context(), StubSpendService(posture))
+    assert result["reconciliation"]["status"] == "reconciled"
+    assert result["reconciliation"]["variance"] == Decimal("0")
+    assert result["financial_posture"].quarantined_spend == Decimal("100")
+    assert result["financial_posture"].unknown_account_count == 2
 
 
 def test_executive_page_contains_required_primary_kpis_in_order():
