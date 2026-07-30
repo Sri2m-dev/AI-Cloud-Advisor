@@ -17,6 +17,9 @@ from tests.financial_data_fabric.test_pvt003c1_financial_data_fabric import (
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "supabase/migrations/202607290001_enterprise_financial_data_fabric.sql"
+PERFORMANCE_MIGRATION = (
+    ROOT / "supabase/migrations/202607290002_optimize_enterprise_financial_posture.sql"
+)
 
 
 class StubSpendService:
@@ -60,6 +63,15 @@ def test_canonical_aggregations_are_database_side_and_do_not_return_raw_evidence
     )[1].split("language plpgsql", 1)[0]
     assert "raw_fields" not in posture_signature
     assert "source_evidence" not in posture_signature
+
+
+def test_posture_uses_certified_rollups_instead_of_fact_level_spend_sum():
+    sql = PERFORMANCE_MIGRATION.read_text(encoding="utf-8").lower()
+    posture = sql.split("create or replace function public.tenant_cloud_financial_posture", 1)[1]
+    assert "coalesce(r.normalized_cost_total" in posture
+    assert "sum(certified_total)" in posture
+    assert "sum(f.unblended_cost)" not in posture
+    assert "cloud_cost_fact_tenant_account_idx" in sql
 
 
 def test_migrated_financial_services_contain_no_unfiltered_select():
