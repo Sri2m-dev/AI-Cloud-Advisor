@@ -23,6 +23,7 @@ PERFORMANCE_MIGRATION = (
 PROJECTION_MIGRATION = (
     ROOT / "supabase/migrations/202607290003_materialize_cloud_financial_projections.sql"
 )
+FACT_COUNT_MIGRATION = ROOT / "supabase/migrations/202607290004_correct_persisted_fact_posture.sql"
 
 
 class StubSpendService:
@@ -88,6 +89,14 @@ def test_fact_rollups_are_private_bounded_and_explicitly_invalidated():
     assert "cloud_cost_fact f" in sql
     assert "raw_fields" not in sql
     assert "source_evidence" not in sql
+
+
+def test_persisted_fact_posture_counts_quarantined_materialized_facts():
+    sql = FACT_COUNT_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "tenant_cloud_import_fact_rollup" in sql
+    assert "sum(fr.persisted_facts)" in sql
+    assert "accepted_row_count" not in sql
+    assert "tenant_cloud_financial_posture_v1" in sql
 
 
 def test_migrated_financial_services_contain_no_unfiltered_select():
