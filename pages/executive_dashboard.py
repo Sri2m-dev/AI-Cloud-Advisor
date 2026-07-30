@@ -1,7 +1,10 @@
+from decimal import Decimal
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from auth.authenticated_tenant import AuthenticatedTenantError
 from components.cards import (
     render_approval_card,
     render_health_card,
@@ -12,17 +15,15 @@ from components.cards import (
 from components.layout import render_empty_state, render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from services.enterprise_spend_composition import (
+    authenticated_tenant_context,
+    enterprise_spend_service,
+)
 from services.executive_dashboard_certification_service import (
     ExecutiveDashboardCertificationService,
 )
 from shared.auth import require_role
 from shared.session import init_session
-from auth.authenticated_tenant import AuthenticatedTenantError
-from services.enterprise_spend_composition import (
-    authenticated_tenant_context,
-    enterprise_spend_service,
-)
-
 
 st.set_page_config(
     page_title="Enterprise Business Health",
@@ -58,11 +59,37 @@ legacy_metrics = certification["legacy_metrics"]
 reconciliation_cards = certification["reconciliation_cards"]
 financial_model = certification["financial_model"]
 reconciliation = certification["reconciliation"]
-governance = certification["governance"]
-allocation = certification["allocation"]
+posture = certification["financial_posture"]
+governance = certification.get("governance") or {
+    "status": "quarantined" if posture.quarantined_spend else "resolved",
+    "unknown_accounts": posture.unknown_account_count,
+    "quarantined_spend": posture.quarantined_spend,
+}
+allocation = certification.get("allocation") or {
+    "coverage": posture.allocation_coverage_percentage,
+    "allocated_spend": posture.allocated_spend,
+    "unallocated_resolved_spend": posture.unallocated_resolved_spend,
+}
 evidence = certification["evidence"]
 format_compact_currency = ExecutiveDashboardCertificationService.format_compact_currency
-format_money_usd = ExecutiveDashboardCertificationService.format_money_usd
+
+
+def format_money_usd(value, currency="USD"):
+    return f"{Decimal(str(value or 0)):,.2f} {currency}"
+
+
+executive_narrative = (
+    "Enterprise technology spend is "
+    f"{format_money_usd(posture.total_ingested_spend, posture.currency)}. "
+    "The quarantined amount is "
+    f"{format_money_usd(posture.quarantined_spend, posture.currency)} because "
+    "ownership has not yet been approved for "
+    f"{posture.unknown_account_count} AWS accounts. Financial reconciliation "
+    "is complete with variance of "
+    f"{format_money_usd(posture.reconciliation_variance, posture.currency)}, "
+    "while allocation coverage remains "
+    f"{posture.allocation_coverage_percentage:.1f}%."
+)
 
 cloud_cost = legacy_metrics["cloud_cost"]
 saas_cost = legacy_metrics["saas_cost"]
@@ -132,7 +159,7 @@ def render_dashboard_content():
     render_insight_card(
         "Executive Summary",
         "Enterprise Business Health",
-        description=certification["executive_summary"],
+        description=executive_narrative,
         icon="executive",
         status="warning" if reconciliation.get("status") == "Variance Detected" else "info",
     )
