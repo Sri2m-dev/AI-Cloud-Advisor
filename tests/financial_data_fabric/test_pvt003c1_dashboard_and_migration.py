@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from models.contracts.enterprise_financial_posture import EnterpriseFinancialPosture
 from services.executive_dashboard_certification_service import (
     ExecutiveDashboardCertificationService,
+)
+from services.supabase_client import (
+    TenantScopeRequiredError,
+    _TenantGuardedQuery,
 )
 from tests.financial_data_fabric.test_pvt003c1_financial_data_fabric import (
     ORG_A,
@@ -45,6 +50,112 @@ def test_executive_dashboard_uses_canonical_quarantined_spend_not_legacy_zero():
     assert result["financial_posture"].quarantined_spend == Decimal("127678.2170275708")
     assert result["financial_model"]["allocated_spend"] == Decimal("0")
     assert result["reconciliation"]["unknown_accounts"] == 2
+
+
+def test_executive_narrative_is_plain_deterministic_and_posture_driven():
+    posture = EnterpriseFinancialPosture.from_mapping(posture_row(ORG_A, "127678.2170275708"))
+    result = ExecutiveDashboardCertificationService.get_dashboard(
+        context(),
+        StubSpendService(posture),
+    )
+    narrative = result["executive_summary"]
+    assert narrative == (
+        "Enterprise technology spend is 127,678.22 USD. The quarantined amount "
+        "is 127,678.22 USD because ownership has not yet been approved for 2 "
+        "AWS accounts. Financial reconciliation is complete with variance of "
+        "0.00 USD, while allocation coverage remains 0.0%."
+    )
+    assert "$" not in narrative
+
+
+def test_executive_reconciliation_governance_and_allocation_are_separate():
+    posture = EnterpriseFinancialPosture.from_mapping(posture_row(ORG_A, "100"))
+    result = ExecutiveDashboardCertificationService.get_dashboard(
+        context(),
+        StubSpendService(posture),
+    )
+    assert result["reconciliation"] == {
+        "status": "reconciled",
+        "allocation_coverage": Decimal("0"),
+        "unallocated_spend": Decimal("0"),
+        "variance": Decimal("0"),
+        "unknown_accounts": 2,
+        "source_rows": 2,
+        "persisted_facts": 2,
+    }
+    assert result["governance"]["status"] == "quarantined"
+    assert result["governance"]["unknown_accounts"] == 2
+    assert result["allocation"]["coverage"] == Decimal("0")
+    assert result["allocation"]["allocated_spend"] == Decimal("0")
+
+
+def test_executive_page_contains_required_primary_kpis_in_order():
+    source = (ROOT / "pages/executive_dashboard.py").read_text(encoding="utf-8")
+    labels = [
+        "Total Enterprise Spend",
+        "Cloud Spend",
+        "Quarantined Spend",
+        "Allocation Coverage",
+        "Reconciliation Variance",
+        "Unknown Cloud Accounts",
+    ]
+    positions = [source.index(f'"{label}"') for label in labels]
+    assert positions == sorted(positions)
+    assert '"Unallocated Spend"' not in source
+    assert "Unallocated resolved spend:" in source
+
+
+class FakeQuery:
+    def __init__(self):
+        self.executed = False
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def insert(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        self.executed = True
+        return SimpleNamespace(data=[{"value": 1}])
+
+
+def test_unscoped_legacy_financial_read_is_safely_disabled():
+    target = FakeQuery()
+    response = (
+        _TenantGuardedQuery(
+            target,
+            table_name="unified_cloud_costs",
+        )
+        .select("*")
+        .execute()
+    )
+    assert response.data == []
+    assert target.executed is False
+
+
+def test_scoped_legacy_compatibility_read_continues_to_rls():
+    target = FakeQuery()
+    response = (
+        _TenantGuardedQuery(target, table_name="mart_enterprise_spend_v2")
+        .select("*")
+        .eq("organization_id", ORG_A)
+        .execute()
+    )
+    assert response.data == [{"value": 1}]
+    assert target.executed is True
+
+
+def test_unscoped_legacy_financial_write_is_rejected():
+    target = FakeQuery()
+    with pytest.raises(TenantScopeRequiredError, match="tenant scope"):
+        _TenantGuardedQuery(
+            target,
+            table_name="unified_cloud_costs",
+        ).insert({"cost": 1}).execute()
 
 
 def test_canonical_migration_is_guarded_and_never_grants_anonymous_execution():

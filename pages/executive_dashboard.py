@@ -58,8 +58,11 @@ legacy_metrics = certification["legacy_metrics"]
 reconciliation_cards = certification["reconciliation_cards"]
 financial_model = certification["financial_model"]
 reconciliation = certification["reconciliation"]
+governance = certification["governance"]
+allocation = certification["allocation"]
 evidence = certification["evidence"]
 format_compact_currency = ExecutiveDashboardCertificationService.format_compact_currency
+format_money_usd = ExecutiveDashboardCertificationService.format_money_usd
 
 cloud_cost = legacy_metrics["cloud_cost"]
 saas_cost = legacy_metrics["saas_cost"]
@@ -135,42 +138,95 @@ def render_dashboard_content():
     )
 
     render_section(
-        "Data Reconciliation Status",
-        "Canonical financial model status for executive reporting and allocation confidence.",
+        "Primary Financial Posture",
+        "Canonical enterprise spend, governance, allocation, and reconciliation signals.",
         divider=True,
     )
 
-    reconciliation_cols = st.columns(4)
-    with reconciliation_cols[0]:
-        render_insight_card(
-            "Reconciliation Status",
-            reconciliation.get("status", "Unknown"),
-            subtitle="Enterprise Financial Model",
-            icon="governance",
-            status="warning" if reconciliation.get("status") == "Variance Detected" else "healthy",
+    primary_top = st.columns(3)
+    with primary_top[0]:
+        render_kpi_card(
+            "Total Enterprise Spend",
+            format_money_usd(posture.total_ingested_spend, posture.currency),
+            subtitle="Canonical enterprise total",
+            icon="cost",
+            status="info",
         )
-    with reconciliation_cols[1]:
+    with primary_top[1]:
+        render_kpi_card(
+            "Cloud Spend",
+            format_money_usd(posture.cloud_spend, posture.currency),
+            subtitle="Canonical CUR-backed cloud spend",
+            icon="cloud",
+            status="info",
+        )
+    with primary_top[2]:
+        render_risk_card(
+            "Quarantined Spend",
+            format_money_usd(posture.quarantined_spend, posture.currency),
+            subtitle="Awaiting account ownership approval",
+            icon="governance",
+            status="warning" if posture.quarantined_spend else "healthy",
+        )
+
+    primary_bottom = st.columns(3)
+    with primary_bottom[0]:
         render_health_card(
             "Allocation Coverage",
-            reconciliation_cards["allocation_coverage_display"],
-            subtitle="Mapped to allocation model",
-            status="healthy" if reconciliation_cards["allocation_coverage"] >= 90 else "warning",
+            f"{posture.allocation_coverage_percentage:.1f}%",
+            subtitle="Resolved spend mapped to business ownership",
+            status="healthy" if posture.allocation_coverage_percentage >= 90 else "warning",
         )
-    with reconciliation_cols[2]:
+    with primary_bottom[1]:
         render_kpi_card(
-            "Allocated Spend",
-            format_compact_currency(financial_model.get("allocated_spend")),
-            subtitle="Canonical model spend",
-            icon="cost",
-            status="healthy",
+            "Reconciliation Variance",
+            format_money_usd(posture.reconciliation_variance, posture.currency),
+            subtitle="Certified source-to-normalized variance",
+            icon="governance",
+            status="healthy" if not posture.reconciliation_variance else "critical",
         )
-    with reconciliation_cols[3]:
-        render_kpi_card(
-            "Unallocated Spend",
-            format_compact_currency(financial_model.get("unallocated_spend")),
-            subtitle="Requires mapping review",
+    with primary_bottom[2]:
+        render_risk_card(
+            "Unknown Cloud Accounts",
+            posture.unknown_account_count,
+            subtitle="AWS accounts awaiting ownership approval",
             icon="risk",
-            status="warning" if reconciliation_cards["unallocated_spend"] else "healthy",
+            status="warning" if posture.unknown_account_count else "healthy",
+        )
+
+    render_section(
+        "Financial Control Status",
+        "Separate reconciliation, governance, and allocation decisions.",
+        divider=True,
+    )
+    control_cols = st.columns(3)
+    with control_cols[0]:
+        render_insight_card(
+            "Reconciliation",
+            str(reconciliation["status"]).title(),
+            subtitle=f"Variance: {format_money_usd(reconciliation['variance'], posture.currency)}",
+            icon="governance",
+            status="healthy" if reconciliation["status"] == "reconciled" else "warning",
+        )
+    with control_cols[1]:
+        render_risk_card(
+            "Governance",
+            str(governance["status"]).title(),
+            subtitle=f"{governance['unknown_accounts']} unknown AWS accounts",
+            icon="security",
+            status="warning" if governance["status"] == "quarantined" else "healthy",
+        )
+    with control_cols[2]:
+        render_kpi_card(
+            "Allocation",
+            f"{allocation['coverage']:.1f}%",
+            subtitle=(
+                f"Allocated: {format_money_usd(allocation['allocated_spend'], posture.currency)}; "
+                "Unallocated resolved spend: "
+                f"{format_money_usd(allocation['unallocated_resolved_spend'], posture.currency)}"
+            ),
+            icon="cost",
+            status="warning" if allocation["coverage"] < 90 else "healthy",
         )
 
     render_section(
@@ -179,17 +235,9 @@ def render_dashboard_content():
         divider=True,
     )
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        render_kpi_card(
-            "Enterprise Spend",
-            format_compact_currency(total_spend),
-            subtitle="Cloud + SaaS + MSP + Licenses",
-            icon="cost",
-            status="healthy" if budget_health >= 80 else "warning",
-        )
-    with col2:
         render_kpi_card(
             "Optimization Potential",
             format_compact_currency(potential_savings),
@@ -197,21 +245,21 @@ def render_dashboard_content():
             icon="cost",
             status="warning" if potential_savings else "healthy",
         )
-    with col3:
+    with col2:
         render_health_card(
             "Governance Health",
             f"{governance_score}%",
             subtitle="Policy and ownership health",
             status="healthy" if governance_score >= 75 else "warning",
         )
-    with col4:
+    with col3:
         render_approval_card(
             "Executive Actions",
             pending_approvals,
             subtitle="Awaiting executive decision",
             status="watch" if pending_approvals else "healthy",
         )
-    with col5:
+    with col4:
         render_risk_card(
             "Critical Risks",
             critical_risks,

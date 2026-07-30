@@ -98,3 +98,39 @@ No membership or account mapping is changed in this implementation baseline.
 
 Raw CUR evidence remains in persistence and is not returned by dashboard
 repositories.
+
+## Browser-continuation consumer safety closure
+
+The shared Supabase application client now treats the following legacy
+financial sources as protected:
+
+- `mart_enterprise_spend`
+- `mart_enterprise_spend_v2`
+- `mart_executive_summary`
+- `unified_cloud_costs`
+- `mart_enterprise_forecast`
+- `mart_budget_vs_actual`
+- `recommendations`
+- `cost_allocations`
+- `application_cost_allocations`
+- application-spend mapping and cost-usage tables
+- cost trend, forecast, anomaly, optimization, savings, and recommendation marts
+- managed-service, SaaS, license, and vendor-spend compatibility sources
+
+An explicit `organization_id`, `org_id`, or `tenant_id` equality filter is
+required before a protected query executes. Tenant-scoped compatibility reads
+continue to RLS. An unscoped legacy read returns an empty result, safely
+disabling that financial section. An unscoped write is rejected. This closes
+active unfiltered reads in Finance, Technology Spend, reports, legacy Executive
+v2, forecasting, allocation, digital-twin, operations, analytics, and
+recommendation consumers without deleting their legacy marts.
+
+The CIO, Executive, Enterprise Spend, and Import History pages remain migrated
+to `EnterpriseSpendService` for canonical cloud financial posture. Where
+Enterprise Spend retains legacy SaaS, MSP, license, forecast, budget, or
+recommendation categories, those compatibility reads carry the authenticated
+organization scope and do not reuse legacy cloud totals.
+
+`Default Org` is the authoritative current DEV organization name resolved from
+the authenticated CUR tenant. Renaming it is a later administrative data
+change, not a dashboard override.
