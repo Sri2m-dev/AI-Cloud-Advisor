@@ -95,3 +95,9 @@ class SupabaseAwsCurIngestionRepository:
             dict(payload),
             on_conflict="organization_id,tenant_id,import_id",
         ).execute()
+
+    def refresh_financial_projections(self, context: TenantContext) -> None:
+        """Invalidate canonical dashboard projections after a terminal import."""
+        if not context.organization_id or not context.tenant_id:
+            raise DataFabricTenantBoundaryError("tenant context is required")
+        self._client.rpc("refresh_tenant_cloud_financial_projections").execute()

@@ -20,6 +20,9 @@ MIGRATION = ROOT / "supabase/migrations/202607290001_enterprise_financial_data_f
 PERFORMANCE_MIGRATION = (
     ROOT / "supabase/migrations/202607290002_optimize_enterprise_financial_posture.sql"
 )
+PROJECTION_MIGRATION = (
+    ROOT / "supabase/migrations/202607290003_materialize_cloud_financial_projections.sql"
+)
 
 
 class StubSpendService:
@@ -72,6 +75,19 @@ def test_posture_uses_certified_rollups_instead_of_fact_level_spend_sum():
     assert "sum(certified_total)" in posture
     assert "sum(f.unblended_cost)" not in posture
     assert "cloud_cost_fact_tenant_account_idx" in sql
+
+
+def test_fact_rollups_are_private_bounded_and_explicitly_invalidated():
+    sql = PROJECTION_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "tenant_cloud_import_fact_rollup" in sql
+    assert "tenant_cloud_account_fact_rollup" in sql
+    assert "tenant_cloud_service_fact_rollup" in sql
+    assert "refresh_tenant_cloud_financial_projections" in sql
+    assert "service role required" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "cloud_cost_fact f" in sql
+    assert "raw_fields" not in sql
+    assert "source_evidence" not in sql
 
 
 def test_migrated_financial_services_contain_no_unfiltered_select():
