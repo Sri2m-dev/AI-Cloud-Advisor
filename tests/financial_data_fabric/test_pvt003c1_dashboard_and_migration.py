@@ -29,6 +29,9 @@ PROJECTION_MIGRATION = (
     ROOT / "supabase/migrations/202607290003_materialize_cloud_financial_projections.sql"
 )
 FACT_COUNT_MIGRATION = ROOT / "supabase/migrations/202607290004_correct_persisted_fact_posture.sql"
+BOUNDED_POSTURE_MIGRATION = (
+    ROOT / "supabase/migrations/202607300001_bound_enterprise_financial_posture.sql"
+)
 
 
 class StubSpendService:
@@ -208,6 +211,18 @@ def test_persisted_fact_posture_counts_quarantined_materialized_facts():
     assert "sum(fr.persisted_facts)" in sql
     assert "accepted_row_count" not in sql
     assert "tenant_cloud_financial_posture_v1" in sql
+
+
+def test_dashboard_posture_reads_only_bounded_financial_projections():
+    sql = BOUNDED_POSTURE_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "tenant_cloud_import_fact_rollup" in sql
+    assert "tenant_cloud_account_fact_rollup" in sql
+    assert "sum(materialized_fact_count)" in sql
+    assert "pvt003c1_can_read_organization(requested_organization_id)" in sql
+    assert "from public.cloud_cost_fact" not in sql
+    assert "tenant_cloud_financial_posture_v1" not in sql
+    assert "set search_path = pg_catalog, public" in sql
+    assert "from public, anon" in sql
 
 
 def test_migrated_financial_services_contain_no_unfiltered_select():

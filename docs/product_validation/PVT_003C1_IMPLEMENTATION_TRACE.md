@@ -134,3 +134,12 @@ organization scope and do not reuse legacy cloud totals.
 `Default Org` is the authoritative current DEV organization name resolved from
 the authenticated CUR tenant. Renaming it is a later administrative data
 change, not a dashboard override.
+
+## Browser-discovered posture timeout remediation
+
+Owner browser certification exposed PostgreSQL `57014` in the canonical
+financial-posture RPC. Migration `202607300001` preserves the RPC contract and
+authorization guard while replacing the remaining raw-fact account scan with
+the private materialized import and account projections created by
+`202607290003`. It does not increase a timeout, expose or remove raw CUR
+evidence, or change ingestion behavior.
