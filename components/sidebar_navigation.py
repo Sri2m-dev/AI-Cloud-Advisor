@@ -1,4 +1,3 @@
-import streamlit as st
 from auth.role_constants import normalize_role
 
 ROLE_PAGES = {
@@ -8,6 +7,7 @@ ROLE_PAGES = {
         "FinOps Dashboard",
         "Enterprise Spend",
         "Cloud Cost Imports",
+        "Cloud Account Registry",
         "Cloud Connections",
         "Cost Upload Center",
         "Service Explorer",
@@ -332,12 +332,17 @@ ROLE_PAGES = {
     ],
 }
 
+for _registry_role in ("super_admin", "client_admin", "executive", "finance", "technical", "auditor", "viewer"):
+    if _registry_role in ROLE_PAGES and "Cloud Account Registry" not in ROLE_PAGES[_registry_role]:
+        ROLE_PAGES[_registry_role].append("Cloud Account Registry")
+
 PAGE_PATHS = {
     "Executive Dashboard": "pages/executive_dashboard.py",
     "Technology Portfolio Overview": "pages/cio_dashboard.py",
     "FinOps Dashboard": "pages/finance_dashboard.py",
     "Enterprise Spend": "pages/enterprise_spend.py",
     "Cloud Cost Imports": "pages/cloud_cost_imports.py",
+    "Cloud Account Registry": "pages/cloud_account_registry.py",
     "Cloud Connections": "pages/cloud_connections.py",
     "Cost Upload Center": "pages/cost_upload_center.py",
     "Service Explorer": "pages/service_explorer.py",
