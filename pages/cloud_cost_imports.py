@@ -61,6 +61,8 @@ def render_content() -> None:
         "reconciliation_status",
         "unknown_account_count",
         "resolved_account_count",
+        "billing_period_start",
+        "billing_period_end",
         "started_at",
         "completed_at",
         "replay_state",

@@ -38,6 +38,9 @@ FACT_COUNT_MIGRATION = ROOT / "supabase/migrations/202607290004_correct_persiste
 BOUNDED_POSTURE_MIGRATION = (
     ROOT / "supabase/migrations/202607300001_bound_enterprise_financial_posture.sql"
 )
+IMPORT_PERIOD_MIGRATION = (
+    ROOT / "supabase/migrations/202607310001_add_import_history_billing_period.sql"
+)
 
 
 class StubSpendService:
@@ -246,6 +249,21 @@ def test_dashboard_posture_reads_only_bounded_financial_projections():
     assert "tenant_cloud_financial_posture_v1" not in sql
     assert "set search_path = pg_catalog, public" in sql
     assert "from public, anon" in sql
+
+
+def test_import_history_exposes_tenant_scoped_billing_period_metadata():
+    sql = IMPORT_PERIOD_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "billing_period_start date" in sql
+    assert "billing_period_end date" in sql
+    assert "i.billing_period_start" in sql
+    assert "i.billing_period_end" in sql
+    assert "pvt003c1_can_read_organization(requested_organization_id)" in sql
+    assert "where i.organization_id = requested_organization_id" in sql
+    assert "and i.tenant_id = requested_organization_id" in sql
+    assert "raw_fields" not in sql
+    page = (ROOT / "pages/cloud_cost_imports.py").read_text(encoding="utf-8")
+    assert '"billing_period_start"' in page
+    assert '"billing_period_end"' in page
 
 
 def test_migrated_financial_services_contain_no_unfiltered_select():
