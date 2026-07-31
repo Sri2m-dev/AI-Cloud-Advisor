@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from services.cio_dashboard_certification_service import CioDashboardCertificationService
+from auth.authenticated_tenant import AuthenticatedTenantContext
+from services.enterprise_spend_service import EnterpriseSpendService
 
 
 def _safe_float(value: Any) -> float:
@@ -27,8 +29,11 @@ class CIOWorkspaceService:
     """
 
     @staticmethod
-    def get_workspace() -> dict[str, Any]:
-        dashboard = CioDashboardCertificationService.get_dashboard()
+    def get_workspace(
+        context: AuthenticatedTenantContext,
+        spend_service: EnterpriseSpendService,
+    ) -> dict[str, Any]:
+        dashboard = CioDashboardCertificationService.get_dashboard(context, spend_service)
         metrics = dashboard.get("metrics") or {}
         evidence = dashboard.get("evidence") or {}
         business_architecture = dashboard.get("business_architecture") or {}

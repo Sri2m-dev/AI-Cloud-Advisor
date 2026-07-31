@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 
+from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.enterprise_financial_model import EnterpriseFinancialModel
+from services.enterprise_spend_service import EnterpriseSpendService
 from services.supabase_client import supabase
 
 
@@ -22,19 +25,28 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
-def _fetch_rows(table_name: str, limit: int | None = None) -> list[dict[str, Any]]:
-    try:
-        query = supabase.table(table_name).select("*")
-        if limit:
-            query = query.limit(limit)
-        response = query.execute()
-        return response.data or []
-    except Exception:
-        return []
+def _fetch_rows(
+    table_name: str,
+    context: AuthenticatedTenantContext,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    for scope_column in ("organization_id", "org_id"):
+        try:
+            query = supabase.table(table_name).select("*").eq(scope_column, context.organization_id)
+            if limit:
+                query = query.limit(limit)
+            response = query.execute()
+            return response.data or []
+        except Exception:
+            continue
+    return []
 
 
-def _fetch_one(table_name: str) -> dict[str, Any]:
-    rows = _fetch_rows(table_name, limit=1)
+def _fetch_one(
+    table_name: str,
+    context: AuthenticatedTenantContext,
+) -> dict[str, Any]:
+    rows = _fetch_rows(table_name, context, limit=1)
     return rows[0] if rows else {}
 
 
@@ -57,11 +69,64 @@ class ExecutiveDashboardCertificationService:
     """
 
     @staticmethod
-    def get_dashboard() -> dict[str, Any]:
-        legacy_metrics = ExecutiveDashboardCertificationService._legacy_metrics()
-        enterprise_summary = EnterpriseFinancialModel.get_enterprise_summary()
-        reconciliation = EnterpriseFinancialModel.get_reconciliation_status()
-        variance_layers = reconciliation.get("variance_layers", [])
+    def get_dashboard(
+        context: AuthenticatedTenantContext,
+        spend_service: EnterpriseSpendService,
+    ) -> dict[str, Any]:
+        posture = spend_service.get_financial_posture(context)
+        legacy_metrics = {
+            "summary": {},
+            "spend_breakdown": {},
+            "recommendations": [],
+            "cloud_cost": float(posture.cloud_spend),
+            "saas_cost": 0.0,
+            "msp_cost": 0.0,
+            "license_cost": 0.0,
+            "total_spend": float(posture.cloud_spend),
+            "potential_savings": 0.0,
+            "savings_realized": 0.0,
+            "governance_score": 0,
+            "critical_risks": 0,
+            "pending_approvals": 0,
+            "budget_health": 0,
+            "optimization_health": 0,
+            "risk_posture": 0,
+            "opportunities_found": 0,
+        }
+        enterprise_summary = {
+            "enterprise_total": posture.total_ingested_spend,
+            "currency": posture.currency,
+            "cloud_spend": posture.cloud_spend,
+            "allocated_spend": posture.allocated_spend,
+            "unallocated_spend": posture.unallocated_resolved_spend,
+            "quarantined_spend": posture.quarantined_spend,
+            "potential_savings": 0,
+            "generated_at": posture.generated_at,
+        }
+        reconciliation_complete = (
+            posture.reconciliation_variance == Decimal("0")
+            and posture.reconciled_spend == posture.total_ingested_spend
+        )
+        reconciliation = {
+            "status": "reconciled" if reconciliation_complete else "unreconciled",
+            "allocation_coverage": posture.allocation_coverage_percentage,
+            "unallocated_spend": posture.unallocated_resolved_spend,
+            "variance": posture.reconciliation_variance,
+            "unknown_accounts": posture.unknown_account_count,
+            "source_rows": posture.source_rows,
+            "persisted_facts": posture.persisted_facts,
+        }
+        governance = {
+            "status": ("quarantined" if posture.quarantined_spend != Decimal("0") else "resolved"),
+            "unknown_accounts": posture.unknown_account_count,
+            "quarantined_spend": posture.quarantined_spend,
+        }
+        allocation = {
+            "coverage": posture.allocation_coverage_percentage,
+            "allocated_spend": posture.allocated_spend,
+            "unallocated_resolved_spend": posture.unallocated_resolved_spend,
+        }
+        variance_layers = []
         status = str(reconciliation.get("status") or "Unknown")
         allocation_coverage = _safe_float(reconciliation.get("allocation_coverage"))
         unallocated_spend = _safe_float(reconciliation.get("unallocated_spend"))
@@ -81,24 +146,46 @@ class ExecutiveDashboardCertificationService:
             },
             "financial_model": enterprise_summary,
             "reconciliation": reconciliation,
+            "governance": governance,
+            "allocation": allocation,
+            "financial_posture": posture,
+            "tenant": context,
             "evidence": {
-                "source_data": ExecutiveDashboardCertificationService._source_data(),
-                "data_coverage": ExecutiveDashboardCertificationService._data_coverage(reconciliation),
+                "source_data": [
+                    {
+                        "Section": "Cloud Spend",
+                        "Source": "EnterpriseSpendService",
+                        "Mode": "Tenant-scoped RPC",
+                    },
+                ],
+                "data_coverage": ExecutiveDashboardCertificationService._data_coverage(
+                    reconciliation
+                ),
                 "financial_reconciliation": [
                     {
                         "Metric": "Data Reconciliation Status",
                         "Value": status,
-                        "Interpretation": ExecutiveDashboardCertificationService._status_interpretation(status),
+                        "Interpretation": (
+                            ExecutiveDashboardCertificationService._status_interpretation(
+                                status
+                            )
+                        ),
                     },
                     {
                         "Metric": "Allocation Coverage",
                         "Value": f"{allocation_coverage:.1f}%",
-                        "Interpretation": "Share of enterprise spend currently mapped to the canonical financial model.",
+                        "Interpretation": (
+                            "Share of enterprise spend currently mapped to the "
+                            "canonical financial model."
+                        ),
                     },
                     {
                         "Metric": "Unallocated Spend",
                         "Value": _money(unallocated_spend),
-                        "Interpretation": "Spend that has not yet been mapped through the business-to-technology allocation chain.",
+                        "Interpretation": (
+                            "Spend that has not yet been mapped through the "
+                            "business-to-technology allocation chain."
+                        ),
                     },
                 ],
                 "ai_interpretation": ExecutiveDashboardCertificationService._ai_interpretation(
@@ -106,8 +193,12 @@ class ExecutiveDashboardCertificationService:
                     reconciliation,
                 ),
                 "raw_evidence": {
-                    "Financial Model": ExecutiveDashboardCertificationService._financial_model_rows(enterprise_summary),
-                    "Variance Layers": ExecutiveDashboardCertificationService._variance_rows(variance_layers),
+                    "Financial Model": ExecutiveDashboardCertificationService._financial_model_rows(
+                        enterprise_summary
+                    ),
+                    "Variance Layers": ExecutiveDashboardCertificationService._variance_rows(
+                        variance_layers
+                    ),
                 },
             },
         }
@@ -117,10 +208,14 @@ class ExecutiveDashboardCertificationService:
         return _money(value)
 
     @staticmethod
-    def _legacy_metrics() -> dict[str, Any]:
-        summary = _fetch_one("mart_executive_summary")
-        spend_breakdown = _fetch_one("mart_enterprise_spend_v2")
-        recommendations = _fetch_rows("recommendations")
+    def format_money_usd(value: Any, currency: str = "USD") -> str:
+        return f"{Decimal(str(value or 0)):,.2f} {currency}"
+
+    @staticmethod
+    def _legacy_metrics(context: AuthenticatedTenantContext) -> dict[str, Any]:
+        summary = _fetch_one("mart_executive_summary", context)
+        spend_breakdown = _fetch_one("mart_enterprise_spend_v2", context)
+        recommendations = _fetch_rows("recommendations", context)
 
         cloud_cost = _spend_value(spend_breakdown, "cloud_spend", "cloud_cost")
         saas_cost = _spend_value(spend_breakdown, "saas_spend", "saas_cost")
@@ -138,8 +233,7 @@ class ExecutiveDashboardCertificationService:
         )
 
         savings_realized = _safe_float(
-            summary.get("savings_realized")
-            or summary.get("realized_savings")
+            summary.get("savings_realized") or summary.get("realized_savings")
         )
 
         if not savings_realized and recommendations:
@@ -148,9 +242,7 @@ class ExecutiveDashboardCertificationService:
                 statuses = rec_df["status"].fillna("").astype(str).str.upper()
                 savings = pd.to_numeric(rec_df["estimated_savings"], errors="coerce").fillna(0)
                 savings_realized = float(
-                    savings[
-                        statuses.isin(["IMPLEMENTED", "COMPLETED", "RESOLVED", "CLOSED"])
-                    ].sum()
+                    savings[statuses.isin(["IMPLEMENTED", "COMPLETED", "RESOLVED", "CLOSED"])].sum()
                 )
 
         governance_score = _safe_int(summary.get("governance_score"))
@@ -191,20 +283,28 @@ class ExecutiveDashboardCertificationService:
         enterprise_summary: dict[str, Any],
         reconciliation: dict[str, Any],
     ) -> str:
-        status = reconciliation.get("status") or "Unknown"
-        enterprise_total = _money(enterprise_summary.get("enterprise_total"))
-        allocated_spend = _money(enterprise_summary.get("allocated_spend"))
-        unallocated_spend = _money(enterprise_summary.get("unallocated_spend"))
-        allocation_coverage = _safe_float(enterprise_summary.get("allocation_coverage"))
-        potential_savings = _money(enterprise_summary.get("potential_savings"))
-
-        sentences = [
-            f"Enterprise technology spend is currently {enterprise_total}, with {allocated_spend} allocated through the canonical financial model.",
-            f"Data reconciliation status is {status}, and allocation coverage is {allocation_coverage:.1f}%.",
-            f"Unallocated spend is {unallocated_spend}, which should be reviewed before using financial rollups as fully reconciled executive totals.",
-            f"Identified optimization potential is {potential_savings}.",
-        ]
-        return " ".join(sentences)
+        currency = str(enterprise_summary.get("currency") or "USD")
+        total = ExecutiveDashboardCertificationService.format_money_usd(
+            enterprise_summary.get("enterprise_total"),
+            currency,
+        )
+        quarantined = ExecutiveDashboardCertificationService.format_money_usd(
+            enterprise_summary.get("quarantined_spend"),
+            currency,
+        )
+        unknown_accounts = _safe_int(reconciliation.get("unknown_accounts"))
+        variance = ExecutiveDashboardCertificationService.format_money_usd(
+            reconciliation.get("variance"),
+            currency,
+        )
+        coverage = _safe_float(reconciliation.get("allocation_coverage"))
+        return (
+            f"Enterprise technology spend is {total}. The quarantined amount is "
+            f"{quarantined} because ownership has not yet been approved for "
+            f"{unknown_accounts} AWS accounts. Financial reconciliation is "
+            f"complete with variance of {variance}, while allocation coverage "
+            f"remains {coverage:.1f}%."
+        )
 
     @staticmethod
     def _source_data() -> list[dict[str, str]]:
@@ -212,8 +312,16 @@ class ExecutiveDashboardCertificationService:
             {"Section": "Executive Summary", "Source": "mart_executive_summary", "Mode": "Live"},
             {"Section": "Enterprise Spend", "Source": "mart_enterprise_spend_v2", "Mode": "Live"},
             {"Section": "Recommendations", "Source": "recommendations", "Mode": "Live"},
-            {"Section": "Financial Model", "Source": "EnterpriseFinancialModel", "Mode": "Canonical"},
-            {"Section": "Business Architecture", "Source": "Business services/processes/application portfolio", "Mode": "Derived"},
+            {
+                "Section": "Financial Model",
+                "Source": "EnterpriseFinancialModel",
+                "Mode": "Canonical",
+            },
+            {
+                "Section": "Business Architecture",
+                "Source": "Business services/processes/application portfolio",
+                "Mode": "Derived",
+            },
         ]
 
     @staticmethod
@@ -251,22 +359,31 @@ class ExecutiveDashboardCertificationService:
         variance_layers = reconciliation.get("variance_layers") or []
         if status == EnterpriseFinancialModel.VARIANCE_DETECTED:
             return (
-                f"The Executive Dashboard is operational, but financial data is not fully reconciled. "
-                f"Allocation coverage is {allocation_coverage:.1f}% and {len(variance_layers)} variance layer(s) require review before certification as a fully reconciled financial source."
+                "The Executive Dashboard is operational, but financial data is "
+                "not fully reconciled. "
+                f"Allocation coverage is {allocation_coverage:.1f}% and "
+                f"{len(variance_layers)} variance layer(s) require review before "
+                "certification as a fully reconciled financial source."
             )
         if status == EnterpriseFinancialModel.PARTIALLY_ALLOCATED:
             return (
-                f"The Executive Dashboard has partial financial allocation coverage at {allocation_coverage:.1f}%. "
-                "Executive decisions should consider unmapped spend before treating totals as final."
+                "The Executive Dashboard has partial financial allocation coverage "
+                f"at {allocation_coverage:.1f}%. Executive decisions should consider "
+                "unmapped spend before treating totals as final."
             )
         return (
-            "The Executive Dashboard financial model is reconciled against the canonical allocation layer and is suitable for certified executive reporting."
+            "The Executive Dashboard financial model is reconciled against the "
+            "canonical allocation layer and is suitable for certified executive "
+            "reporting."
         )
 
     @staticmethod
     def _status_interpretation(status: str) -> str:
         if status == EnterpriseFinancialModel.VARIANCE_DETECTED:
-            return "Financial rollups are usable, but layer-level source totals do not fully match the canonical allocation model."
+            return (
+                "Financial rollups are usable, but layer-level source totals do not "
+                "fully match the canonical allocation model."
+            )
         if status == EnterpriseFinancialModel.PARTIALLY_ALLOCATED:
             return "Some spend is mapped to the allocation model and some remains unmapped."
         if status == EnterpriseFinancialModel.RECONCILED:

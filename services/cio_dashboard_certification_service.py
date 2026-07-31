@@ -4,21 +4,13 @@ from typing import Any
 
 import pandas as pd
 
-from services.approval_service import ApprovalService
+from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.business_capability_service import BusinessCapabilityService
 from services.business_process_service import BusinessProcessService
 from services.business_service_service import BusinessServiceService
 from services.business_unit_service import BusinessUnitService
-from services.cost_intelligence_service import (
-    get_cost_anomalies,
-    get_optimization_opportunities,
-)
-from services.enterprise_financial_model import EnterpriseFinancialModel
-from services.reporting_service import get_executive_summary
-from services.saas_governance_service import SaaSGovernanceService
+from services.enterprise_spend_service import EnterpriseSpendService
 from services.supabase_client import supabase
-from services.technology_spend_service import TechnologySpendService
-
 
 AI_PLATFORM_TERMS = (
     "openai",
@@ -52,12 +44,23 @@ def _safe_int(value: Any, fallback: int = 0) -> int:
         return fallback
 
 
-def _fetch_rows(table_name: str) -> list[dict[str, Any]]:
-    try:
-        response = supabase.table(table_name).select("*").execute()
-        return response.data or []
-    except Exception:
-        return []
+def _fetch_rows(
+    table_name: str,
+    context: AuthenticatedTenantContext,
+) -> list[dict[str, Any]]:
+    """Fetch tenant-owned non-CUR rows without ever falling back to all rows."""
+    for scope_column in ("organization_id", "org_id"):
+        try:
+            response = (
+                supabase.table(table_name)
+                .select("*")
+                .eq(scope_column, context.organization_id)
+                .execute()
+            )
+            return response.data or []
+        except Exception:
+            continue
+    return []
 
 
 def _first_existing_total(df: pd.DataFrame, columns: list[str]) -> float:
@@ -139,28 +142,29 @@ class CioDashboardCertificationService:
         return _money(value)
 
     @staticmethod
-    def get_dashboard() -> dict[str, Any]:
-        summary = _safe_call(TechnologySpendService.get_summary, {})
-        executive_summary = _safe_call(get_executive_summary, {})
-        approval_metrics = _safe_call(ApprovalService.get_dashboard_metrics, {})
-        saas_kpis = _safe_call(SaaSGovernanceService.get_kpis, {})
+    def get_dashboard(
+        context: AuthenticatedTenantContext,
+        spend_service: EnterpriseSpendService,
+    ) -> dict[str, Any]:
+        posture = spend_service.get_financial_posture(context)
+        summary = {
+            "cloud_cost": posture.cloud_spend,
+            "total_spend": posture.cloud_spend,
+            "ownership_coverage": posture.allocation_coverage_percentage,
+        }
+        executive_summary: dict[str, Any] = {}
+        saas_kpis: dict[str, Any] = {}
+        optimization_df = pd.DataFrame()
+        anomaly_df = pd.DataFrame()
 
-        optimization_result = _safe_call(get_optimization_opportunities, {"data": pd.DataFrame()})
-        anomaly_result = _safe_call(get_cost_anomalies, {"data": pd.DataFrame()})
-
-        optimization_df = optimization_result.get("data", pd.DataFrame())
-        anomaly_df = anomaly_result.get("data", pd.DataFrame())
-        if not isinstance(optimization_df, pd.DataFrame):
-            optimization_df = pd.DataFrame(optimization_df)
-        if not isinstance(anomaly_df, pd.DataFrame):
-            anomaly_df = pd.DataFrame(anomaly_df)
-
-        cloud_df = pd.DataFrame(_fetch_rows("unified_cloud_costs"))
-        application_df = pd.DataFrame(_fetch_rows("application_registry"))
-        resource_df = pd.DataFrame(_fetch_rows("cloud_resources"))
-        vendor_spend_df = pd.DataFrame(_fetch_rows("vw_vendor_spend"))
-        inactive_users_df = pd.DataFrame(_fetch_rows("vw_inactive_saas_users"))
-        renewal_risk_df = pd.DataFrame(_fetch_rows("vw_saas_renewal_risk"))
+        # Canonical cloud totals never read unified_cloud_costs. Other portfolio
+        # sources stay visible only when their own tenant column can be applied.
+        cloud_df = pd.DataFrame()
+        application_df = pd.DataFrame(_fetch_rows("application_registry", context))
+        resource_df = pd.DataFrame(_fetch_rows("cloud_resources", context))
+        vendor_spend_df = pd.DataFrame(_fetch_rows("vw_vendor_spend", context))
+        inactive_users_df = pd.DataFrame(_fetch_rows("vw_inactive_saas_users", context))
+        renewal_risk_df = pd.DataFrame(_fetch_rows("vw_saas_renewal_risk", context))
 
         metrics = CioDashboardCertificationService._metrics(
             summary,
@@ -176,9 +180,39 @@ class CioDashboardCertificationService:
             renewal_risk_df,
         )
 
-        financial_model = EnterpriseFinancialModel.get_enterprise_summary()
-        reconciliation = EnterpriseFinancialModel.get_reconciliation_status()
-        business_architecture = CioDashboardCertificationService._business_architecture_summary(metrics)
+        metrics["total_spend"] = float(posture.cloud_spend)
+        metrics["cloud_accounts"] = posture.resolved_account_count + posture.unknown_account_count
+        financial_model = {
+            "enterprise_total": posture.total_ingested_spend,
+            "cloud_spend": posture.cloud_spend,
+            "allocated_spend": posture.allocated_spend,
+            "unallocated_spend": posture.unallocated_resolved_spend,
+            "resolved_spend": posture.resolved_spend,
+            "quarantined_spend": posture.quarantined_spend,
+            "generated_at": posture.generated_at,
+        }
+        reconciliation_complete = (
+            posture.reconciliation_variance == 0
+            and posture.reconciled_spend == posture.total_ingested_spend
+        )
+        reconciliation = {
+            "status": "reconciled" if reconciliation_complete else "unreconciled",
+            "allocation_coverage": posture.allocation_coverage_percentage,
+            "variance": posture.reconciliation_variance,
+            "source_rows": posture.source_rows,
+            "persisted_facts": posture.persisted_facts,
+            "unknown_accounts": posture.unknown_account_count,
+        }
+        business_architecture = {
+            "business_units": 0,
+            "capabilities": 0,
+            "services": metrics["business_services"],
+            "processes": 0,
+            "applications": metrics["applications"],
+            "technologies": metrics["resources"],
+            "mapping_coverage": 0,
+            "automation_candidates": 0,
+        }
 
         return {
             "metrics": metrics,
@@ -201,7 +235,16 @@ class CioDashboardCertificationService:
                 "allocation_coverage_display": f"{_safe_float(reconciliation.get('allocation_coverage')):.1f}%",
                 "unallocated_spend": _safe_float(financial_model.get("unallocated_spend")),
                 "unallocated_spend_display": _money(financial_model.get("unallocated_spend")),
+                "total_ingested_spend": posture.total_ingested_spend,
+                "resolved_spend": posture.resolved_spend,
+                "quarantined_spend": posture.quarantined_spend,
+                "source_rows": posture.source_rows,
+                "persisted_facts": posture.persisted_facts,
+                "unknown_accounts": posture.unknown_account_count,
+                "variance": posture.reconciliation_variance,
             },
+            "financial_posture": posture,
+            "tenant": context,
             "business_architecture": business_architecture,
             "executive_summary": CioDashboardCertificationService._executive_summary(
                 metrics,

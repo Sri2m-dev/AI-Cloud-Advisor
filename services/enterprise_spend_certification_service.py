@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 
-from services.enterprise_financial_model import EnterpriseFinancialModel
+from auth.authenticated_tenant import AuthenticatedTenantContext
+from services.enterprise_spend_service import EnterpriseSpendService
 from services.supabase_client import supabase
 
 
@@ -15,16 +17,23 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
-def _fetch_rows(table_name: str) -> list[dict[str, Any]]:
-    try:
-        response = supabase.table(table_name).select("*").execute()
-        return response.data or []
-    except Exception:
-        return []
+def _fetch_rows(table_name: str, context: AuthenticatedTenantContext) -> list[dict[str, Any]]:
+    for scope_column in ("organization_id", "org_id"):
+        try:
+            response = (
+                supabase.table(table_name)
+                .select("*")
+                .eq(scope_column, context.organization_id)
+                .execute()
+            )
+            return response.data or []
+        except Exception:
+            continue
+    return []
 
 
-def _fetch_one(table_name: str) -> dict[str, Any]:
-    rows = _fetch_rows(table_name)
+def _fetch_one(table_name: str, context: AuthenticatedTenantContext) -> dict[str, Any]:
+    rows = _fetch_rows(table_name, context)
     return rows[0] if rows else {}
 
 
@@ -63,14 +72,19 @@ class EnterpriseSpendCertificationService:
         return f"${value:,.0f}"
 
     @staticmethod
-    def get_dashboard() -> dict[str, Any]:
-        breakdown = _fetch_one("mart_enterprise_spend_v2")
-        forecast_df = pd.DataFrame(_fetch_rows("mart_enterprise_forecast"))
-        cost_df = pd.DataFrame(_fetch_rows("unified_cloud_costs"))
-        budget_df = pd.DataFrame(_fetch_rows("mart_budget_vs_actual"))
-        recommendations_df = pd.DataFrame(_fetch_rows("recommendations"))
+    def get_dashboard(
+        context: AuthenticatedTenantContext,
+        spend_service: EnterpriseSpendService,
+    ) -> dict[str, Any]:
+        posture = spend_service.get_financial_posture(context)
+        breakdown = _fetch_one("mart_enterprise_spend_v2", context)
+        forecast_df = pd.DataFrame(_fetch_rows("mart_enterprise_forecast", context))
+        cost_df = pd.DataFrame(spend_service.get_spend_by_service(context))
+        budget_df = pd.DataFrame(_fetch_rows("mart_budget_vs_actual", context))
+        recommendations_df = pd.DataFrame(_fetch_rows("recommendations", context))
 
-        cloud_cost = _spend_value(breakdown, "cloud_spend", "cloud_cost")
+        # Legacy cloud is deliberately ignored to prevent double counting.
+        cloud_cost = float(posture.cloud_spend)
         saas_cost = _spend_value(breakdown, "saas_spend", "saas_cost")
         msp_cost = _spend_value(breakdown, "msp_spend", "msp_cost")
         license_cost = _spend_value(breakdown, "license_spend", "license_cost")
@@ -148,8 +162,23 @@ class EnterpriseSpendCertificationService:
             ]
         )
 
-        financial_model = EnterpriseFinancialModel.get_enterprise_summary()
-        reconciliation = EnterpriseFinancialModel.get_reconciliation_status()
+        financial_model = {
+            "enterprise_total": posture.total_ingested_spend + Decimal(str(saas_cost + msp_cost + license_cost)),
+            "allocated_spend": posture.allocated_spend,
+            "unallocated_spend": posture.unallocated_resolved_spend,
+            "quarantined_spend": posture.quarantined_spend,
+            "generated_at": posture.generated_at,
+        }
+        reconciliation_complete = (
+            posture.reconciliation_variance == 0
+            and posture.reconciled_spend == posture.total_ingested_spend
+        )
+        reconciliation = {
+            "status": "reconciled" if reconciliation_complete else "unreconciled",
+            "allocation_coverage": posture.allocation_coverage_percentage,
+            "variance": posture.reconciliation_variance,
+            "unknown_accounts": posture.unknown_account_count,
+        }
 
         metrics = {
             "cloud_cost": cloud_cost,
@@ -180,6 +209,8 @@ class EnterpriseSpendCertificationService:
             },
             "financial_model": financial_model,
             "reconciliation": reconciliation,
+            "financial_posture": posture,
+            "tenant": context,
             "reconciliation_cards": {
                 "status": reconciliation.get("status") or "Unknown",
                 "allocation_coverage": _safe_float(reconciliation.get("allocation_coverage")),
