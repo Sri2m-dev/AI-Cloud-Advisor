@@ -11,7 +11,7 @@ from auth.authenticated_tenant import AuthenticatedTenantContext
 from repositories.cloud_account_registry_repository import CloudAccountRegistryRepository
 
 PROVIDERS = {"aws", "azure", "gcp"}
-READ_ROLES = {"super_admin", "client_admin", "executive", "finance", "auditor", "viewer", "technical", "operations"}
+READ_ROLES = {"super_admin", "client_admin", "executive", "cio", "finance", "auditor", "operations"}
 EDIT_ROLES = {"super_admin", "client_admin", "finance", "operations"}
 FULL_ROLES = {"super_admin", "client_admin", "operations"}
 IMPORT_COLUMNS = ["Provider", "Account ID", "Account Name", "Owner", "Business Unit", "Department", "Application", "Environment", "Budget"]

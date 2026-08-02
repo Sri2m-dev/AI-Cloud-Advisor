@@ -19,7 +19,7 @@ from shared.session import init_session
 from shared.styles import configure_page
 
 configure_page(page_title="Cloud Account Registry | Nexora", page_icon="cloud")
-init_session(); require_role(["super_admin","client_admin","executive","finance","technical","operations","auditor","viewer"])
+init_session(); require_role(["super_admin","client_admin","executive","cio","finance","operations","auditor"])
 context = authenticated_tenant_context(st.session_state)
 service = CloudAccountRegistryService(CloudAccountRegistryRepository(supabase))
 permissions = service.permissions(context)

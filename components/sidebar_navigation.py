@@ -330,9 +330,14 @@ ROLE_PAGES = {
         "Risk & Governance",
         "Audit Timeline",
     ],
+    "auditor": [
+        "Cloud Account Registry",
+        "Audit Timeline",
+        "Reports",
+    ],
 }
 
-for _registry_role in ("super_admin", "client_admin", "executive", "finance", "technical", "auditor", "viewer"):
+for _registry_role in ("super_admin", "client_admin", "executive", "finance", "cio", "auditor"):
     if _registry_role in ROLE_PAGES and "Cloud Account Registry" not in ROLE_PAGES[_registry_role]:
         ROLE_PAGES[_registry_role].append("Cloud Account Registry")
 

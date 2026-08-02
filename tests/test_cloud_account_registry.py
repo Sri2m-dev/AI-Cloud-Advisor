@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 
 from auth.authenticated_tenant import AuthenticatedTenantContext
+from components.navigation.sidebar import build_persona_navigation_items
+from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.cloud_account_registry_service import (
     CloudAccountRegistryService,
     RegistryValidationError,
@@ -82,3 +84,26 @@ def test_migration_has_tenant_rls_unique_identity_and_no_delete_grant():
     assert "pvt003c1_can_read_organization" in sql
     assert "revoke delete" in sql
     assert "cloud_account_registry_audit" in sql
+
+def test_active_navigation_registers_route_and_authorized_personas():
+    assert PAGE_PATHS["Cloud Account Registry"] == "pages/cloud_account_registry.py"
+    authorized = {role for role, pages in ROLE_PAGES.items() if "Cloud Account Registry" in pages}
+    assert {"super_admin","client_admin","executive","cio","finance","auditor"} <= authorized
+    for role in ("executive","cio","finance"):
+        items = build_persona_navigation_items(role=role, page_paths=PAGE_PATHS)
+        assert any(child["page"] == "pages/cloud_account_registry.py" for child in items[0]["children"])
+    assert "Cloud Account Registry" not in ROLE_PAGES.get("technical", [])
+    assert "Cloud Account Registry" not in ROLE_PAGES.get("viewer", [])
+
+def test_server_side_unauthorized_role_is_denied():
+    assert CloudAccountRegistryService.permissions(context("client_admin"))["full"]
+    with pytest.raises(PermissionError, match="read denied"):
+        CloudAccountRegistryService(Repo()).list_accounts(context("viewer"))
+
+def test_page_path_exists_and_has_no_hard_delete_action():
+    from pathlib import Path
+    path = Path(PAGE_PATHS["Cloud Account Registry"])
+    assert path.exists()
+    source = path.read_text(encoding="utf-8")
+    assert "Deactivate" in source and "Archive" in source
+    assert 'button("Delete' not in source
