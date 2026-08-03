@@ -43,3 +43,21 @@ certification uses synthetic accounts `999999999999` and `888888888888`; they
 must be archived after certification while their audit evidence remains.
 
 Production was not accessed. No CUR facts or account mappings were changed.
+
+## Discovered-account integration
+
+The registry uses a deterministic read projection rather than materializing a
+second copy of CUR-discovered identities. Governed rows remain owned by
+`cloud_account_registry`; unresolved AWS identities and quarantined spend are
+owned by the canonical Financial Data Fabric and are read through
+`EnterpriseSpendService.get_unknown_account_posture()` plus
+`get_financial_posture()`. The union key is tenant + provider + provider account
+ID. A governed record supersedes the projected shell while retaining current
+discovery evidence, so replay and corrected imports cannot create duplicate
+registry records.
+
+Projected identities are explicitly `discovered`, `unknown`, `unassigned`, and
+`quarantined`. They show the provider account ID as their display name and do
+not fabricate ownership, business mapping, environment, or application data.
+They cannot enter generic edit or lifecycle controls until a user explicitly
+creates a tenant-owned pending mapping. No database migration is required.
