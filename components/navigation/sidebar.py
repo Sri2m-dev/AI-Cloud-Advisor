@@ -7,9 +7,9 @@ import streamlit as st
 
 from auth.role_constants import normalize_role
 from components.design_system import get_theme
-from components.design_system.icons import ICONS, NAVIGATION_SECTIONS, icon as resolve_icon
+from components.design_system.icons import ICONS, NAVIGATION_SECTIONS
+from components.design_system.icons import icon as resolve_icon
 from components.layout import render_status_badge
-
 
 SECTION_ORDER = [
     "Home",
@@ -46,6 +46,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Executive Overview", "page_label": "Executive Dashboard", "section": "Home", "icon": "home"},
         {"label": "Executive Dashboard", "page_label": "Executive Dashboard", "section": "Executive", "icon": "executive"},
         {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
+        {"label": "Cloud Account Registry", "page_label": "Cloud Account Registry", "section": "Finance", "icon": "cloud"},
         {"label": "Approvals", "page_label": "Approvals", "section": "Governance", "icon": "approval"},
         {"label": "Governance", "page_label": "Risk & Governance", "section": "Governance", "icon": "governance"},
         {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
@@ -66,6 +67,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "SaaS Intelligence", "page_label": "SaaS + AI Intelligence", "section": "Technology Governance", "icon": "marketplace"},
         {"label": "Risk & Governance", "page_label": "Risk & Governance", "section": "Technology Governance", "icon": "governance"},
         {"label": "Reports", "page_label": "Reports", "section": "Executive Reporting", "icon": "reports"},
+        {"label": "Cloud Account Registry", "page_label": "Cloud Account Registry", "section": "Financial Governance", "icon": "cloud"},
     ],
     "technical": [
         {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
@@ -80,6 +82,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
     "finance": [
         {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
         {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
+        {"label": "Cloud Account Registry", "page_label": "Cloud Account Registry", "section": "Finance", "icon": "cloud"},
         {"label": "Forecasting", "page_label": "Forecasting", "section": "Finance", "icon": "trend_up"},
         {"label": "Savings", "page_label": "Savings Governance", "section": "Finance", "icon": "cost"},
         {"label": "Budget vs Actual", "page_label": "FinOps Dashboard", "section": "Finance", "icon": "finance"},
