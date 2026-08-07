@@ -8,16 +8,9 @@ import streamlit as st
 from components.layout import render_page, render_section
 from components.navigation import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
-from repositories.cloud_account_registry_repository import CloudAccountRegistryRepository
-from services.cloud_account_registry_service import (
-    CloudAccountRegistryService,
-    RegistryValidationError,
-)
-from services.enterprise_spend_composition import (
-    authenticated_tenant_context,
-    enterprise_spend_service,
-)
-from services.supabase_client import supabase
+from services.cloud_account_registry_composition import cloud_account_registry_service
+from services.cloud_account_registry_service import RegistryValidationError
+from services.enterprise_spend_composition import authenticated_tenant_context
 from shared.auth import require_role
 from shared.session import init_session
 from shared.styles import configure_page
@@ -28,9 +21,7 @@ require_role(
     ["super_admin", "client_admin", "executive", "cio", "finance", "operations", "auditor"]
 )
 context = authenticated_tenant_context(st.session_state)
-service = CloudAccountRegistryService(
-    CloudAccountRegistryRepository(supabase), enterprise_spend_service()
-)
+service = cloud_account_registry_service()
 permissions = service.permissions(context)
 role = st.session_state.get("role", "viewer")
 render_enterprise_sidebar(

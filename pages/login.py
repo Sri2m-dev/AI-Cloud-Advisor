@@ -1,64 +1,39 @@
 import os
 
 import streamlit as st
-from shared.session import init_session
+
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import DEFAULT_ROLE_PAGE
 from services import audit_service
+from services.local_auth_service import (
+    authenticate_local_user,
+    ensure_default_tenant_administrator,
+)
+from shared.session import init_session
 from utils.auth import login_user as supabase_login_user
 
 # Initialize session defaults
 init_session()
 
 # Page configuration
-st.set_page_config(
-    page_title="NEXORA Login",
-    page_icon="🔐",
-    layout="wide"
-)
+st.set_page_config(page_title="NEXORA Login", page_icon="🔐", layout="wide")
 
 # ------------------------------------------------------------------
 # Dev-only Local Users
 # ------------------------------------------------------------------
 
 AUTH_MODE = os.getenv("AUTH_MODE", "").strip().lower()
-ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("CLOUD_ADVISOR_ENV", "development")).strip().lower()
+ENVIRONMENT = (
+    os.getenv("ENVIRONMENT", os.getenv("CLOUD_ADVISOR_ENV", "development")).strip().lower()
+)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-DEV_AUTH_ENABLED = AUTH_MODE in {"dev", "demo", "local"} or (ENVIRONMENT != "production" and not SUPABASE_URL)
+DEV_AUTH_ENABLED = AUTH_MODE in {"dev", "demo", "local"} or (
+    ENVIRONMENT != "production" and not SUPABASE_URL
+)
 DEV_ORG_ID = "bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c"
 
-VALID_USERS = {
-
-    "ceo@company.com": {
-        "password": "password123",
-        "role": "executive"
-    },
-
-    "admin@company.com": {
-        "password": "password123",
-        "role": "super_admin"
-    },
-
-    "finance@company.com": {
-        "password": "password123",
-        "role": "finance"
-    },
-
-    "finops@client.com": {
-        "password": "password123",
-        "role": "finance"
-    },
-
-    "engineer@client.com": {
-        "password": "password123",
-        "role": "technical"
-    },
-
-    "cto@company.com": {
-        "password": "password123",
-        "role": "cio"
-    }
-}
+if DEV_AUTH_ENABLED:
+    ensure_default_tenant_administrator()
 
 
 def get_profile_org_id(profile):
@@ -105,16 +80,18 @@ def login_with_dev_user(username, password):
     if not DEV_AUTH_ENABLED:
         return False
 
-    user = VALID_USERS.get(username)
-
-    if not user or user["password"] != password:
+    user = authenticate_local_user(username, password)
+    if not user:
         return False
 
     set_login_session(
-        email=username,
-        role=user["role"],
-        org_id=DEV_ORG_ID
+        email=user.email,
+        role=user.role,
+        org_id=user.organization_id,
     )
+    st.session_state["auth_backend"] = "local"
+    st.session_state["authorized_organization_ids"] = [user.organization_id]
+    st.session_state["organization_name"] = user.organization_name
     return True
 
 
@@ -145,10 +122,7 @@ def login_with_supabase(username, password):
         return False
 
     set_login_session(
-        email=email,
-        role=role,
-        org_id=org_id,
-        user_id=st.session_state.get("user_id")
+        email=email, role=role, org_id=org_id, user_id=st.session_state.get("user_id")
     )
     return True
 
@@ -176,25 +150,17 @@ st.caption("Next Generation Technology Intelligence")
 
 # Already authenticated
 if st.session_state.get("authenticated"):
-
-    st.success(
-        f"Already logged in as {st.session_state.get('user')}"
-    )
+    st.success(f"Already logged in as {st.session_state.get('user')}")
 
     role = st.session_state.get("role")
     route_user(role)
 
 else:
-
     username = st.text_input("Username")
 
-    password = st.text_input(
-        "Password",
-        type="password"
-    )
+    password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-
         try:
             try:
                 login_success = login_with_supabase(username, password)
@@ -214,7 +180,7 @@ else:
                     user_id=st.session_state["email"],
                     org_id=st.session_state["organization_id"],
                     ip_address=None,  # Would come from request context in production
-                    user_agent=None   # Would come from request context in production
+                    user_agent=None,  # Would come from request context in production
                 )
             except Exception:
                 pass
@@ -232,27 +198,15 @@ else:
 # ------------------------------------------------------------------
 
 try:
-
     params = st.query_params
     auto_login = params.get("auto_login")
 
-    if (
-        DEV_AUTH_ENABLED
-        and
-        auto_login == "1"
-        and not st.session_state.get("authenticated")
-    ):
-
-        set_login_session(
-            email="ceo@company.com",
-            role="executive",
-            org_id=DEV_ORG_ID
-        )
+    if DEV_AUTH_ENABLED and auto_login == "1" and not st.session_state.get("authenticated"):
+        set_login_session(email="ceo@company.com", role="executive", org_id=DEV_ORG_ID)
 
         # Automatically log the auto-login event
         audit_service.log_user_login(
-            user_id="ceo@company.com",
-            org_id=st.session_state["organization_id"]
+            user_id="ceo@company.com", org_id=st.session_state["organization_id"]
         )
 
         route_user("executive")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 from io import BytesIO
 from types import SimpleNamespace
@@ -7,9 +8,15 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+import repositories.cloud_account_registry_repository as registry_repository_module
 from auth.authenticated_tenant import AuthenticatedTenantContext
 from components.navigation.sidebar import build_persona_navigation_items
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+from repositories.cloud_account_registry_repository import (
+    CloudAccountRegistryRepository,
+    LocalCloudAccountRegistryRepository,
+)
+from services.cloud_account_registry_composition import cloud_account_registry_repository
 from services.cloud_account_registry_service import (
     CloudAccountRegistryService,
     RegistryValidationError,
@@ -289,3 +296,84 @@ def test_new_manual_record_remains_pending_and_audited():
     )
     assert saved["status"] == "pending_mapping"
     assert repo.audit[0]["action"] == "create"
+
+
+def test_repository_selection_uses_supabase_when_configured():
+    client = object()
+    repository = cloud_account_registry_repository(
+        supabase_url="https://project.supabase.co", client=client
+    )
+    assert isinstance(repository, CloudAccountRegistryRepository)
+    assert repository.client is client
+
+
+def test_repository_selection_uses_local_when_supabase_absent():
+    assert isinstance(
+        cloud_account_registry_repository(supabase_url=""),
+        LocalCloudAccountRegistryRepository,
+    )
+
+
+def test_local_fallback_preserves_crud_audit_import_export_and_tenant_isolation(
+    monkeypatch, tmp_path
+):
+    database_path = tmp_path / "registry.db"
+
+    def get_test_db():
+        conn = sqlite3.connect(database_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    monkeypatch.setattr(registry_repository_module, "get_db", get_test_db)
+    service = CloudAccountRegistryService(LocalCloudAccountRegistryRepository())
+    tenant_a = context("super_admin")
+    tenant_b = AuthenticatedTenantContext(
+        "972ee726-c5ab-427a-b77c-bd0e60bc322f",
+        "Other Org",
+        "user-2",
+        "other@example.com",
+        "super_admin",
+        frozenset(),
+        "972ee726-c5ab-427a-b77c-bd0e60bc322f",
+    )
+
+    saved = service.save(tenant_a, complete(), reason="local create")
+    assert len(service.list_accounts(tenant_a)) == 1
+    assert service.list_accounts(tenant_b) == []
+    updated = service.transition(tenant_a, saved["id"], "archived", "local archive")
+    assert updated["status"] == "archived"
+    history = service.repository.audit_history(tenant_a, saved["id"])
+    assert [entry["action"] for entry in history] == ["update", "create"]
+    assert service.repository.audit_history(tenant_b, saved["id"]) == []
+
+    csv_content = (
+        pd.DataFrame(
+            [
+                {
+                    "Provider": "gcp",
+                    "Account ID": "project-local",
+                    "Account Name": "Local",
+                    "Owner": "owner",
+                    "Business Unit": "Platform",
+                    "Department": "Engineering",
+                    "Application": "Nexora",
+                    "Environment": "dev",
+                    "Budget": "10",
+                }
+            ]
+        )
+        .to_csv(index=False)
+        .encode()
+    )
+    preview = service.preview_csv(tenant_a, csv_content)
+    service.commit_preview(tenant_a, preview, reason="local import")
+    rows = service.list_accounts(tenant_a)
+    assert len(rows) == 2
+    assert b"project-local" in service.export_csv(rows)
+    assert pd.read_excel(BytesIO(service.export_excel(rows))).shape[0] == 2
+
+
+def test_page_uses_automatic_composition_and_has_no_direct_supabase_repository():
+    source = open("pages/cloud_account_registry.py", encoding="utf-8").read()
+    assert "cloud_account_registry_service()" in source
+    assert "CloudAccountRegistryRepository(supabase)" not in source
