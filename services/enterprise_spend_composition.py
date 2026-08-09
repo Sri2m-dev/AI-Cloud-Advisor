@@ -36,6 +36,14 @@ class _EmptyTenantSpendRepository:
         self._require_context(context)
         return ()
 
+    def get_account_classification_evidence(self, context, account_id):
+        self._require_context(context)
+        return ()
+
+    def get_accounts_classification_evidence(self, context, account_ids):
+        self._require_context(context)
+        return ()
+
     def get_import_history(self, context):
         self._require_context(context)
         return ()

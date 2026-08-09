@@ -76,6 +76,58 @@ class CloudAccountRegistryRepository:
         )
         return list(response.data or [])
 
+    def resolve_account(
+        self,
+        context: AuthenticatedTenantContext,
+        discovered: Mapping[str, Any],
+        mapping: Mapping[str, Any],
+        *,
+        reason: str,
+        confirmed: bool,
+        expected_state: str = "DISCOVERED",
+    ) -> dict[str, Any]:
+        self._require(context)
+        response = self.client.rpc(
+            "fg002_resolve_cloud_account",
+            {
+                "requested_organization_id": context.organization_id,
+                "requested_payer_account_id": discovered.get("payer_account_id"),
+                "requested_account_id": discovered.get("account_id"),
+                "requested_mapping": dict(mapping),
+                "requested_reason": reason,
+                "requested_confirmed": confirmed,
+                "requested_expected_state": expected_state,
+            },
+        ).execute()
+        return dict(response.data or {})
+
+    def version_history(self, context: AuthenticatedTenantContext, registry_id: str):
+        self._require(context)
+        response = (
+            self.client.table("cloud_account_registry_version")
+            .select("*")
+            .eq("organization_id", context.organization_id)
+            .eq("tenant_id", context.tenant_id)
+            .eq("registry_id", registry_id)
+            .order("version", desc=True)
+            .execute()
+        )
+        return list(response.data or [])
+
+    def bulk_resolve(self, context, accounts, mapping, *, reason: str, confirmed: bool):
+        self._require(context)
+        response = self.client.rpc(
+            "fg002_bulk_resolve_cloud_accounts",
+            {
+                "requested_organization_id": context.organization_id,
+                "requested_accounts": list(accounts),
+                "requested_mapping": dict(mapping),
+                "requested_reason": reason,
+                "requested_confirmed": confirmed,
+            },
+        ).execute()
+        return dict(response.data or {})
+
 
 class LocalCloudAccountRegistryRepository:
     """SQLite-backed registry with the same tenant-scoped contract as Supabase."""

@@ -73,6 +73,36 @@ class EnterpriseSpendRepository:
             ).execute()
         )
 
+    def get_account_classification_evidence(
+        self, context: AuthenticatedTenantContext, account_id: str
+    ) -> tuple[Mapping[str, Any], ...]:
+        if not isinstance(context, AuthenticatedTenantContext):
+            raise TypeError("AuthenticatedTenantContext is required")
+        return self._rows(
+            self._client.rpc(
+                "tenant_cloud_account_classification_evidence",
+                {
+                    "requested_organization_id": context.organization_id,
+                    "requested_account_id": account_id,
+                },
+            ).execute()
+        )
+
+    def get_accounts_classification_evidence(
+        self, context: AuthenticatedTenantContext, account_ids
+    ) -> tuple[Mapping[str, Any], ...]:
+        if not isinstance(context, AuthenticatedTenantContext):
+            raise TypeError("AuthenticatedTenantContext is required")
+        return self._rows(
+            self._client.rpc(
+                "tenant_cloud_accounts_classification_evidence",
+                {
+                    "requested_organization_id": context.organization_id,
+                    "requested_account_ids": list(account_ids),
+                },
+            ).execute()
+        )
+
     def get_import_history(
         self,
         context: AuthenticatedTenantContext,

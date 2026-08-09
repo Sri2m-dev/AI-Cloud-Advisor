@@ -2,18 +2,52 @@
 
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Mapping, Protocol
 
 import pandas as pd
 
 from auth.authenticated_tenant import AuthenticatedTenantContext
+from classification_engine.models import ClassificationEvidence, ClassificationPolicy
+from classification_engine.service import SUPPORTED_FIELDS, ClassificationService
+from classification_engine.sources import collect_aws_evidence
 from repositories.cloud_account_registry_repository import CloudAccountRegistryRepository
 
 PROVIDERS = {"aws", "azure", "gcp"}
 READ_ROLES = {"super_admin", "client_admin", "executive", "cio", "finance", "auditor", "operations"}
 EDIT_ROLES = {"super_admin", "client_admin", "finance", "operations"}
 FULL_ROLES = {"super_admin", "client_admin", "operations"}
+RESOLVE_ROLES = {"super_admin", "client_admin", "organization_admin", "finance", "operations"}
+APPROVE_ROLES = {"super_admin", "client_admin", "organization_admin"}
+RESOLUTION_STATES = {
+    "DISCOVERED",
+    "PENDING_REVIEW",
+    "PARTIALLY_MAPPED",
+    "READY_FOR_APPROVAL",
+    "APPROVED",
+    "ACTIVE",
+    "REJECTED",
+    "SUSPENDED",
+}
+RESOLUTION_FIELDS = (
+    "account_name",
+    "alias",
+    "environment",
+    "business_unit",
+    "department",
+    "application",
+    "business_service",
+    "owner",
+    "technical_owner",
+    "finance_owner",
+    "cost_center",
+    "project_code",
+    "criticality",
+    "effective_date",
+    "resolution_status",
+)
 IMPORT_COLUMNS = [
     "Provider",
     "Account ID",
@@ -38,15 +72,115 @@ class DiscoveredAccountSource(Protocol):
 
     def get_financial_posture(self, context: AuthenticatedTenantContext) -> Any: ...
 
+    def get_account_classification_evidence(
+        self, context: AuthenticatedTenantContext, account_id: str
+    ) -> tuple[Mapping[str, Any], ...]: ...
+
+    def get_accounts_classification_evidence(
+        self, context: AuthenticatedTenantContext, account_ids
+    ) -> tuple[Mapping[str, Any], ...]: ...
+
 
 class CloudAccountRegistryService:
     def __init__(
         self,
         repository: CloudAccountRegistryRepository,
         discovered_accounts: DiscoveredAccountSource | None = None,
+        classification_service: ClassificationService | None = None,
     ) -> None:
         self.repository = repository
         self.discovered_accounts = discovered_accounts
+        self.classification_service = classification_service or ClassificationService()
+
+    def classify_account(
+        self,
+        context: AuthenticatedTenantContext,
+        row: Mapping[str, Any],
+        evidence_rows: tuple[Mapping[str, Any], ...] | None = None,
+    ):
+        """Classify available fields independently without treating inference as approval."""
+        observed_at = row.get("last_seen_at")
+        if not isinstance(observed_at, datetime):
+            observed_at = datetime.now(timezone.utc)
+        elif observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        evidence = []
+        if str(row.get("provider") or "").lower() == "aws":
+            evidence.extend(
+                collect_aws_evidence(
+                    organization_id=context.organization_id,
+                    tenant_id=context.tenant_id,
+                    account_id=str(row.get("account_id") or ""),
+                    metadata=row,
+                    observed_at=observed_at,
+                )
+            )
+        if evidence_rows is None:
+            evidence_rows = ()
+            if self.discovered_accounts is not None and hasattr(
+                self.discovered_accounts, "get_account_classification_evidence"
+            ):
+                evidence_rows = self.discovered_accounts.get_account_classification_evidence(
+                    context, str(row.get("account_id") or "")
+                )
+        for source_row in evidence_rows:
+            reference = str(source_row.get("source_reference") or "billing")
+            value = str(source_row.get("observed_value") or "")
+            digest = hashlib.sha256(f"{reference}:{value}".encode()).hexdigest()
+            source_timestamp = source_row.get("observed_at")
+            if not isinstance(source_timestamp, datetime):
+                source_timestamp = observed_at
+            evidence.append(
+                ClassificationEvidence(
+                    evidence_id=digest,
+                    organization_id=context.organization_id,
+                    tenant_id=context.tenant_id,
+                    source_type=str(source_row.get("source_type") or "billing_metadata"),
+                    source_name="AWS CUR metadata",
+                    source_reference=reference,
+                    observed_field=str(source_row.get("observed_field") or ""),
+                    observed_value=value,
+                    observed_at=source_timestamp,
+                    source_reliability=0.8,
+                    evidence_hash=digest,
+                    metadata={"coverage": float(source_row.get("coverage") or 0)},
+                )
+            )
+        for field_name in SUPPORTED_FIELDS:
+            value = row.get(field_name)
+            if not value or (
+                field_name == "account_name" and str(value) == str(row.get("account_id"))
+            ):
+                continue
+            source = str(row.get(f"{field_name}_source") or row.get("source") or "registry")
+            reference = f"{row.get('provider')}:{row.get('account_id')}:{field_name}"
+            digest = hashlib.sha256(f"{reference}:{value}".encode()).hexdigest()
+            evidence.append(
+                ClassificationEvidence(
+                    evidence_id=digest,
+                    organization_id=context.organization_id,
+                    tenant_id=context.tenant_id,
+                    source_type=source,
+                    source_name=source,
+                    source_reference=reference,
+                    observed_field=field_name,
+                    observed_value=str(value),
+                    observed_at=observed_at,
+                    source_reliability=float(row.get(f"{field_name}_reliability") or 0.7),
+                    evidence_hash=digest,
+                    lineage_reference=str(row.get("source_import_id") or "") or None,
+                )
+            )
+        policy = ClassificationPolicy(
+            organization_id=context.organization_id,
+            tenant_id=context.tenant_id,
+        )
+        return self.classification_service.classify_account(
+            context,
+            account_id=str(row.get("account_id") or ""),
+            evidence=tuple(evidence),
+            policy=policy,
+        )
 
     @staticmethod
     def permissions(context: AuthenticatedTenantContext) -> dict[str, bool]:
@@ -54,7 +188,105 @@ class CloudAccountRegistryService:
             "read": context.role in READ_ROLES,
             "edit": context.role in EDIT_ROLES,
             "full": context.role in FULL_ROLES,
+            "resolve": context.role in RESOLVE_ROLES,
+            "approve": context.role in APPROVE_ROLES,
         }
+
+    @staticmethod
+    def allocation_ready(values: Mapping[str, Any]) -> bool:
+        """Allocation is an approval boundary; inference alone is never sufficient."""
+        return bool(
+            (values.get("business_unit") or values.get("department"))
+            and values.get("cost_center")
+            and values.get("environment")
+            and str(values.get("resolution_status") or "").upper() in {"APPROVED", "ACTIVE"}
+        )
+
+    def resolve_discovered(
+        self,
+        context,
+        discovered,
+        values,
+        *,
+        reason: str,
+        confirmed: bool,
+        expected_state: str = "DISCOVERED",
+    ):
+        permissions = self.permissions(context)
+        if not permissions["resolve"]:
+            raise PermissionError("cloud account resolution denied")
+        if not confirmed:
+            raise RegistryValidationError("explicit resolution confirmation is required")
+        if not str(reason or "").strip():
+            raise RegistryValidationError("resolution reason is required")
+        state = str(values.get("resolution_status") or "PENDING_REVIEW").upper()
+        if state not in RESOLUTION_STATES:
+            raise RegistryValidationError("invalid resolution status")
+        if state in {"APPROVED", "ACTIVE"} and not permissions["approve"]:
+            raise PermissionError("cloud account approval denied")
+        source_evidence = discovered.get("source_evidence") or {}
+        account_id = str(discovered.get("account_id") or "").strip()
+        payer_id = str(
+            discovered.get("payer_account_id") or source_evidence.get("payer_account_id") or ""
+        ).strip()
+        if (
+            str(discovered.get("provider") or "aws").lower() != "aws"
+            or not account_id
+            or not payer_id
+        ):
+            raise RegistryValidationError("immutable discovered AWS identity is required")
+        mapping = {field: values.get(field) for field in RESOLUTION_FIELDS}
+        for field in (
+            "source_import_id",
+            "first_seen_at",
+            "last_seen_at",
+            "billing_period",
+            "quarantined_spend",
+            "currency",
+        ):
+            mapping[field] = discovered.get(field) or source_evidence.get(field)
+        result = self.repository.resolve_account(
+            context,
+            discovered,
+            mapping,
+            reason=reason,
+            confirmed=confirmed,
+            expected_state=expected_state,
+        )
+        if self.discovered_accounts is not None:
+            self.discovered_accounts.invalidate(context.organization_id)
+        return result
+
+    def preview_bulk_resolution(self, context, accounts, shared_values):
+        if not self.permissions(context)["resolve"]:
+            raise PermissionError("bulk account resolution denied")
+        selected = list(accounts)
+        return {
+            "accounts": selected,
+            "count": len(selected),
+            "quarantined_spend": sum(float(row.get("quarantined_spend") or 0) for row in selected),
+            "changes": {
+                key: value for key, value in shared_values.items() if value not in (None, "")
+            },
+            "allocation_ready": all(
+                self.allocation_ready({**row, **shared_values}) for row in selected
+            ),
+        }
+
+    def commit_bulk_resolution(self, context, preview, *, reason: str, confirmed: bool):
+        if not confirmed:
+            raise RegistryValidationError("explicit bulk confirmation is required")
+        if not str(reason or "").strip():
+            raise RegistryValidationError("bulk resolution reason is required")
+        if not preview.get("accounts"):
+            raise RegistryValidationError("bulk accounts are required")
+        return self.repository.bulk_resolve(
+            context,
+            preview["accounts"],
+            preview.get("changes") or {},
+            reason=reason,
+            confirmed=confirmed,
+        )
 
     @staticmethod
     def governance_score(row: Mapping[str, Any]) -> int:
@@ -158,9 +390,18 @@ class CloudAccountRegistryService:
 
     def dashboard(self, context: AuthenticatedTenantContext) -> dict[str, Any]:
         rows = self.list_accounts(context)
+        classifications = {
+            str(row.get("account_id")): self.classify_account(context, row, ()) for row in rows
+        }
+        posture = (
+            self.discovered_accounts.get_financial_posture(context)
+            if self.discovered_accounts is not None
+            else None
+        )
         scores = [int(r.get("governance_score") or 0) for r in rows if r.get("governance_assessed")]
         return {
             "accounts": rows,
+            "classifications": classifications,
             "total": len(rows),
             "aws": sum(r.get("provider") == "aws" for r in rows),
             "azure": sum(r.get("provider") == "azure" for r in rows),
@@ -175,6 +416,24 @@ class CloudAccountRegistryService:
                 r.get("mapping_status") == "unknown" or r.get("status") == "unknown" for r in rows
             ),
             "average_governance": round(sum(scores) / len(scores), 1) if scores else "Not assessed",
+            "needs_review": sum(
+                all(result.inference_status == "NEEDS_REVIEW" for result in results)
+                for results in classifications.values()
+            ),
+            "resolved_inferred": sum(
+                any(result.inference_status == "RESOLVED_INFERRED" for result in results)
+                for results in classifications.values()
+            ),
+            "resolved_approved": sum(
+                any(result.inference_status == "RESOLVED_APPROVED" for result in results)
+                for results in classifications.values()
+            ),
+            "conflicted": sum(
+                any(result.conflict for result in results) for results in classifications.values()
+            ),
+            "quarantined_spend": getattr(posture, "quarantined_spend", 0),
+            "resolved_spend": getattr(posture, "resolved_spend", 0),
+            "allocation_coverage": getattr(posture, "allocation_coverage_percentage", 0),
         }
 
     def save(
@@ -237,9 +496,7 @@ class CloudAccountRegistryService:
             context,
             {
                 **next(
-                    r
-                    for r in self.list_accounts(context)
-                    if str(r.get("id")) == str(registry_id)
+                    r for r in self.list_accounts(context) if str(r.get("id")) == str(registry_id)
                 ),
                 "status": status,
             },

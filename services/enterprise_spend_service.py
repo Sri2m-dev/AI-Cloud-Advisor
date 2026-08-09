@@ -91,6 +91,14 @@ class EnterpriseSpendService:
             and (payer_id is None or row.get("payer_account_id") == payer_id)
         )
 
+    def get_account_classification_evidence(
+        self, context: AuthenticatedTenantContext, account_id: str
+    ):
+        return self._repository.get_account_classification_evidence(context, account_id)
+
+    def get_accounts_classification_evidence(self, context, account_ids):
+        return self._repository.get_accounts_classification_evidence(context, account_ids)
+
     def get_import_history(self, context: AuthenticatedTenantContext):
         return self._repository.get_import_history(context)
 

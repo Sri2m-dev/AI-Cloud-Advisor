@@ -35,6 +35,7 @@ render_enterprise_sidebar(
 def content():
     data = service.dashboard(context)
     rows = data["accounts"]
+    classifications = data["classifications"]
     st.caption(f"Organization: {context.organization_name}")
     cols = st.columns(8)
     for col, label, key in zip(
@@ -50,6 +51,13 @@ def content():
             "Average Governance Score",
         ],
         ["total", "aws", "azure", "gcp", "active", "pending", "unknown", "average_governance"],
+    ):
+        col.metric(label, data[key])
+    classification_cols = st.columns(4)
+    for col, label, key in zip(
+        classification_cols,
+        ["Needs Review", "Resolved (Inferred)", "Resolved (Approved)", "Conflicted"],
+        ["needs_review", "resolved_inferred", "resolved_approved", "conflicted"],
     ):
         col.metric(label, data[key])
     render_section("Registry", "Search, filter, govern, and inspect tenant-owned cloud accounts.")
@@ -204,18 +212,39 @@ def content():
         )
         tabs = st.tabs(
             [
-                "Overview",
-                "Financial",
-                "Ownership",
+                "Discovery Evidence",
+                "Classification",
                 "Business Mapping",
-                "Applications",
-                "Technology",
-                "Synchronization",
+                "Financial Impact",
+                "Approval History",
                 "Audit History",
             ]
         )
         tabs[0].json(selected)
-        tabs[1].write(
+        account_results = classifications.get(str(selected.get("account_id")), ())
+        tabs[1].dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Field": result.field_name,
+                        "Inferred Value": result.inferred_value or "UNKNOWN",
+                        "Confidence": f"{result.confidence_score:.0%}",
+                        "Method": result.inference_method,
+                        "Evidence": len(result.evidence_ids),
+                        "Status": result.inference_status,
+                        "Approval": result.approval_status,
+                        "Conflict": result.conflict,
+                    }
+                    for result in account_results
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+        tabs[2].write(
+            {result.field_name: result.inferred_value or "UNKNOWN" for result in account_results}
+        )
+        tabs[3].write(
             {
                 k: selected.get(k)
                 for k in (
@@ -227,39 +256,8 @@ def content():
                 )
             }
         )
-        tabs[2].write(
-            {
-                k: selected.get(k)
-                for k in ("ownership_status", "owner", "technical_owner", "finance_owner")
-            }
-        )
-        tabs[3].write(
-            {
-                k: selected.get(k)
-                for k in (
-                    "mapping_status",
-                    "business_unit",
-                    "department",
-                    "business_service",
-                    "project",
-                )
-            }
-        )
-        tabs[4].write(selected.get("application") or "Not mapped")
-        tabs[5].write(
-            {
-                "landing_zone": selected.get("landing_zone"),
-                "health_score": selected.get("health_score"),
-            }
-        )
-        tabs[6].write(
-            {
-                "source": selected.get("source"),
-                "first_seen_at": selected.get("first_seen_at"),
-                "last_seen_at": selected.get("last_seen_at"),
-            }
-        )
-        tabs[7].dataframe(
+        tabs[4].write("No approval is implied by inferred classifications.")
+        tabs[5].dataframe(
             service.repository.audit_history(context, selected["id"]) if selected.get("id") else []
         )
         if selected.get("id") is None:
