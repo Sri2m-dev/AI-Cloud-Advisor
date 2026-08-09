@@ -1,5 +1,7 @@
 import streamlit as st
 
+from auth.role_constants import normalize_role
+
 
 def require_role(allowed_roles):
     """
@@ -22,15 +24,11 @@ def require_role(allowed_roles):
         st.error("Please log in")
         st.stop()
 
-    role = str(
-        st.session_state.get(
-            "role",
-            ""
-        )
-    ).strip().lower()
+    role = normalize_role(st.session_state.get("role", ""))
+    st.session_state["role"] = role
 
     normalized_roles = [
-        str(r).strip().lower()
+        normalize_role(r)
         for r in allowed_roles
     ]
 
@@ -62,16 +60,7 @@ def login_user(email, password):
     Current application uses pages/login.py.
     """
 
-    if email == "admin":
-
-        return {
-            "status": True,
-            "role": "super_admin",
-            "client_id": "global",
-            "username": "admin",
-        }
-
     return {
         "status": False,
-        "error": "User not found",
+        "error": "Legacy login is disabled; use pages/login.py",
     }

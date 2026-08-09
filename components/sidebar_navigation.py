@@ -332,8 +332,17 @@ ROLE_PAGES = {
     ],
     "auditor": [
         "Cloud Account Registry",
+        "Account Resolution",
         "Audit Timeline",
         "Reports",
+    ],
+    "operations": [
+        "Operations Workspace",
+        "Cloud Account Registry",
+        "Account Resolution",
+        "Service Explorer",
+        "Technical Analytics",
+        "Audit Timeline",
     ],
 }
 
@@ -344,7 +353,10 @@ for _registry_role in ("super_admin", "client_admin", "executive", "finance", "c
 for _classification_role in (
     "super_admin", "client_admin", "executive", "finance", "cio", "operations", "auditor"
 ):
-    if _classification_role in ROLE_PAGES and "Account Resolution" not in ROLE_PAGES[_classification_role]:
+    if (
+        _classification_role in ROLE_PAGES
+        and "Account Resolution" not in ROLE_PAGES[_classification_role]
+    ):
         ROLE_PAGES[_classification_role].append("Account Resolution")
 
 PAGE_PATHS = {
@@ -439,6 +451,8 @@ DEFAULT_ROLE_PAGE = {
     "cio": PAGE_PATHS["Technology Portfolio Overview"],
     "finance": PAGE_PATHS["FinOps Dashboard"],
     "technical": PAGE_PATHS["Operations Workspace"],
+    "operations": PAGE_PATHS["Operations Workspace"],
+    "auditor": PAGE_PATHS["Audit Timeline"],
 }
 
 

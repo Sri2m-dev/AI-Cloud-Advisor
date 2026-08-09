@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 import os
 import sys
 
@@ -36,6 +38,7 @@ init_session()
 require_role([
     "finance",
     "technical",
+    "operations",
     "super_admin",
 ])
 

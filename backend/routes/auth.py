@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -33,13 +32,7 @@ def _load_api_users() -> dict:
     # API_USERS_JSON={"admin":{"password":"secret","role":"SuperAdmin"}}
     raw = os.getenv("API_USERS_JSON")
     if not raw:
-        return {
-            "admin": {"password": "admin123", "role": "SuperAdmin"},
-            "customer_admin": {"password": "client123", "role": "CustomerAdmin"},
-            "finops": {"password": "finops123", "role": "FinOpsManager"},
-            "viewer": {"password": "viewer123", "role": "Viewer"},
-            "auditor": {"password": "auditor123", "role": "Auditor"},
-        }
+        return {}
 
     import json
 
@@ -85,11 +78,15 @@ def login(payload: LoginRequest):
 def refresh(payload: RefreshRequest):
     decoded = verify_jwt(payload.refresh_token)
     if not decoded or decoded == "expired":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
     if decoded.get("token_type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong token type")
     if is_token_revoked(decoded.get("jti")):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked"
+        )
 
     # Rotate refresh tokens: revoke old one when exchanging.
     revoke_token(decoded.get("jti"), decoded.get("exp"))
