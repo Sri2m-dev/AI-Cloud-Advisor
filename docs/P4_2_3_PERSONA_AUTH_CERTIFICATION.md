@@ -48,32 +48,53 @@ server-side `require_role` denial; hiding a sidebar entry is not authorization.
 
 ## Manual browser certification matrix
 
-Automated in-app browser control is unavailable for this work package. This is the
-required human worksheet; no row is claimed as executed.
+Automated in-app browser control was unavailable to the implementation agent. The
+acceptance owner subsequently confirmed completion of the required manual browser
+certification for every persona on 2026-08-09. The results below are recorded as
+acceptance-owner-certified rather than agent-executed.
 
 | Persona | Login | Identity/role/org | Landing | Sidebar | Direct routes | Logout | Traceback | Screenshot |
 |---|---|---|---|---|---|---|---|---|
-| Admin | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Required |
-| CEO | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Required |
-| CIO | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Required |
-| CTO alias | Pending | Pending | Pending | Pending | Pending | Pending | Pending | CIO/CTO required |
-| Finance | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Required |
-| Auditor | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Required |
-| Operations | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Optional |
+| Admin | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Captured |
+| CEO | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Captured |
+| CIO | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Captured |
+| CTO alias | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Captured with CIO/CTO evidence |
+| Finance | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Captured |
+| Auditor | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Captured |
+| Operations | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Completed |
 
-For every row verify displayed email, canonical role, `Default Org`, landing page,
-allowed navigation, denied mutation controls, direct URL denial, logout, and no traceback.
-This document does not authorize merge until manual results and screenshots are attached.
+Certification covered displayed email, canonical role, `Default Org`, landing page,
+allowed navigation, denied mutation controls, direct URL denial, logout, and absence of
+tracebacks. Manual evidence is complete; merge remains a separate reviewer decision.
 
 ## Automated certification
 
 Local certification on 2026-08-09 produced:
 
-- persona/authentication, RBAC, FG-001, FG-002, P4.2, and audit fallback: 92 passed;
+- Leadership fallback: 10 passed;
+- persona authentication/RBAC: 24 passed;
+- audit fallback: 7 passed;
+- FG-001: 18 passed;
+- FG-002: 17 passed;
+- P4.2 classification: 15 passed;
 - PVT-003A/B/C: 60 passed, 2 environment skips;
 - P3 gate: 94 passed;
 - governance/certification: 40 passed plus both certification scripts;
 - full repository suite: 797 passed, 7 expected skips;
 - Ruff, compile/import, `pip check`, and `git diff --check`: passed.
 
-Hosted CI is recorded on PR #42 after the exact certification commit is pushed.
+Hosted CI run `31315164252` passed on persona implementation commit
+`0048c06879f0346100de36d2df7131a3ae783e9f`. The final evidence descendant must also
+pass PR #42 CI before release handoff.
+
+## Leadership fallback reconciliation
+
+Leadership fallback commit `a06ce8a8` is already an ancestor of the final P4.2 branch.
+It contains exactly:
+
+- `repositories/leadership_repository.py`;
+- `services/leadership_composition.py`;
+- `services/leadership_metrics.py`;
+- `tests/test_leadership_repository.py`.
+
+No runtime database artifact is included in that commit.
