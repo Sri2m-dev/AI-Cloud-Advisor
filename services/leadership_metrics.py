@@ -5,7 +5,8 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from repositories.leadership_repository import LeadershipDashboardRepository
+from repositories.leadership_repository import LeadershipRepository
+from services.leadership_composition import leadership_repository
 
 
 def _df(rows) -> pd.DataFrame:
@@ -27,17 +28,26 @@ def _sum_column(df: pd.DataFrame, column: str) -> float:
     return float(pd.to_numeric(df[column], errors="coerce").fillna(0).sum())
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_leadership_dashboard_metrics(organization_id: str | None = None) -> dict[str, Any]:
+def get_leadership_dashboard_metrics(
+    organization_id: str | None = None,
+    repository: LeadershipRepository | None = None,
+) -> dict[str, Any]:
+    organization_id = str(
+        organization_id
+        or st.session_state.get("organization_id")
+        or st.session_state.get("org_id")
+        or ""
+    ).strip()
+    selected_repository = repository or leadership_repository()
 
-    enterprise_spend = LeadershipDashboardRepository.get_enterprise_spend()
-    spend_breakdown = LeadershipDashboardRepository.get_enterprise_spend_breakdown()
-    savings_row = LeadershipDashboardRepository.get_savings()
+    enterprise_spend = selected_repository.get_enterprise_spend(organization_id)
+    spend_breakdown = selected_repository.get_enterprise_spend_breakdown(organization_id)
+    savings_row = selected_repository.get_savings(organization_id)
 
-    approvals_df = _df(LeadershipDashboardRepository.get_approval_requests())
-    optimization_df = _df(LeadershipDashboardRepository.get_optimization_opportunities())
-    anomalies_df = _df(LeadershipDashboardRepository.get_cost_anomalies())
-    recommendations_df = _df(LeadershipDashboardRepository.get_recommendations())
+    approvals_df = _df(selected_repository.get_approval_requests(organization_id))
+    optimization_df = _df(selected_repository.get_optimization_opportunities(organization_id))
+    anomalies_df = _df(selected_repository.get_cost_anomalies(organization_id))
+    recommendations_df = _df(selected_repository.get_recommendations(organization_id))
 
     total_spend = _to_float(enterprise_spend.get("total_spend", 0))
 
