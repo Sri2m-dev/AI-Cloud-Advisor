@@ -56,5 +56,6 @@ Local certification on 2026-08-09 produced:
 
 Interactive page certification remains pending because the required in-app browser
 connection was unavailable in the execution environment. This evidence does not replace
-that browser gate or authorize merge. Hosted CI status is recorded on PR #42 after the
-exact remediation commit is pushed.
+that browser gate or authorize merge. Hosted CI run `31311889510` passed on remediation
+commit `31eff4114cb9a39c30068f2822bdb9e9a3788eb0`; the final documentation descendant
+must also pass the same PR gate before handoff.
