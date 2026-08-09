@@ -2,23 +2,17 @@
 Audit Service - Centralized event logging and audit trail management.
 """
 
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-from services.supabase_client import supabase
+import logging
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from repositories.audit_repository import legacy_organization_id
+from services.audit_composition import audit_repository
 
 PRIMARY_AUDIT_TABLE = "audit_events"
 
 
-def _legacy_organization_id(org_id: Optional[str]) -> int:
-    return int(org_id) if str(org_id).isdigit() else 1
-
-
-def _event_org_matches(row: Dict[str, Any], org_id: Optional[str]) -> bool:
-    if not org_id or str(org_id).isdigit():
-        return True
-
-    event_data = row.get("event_data") or {}
-    return str(event_data.get("org_id") or "") == str(org_id)
+logger = logging.getLogger(__name__)
 
 
 def log_event(
@@ -31,12 +25,11 @@ def log_event(
     details: Optional[Dict[str, Any]] = None,
     status: str = "success",
     ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None
+    user_agent: Optional[str] = None,
 ) -> Dict[str, Any]:
-
     try:
         audit_record = {
-            "organization_id": _legacy_organization_id(org_id),
+            "organization_id": legacy_organization_id(org_id),
             "event_type": event_type,
             "event_source": resource_type,
             "entity_id": str(resource_id),
@@ -48,114 +41,58 @@ def log_event(
                 "user_id": str(user_id),
                 "org_id": str(org_id or ""),
                 "ip_address": ip_address,
-                "user_agent": user_agent
+                "user_agent": user_agent,
             },
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
-
-        response = (
-            supabase
-            .table(PRIMARY_AUDIT_TABLE)
-            .insert(audit_record)
-            .execute()
-        )
-
-        if response.data:
-            return response.data[0]
-
-        return {"error": "No data returned"}
+        return audit_repository().insert_event(audit_record)
 
     except Exception as e:
-        import traceback
-
-        print("=" * 80)
-        print("AUDIT INSERT FAILED")
-        print(traceback.format_exc())
-        print("=" * 80)
-
+        logger.error("audit insert failed", extra={"event_type": event_type, "error": str(e)})
         return {"error": str(e)}
 
 
 def get_events(
-    org_id: Optional[str] = None,
-    event_type: Optional[str] = None,
-    limit: int = 100
+    org_id: Optional[str] = None, event_type: Optional[str] = None, limit: int = 100
 ) -> List[Dict[str, Any]]:
-
     try:
-        query = supabase.table(PRIMARY_AUDIT_TABLE).select("*")
-
-        if org_id and str(org_id).isdigit():
-            query = query.eq("organization_id", _legacy_organization_id(org_id))
-
-        if event_type:
-            query = query.eq("event_type", event_type)
-
-        response = (
-            query
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-
-        rows = response.data or []
-        return [
-            row
-            for row in rows
-            if _event_org_matches(row, org_id)
-        ]
+        return audit_repository().list_events(org_id=org_id, event_type=event_type, limit=limit)
 
     except Exception as e:
-        print(f"Error fetching audit events: {e}")
+        logger.error("audit read failed", extra={"error": str(e)})
         return []
 
 
 def get_user_events(user_id: str, limit: int = 100):
     events = get_events(limit=limit)
-    return [
-        e for e in events
-        if str(e.get("actor_id")) == str(user_id)
-    ]
+    return [e for e in events if str(e.get("actor_id")) == str(user_id)]
 
 
-def get_org_events(
-    org_id: str,
-    event_type: Optional[str] = None,
-    limit: int = 100
-):
-    return get_events(
-        org_id=org_id,
-        event_type=event_type,
-        limit=limit
-    )
+def get_org_events(org_id: str, event_type: Optional[str] = None, limit: int = 100):
+    return get_events(org_id=org_id, event_type=event_type, limit=limit)
 
 
 def get_resource_events(
     resource_type: str,
     resource_id: str,
-    limit: int = 100
+    limit: int = 100,
+    org_id: Optional[str] = None,
 ):
-
     try:
-        response = (
-            supabase
-            .table(PRIMARY_AUDIT_TABLE)
-            .select("*")
-            .eq("event_source", resource_type)
-            .eq("entity_id", str(resource_id))
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
+        return audit_repository().list_events(
+            org_id=org_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            limit=limit,
         )
 
-        return response.data if response.data else []
-
     except Exception as e:
-        print(f"Error fetching resource events: {e}")
+        logger.error("audit resource read failed", extra={"error": str(e)})
         return []
 
 
 # Approval Events
+
 
 def log_approval_created(approval_id, created_by, org_id, title, **kwargs):
     return log_event(
@@ -168,8 +105,8 @@ def log_approval_created(approval_id, created_by, org_id, title, **kwargs):
         details={
             "title": title,
             "approval_type": kwargs.get("approval_type"),
-            "priority": kwargs.get("priority")
-        }
+            "priority": kwargs.get("priority"),
+        },
     )
 
 
@@ -181,7 +118,7 @@ def log_approval_approved(approval_id, approved_by, org_id, comments=None, **kwa
         resource_type="approval",
         resource_id=approval_id,
         org_id=org_id,
-        details={"comments": comments}
+        details={"comments": comments},
     )
 
 
@@ -193,18 +130,11 @@ def log_approval_rejected(approval_id, rejected_by, org_id, reason=None, **kwarg
         resource_type="approval",
         resource_id=approval_id,
         org_id=org_id,
-        details={"reason": reason}
+        details={"reason": reason},
     )
 
 
-def log_approval_escalated(
-    approval_id,
-    escalated_by,
-    escalated_to,
-    org_id,
-    reason=None,
-    **kwargs
-):
+def log_approval_escalated(approval_id, escalated_by, escalated_to, org_id, reason=None, **kwargs):
     return log_event(
         event_type="APPROVAL_ESCALATED",
         user_id=escalated_by,
@@ -212,10 +142,7 @@ def log_approval_escalated(
         resource_type="approval",
         resource_id=approval_id,
         org_id=org_id,
-        details={
-            "escalated_to": escalated_to,
-            "reason": reason
-        }
+        details={"escalated_to": escalated_to, "reason": reason},
     )
 
 
@@ -258,7 +185,7 @@ def log_status_changed(
     old_status=None,
     new_status=None,
     notes=None,
-    **kwargs
+    **kwargs,
 ):
     return log_event(
         event_type="STATUS_CHANGED",
@@ -277,13 +204,7 @@ def log_status_changed(
 
 
 def log_workflow_changed(
-    workflow_id,
-    changed_by,
-    org_id,
-    old_state=None,
-    new_state=None,
-    notes=None,
-    **kwargs
+    workflow_id, changed_by, org_id, old_state=None, new_state=None, notes=None, **kwargs
 ):
     return log_event(
         event_type="WORKFLOW_CHANGED",
@@ -396,13 +317,8 @@ def log_user_logout(user_id=None, username=None, organization_id=None, org_id=No
 def get_audit_logs(org_id=None, limit=100):
     return get_events(org_id=org_id, limit=limit)
 
-def log_user_login(
-    user_id=None,
-    username=None,
-    organization_id=None,
-    org_id=None,
-    **kwargs
-):
+
+def log_user_login(user_id=None, username=None, organization_id=None, org_id=None, **kwargs):
     try:
         organization = organization_id or org_id or 1
         actor = str(user_id or username or 1)
@@ -418,7 +334,7 @@ def log_user_login(
                 "username": username or user_id,
                 **kwargs,
             },
-            status="success"
+            status="success",
         )
 
     except Exception as e:
