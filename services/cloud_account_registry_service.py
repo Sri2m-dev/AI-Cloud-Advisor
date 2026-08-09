@@ -14,6 +14,35 @@ PROVIDERS = {"aws", "azure", "gcp"}
 READ_ROLES = {"super_admin", "client_admin", "executive", "cio", "finance", "auditor", "operations"}
 EDIT_ROLES = {"super_admin", "client_admin", "finance", "operations"}
 FULL_ROLES = {"super_admin", "client_admin", "operations"}
+RESOLVE_ROLES = {"super_admin", "client_admin", "organization_admin", "finance", "operations"}
+APPROVE_ROLES = {"super_admin", "client_admin", "organization_admin"}
+RESOLUTION_STATES = {
+    "DISCOVERED",
+    "PENDING_REVIEW",
+    "PARTIALLY_MAPPED",
+    "READY_FOR_APPROVAL",
+    "APPROVED",
+    "ACTIVE",
+    "REJECTED",
+    "SUSPENDED",
+}
+RESOLUTION_FIELDS = (
+    "account_name",
+    "alias",
+    "environment",
+    "business_unit",
+    "department",
+    "application",
+    "business_service",
+    "owner",
+    "technical_owner",
+    "finance_owner",
+    "cost_center",
+    "project_code",
+    "criticality",
+    "effective_date",
+    "resolution_status",
+)
 IMPORT_COLUMNS = [
     "Provider",
     "Account ID",
@@ -54,7 +83,107 @@ class CloudAccountRegistryService:
             "read": context.role in READ_ROLES,
             "edit": context.role in EDIT_ROLES,
             "full": context.role in FULL_ROLES,
+            "resolve": context.role in RESOLVE_ROLES,
+            "approve": context.role in APPROVE_ROLES,
         }
+
+    @staticmethod
+    def allocation_ready(values: Mapping[str, Any]) -> bool:
+        return bool(
+            values.get("owner")
+            and (values.get("business_unit") or values.get("department"))
+            and values.get("cost_center")
+            and values.get("environment")
+            and str(values.get("resolution_status") or "").upper() in {"APPROVED", "ACTIVE"}
+        )
+
+    def resolve_discovered(
+        self,
+        context: AuthenticatedTenantContext,
+        discovered: Mapping[str, Any],
+        values: Mapping[str, Any],
+        *,
+        reason: str,
+        confirmed: bool,
+        expected_state: str = "DISCOVERED",
+    ):
+        permissions = self.permissions(context)
+        if not permissions["resolve"]:
+            raise PermissionError("cloud account resolution denied")
+        if not confirmed:
+            raise RegistryValidationError("explicit resolution confirmation is required")
+        if not str(reason or "").strip():
+            raise RegistryValidationError("resolution reason is required")
+        state = str(values.get("resolution_status") or "PENDING_REVIEW").upper()
+        if state not in RESOLUTION_STATES:
+            raise RegistryValidationError("invalid resolution status")
+        if state in {"APPROVED", "ACTIVE"} and not permissions["approve"]:
+            raise PermissionError("cloud account approval denied")
+        evidence = discovered.get("source_evidence") or {}
+        provider = str(
+            discovered.get("provider") or evidence.get("original_provider") or "aws"
+        ).lower()
+        account_id = str(discovered.get("account_id") or "").strip()
+        payer_id = str(
+            discovered.get("payer_account_id") or evidence.get("payer_account_id") or ""
+        ).strip()
+        if provider != "aws" or not account_id or not payer_id:
+            raise RegistryValidationError("immutable discovered AWS identity is required")
+        mapping = {field: values.get(field) for field in RESOLUTION_FIELDS}
+        mapping.update(
+            source_import_id=discovered.get("source_import_id") or evidence.get("source_import_id"),
+            first_seen_at=discovered.get("first_seen_at") or evidence.get("first_seen_at"),
+            last_seen_at=discovered.get("last_seen_at") or evidence.get("last_seen_at"),
+            billing_period=discovered.get("billing_period") or evidence.get("billing_period"),
+            quarantined_spend=discovered.get("quarantined_spend")
+            or evidence.get("quarantined_spend"),
+            currency=discovered.get("currency") or evidence.get("currency"),
+        )
+        try:
+            result = self.repository.resolve_account(
+                context,
+                discovered,
+                mapping,
+                reason=reason,
+                confirmed=confirmed,
+                expected_state=expected_state,
+            )
+        except AttributeError as exc:
+            raise RuntimeError("account resolution repository is not configured") from exc
+        if self.discovered_accounts is not None:
+            self.discovered_accounts.invalidate(context.organization_id)
+        return result
+
+    def preview_bulk_resolution(self, context, accounts, shared_values):
+        if not self.permissions(context)["resolve"]:
+            raise PermissionError("bulk account resolution denied")
+        selected = list(accounts)
+        return {
+            "accounts": selected,
+            "count": len(selected),
+            "quarantined_spend": sum(
+                (float(row.get("quarantined_spend") or 0) for row in selected), 0.0
+            ),
+            "changes": {k: v for k, v in shared_values.items() if v not in (None, "")},
+            "allocation_ready": all(
+                self.allocation_ready({**row, **shared_values}) for row in selected
+            ),
+        }
+
+    def commit_bulk_resolution(self, context, preview, *, reason: str, confirmed: bool):
+        if not confirmed:
+            raise RegistryValidationError("explicit bulk confirmation is required")
+        if not str(reason or "").strip():
+            raise RegistryValidationError("bulk resolution reason is required")
+        if not preview.get("accounts"):
+            raise RegistryValidationError("bulk accounts are required")
+        return self.repository.bulk_resolve(
+            context,
+            preview["accounts"],
+            preview.get("changes") or {},
+            reason=reason,
+            confirmed=confirmed,
+        )
 
     @staticmethod
     def governance_score(row: Mapping[str, Any]) -> int:
@@ -158,6 +287,11 @@ class CloudAccountRegistryService:
 
     def dashboard(self, context: AuthenticatedTenantContext) -> dict[str, Any]:
         rows = self.list_accounts(context)
+        posture = (
+            self.discovered_accounts.get_financial_posture(context)
+            if self.discovered_accounts is not None
+            else None
+        )
         scores = [int(r.get("governance_score") or 0) for r in rows if r.get("governance_assessed")]
         return {
             "accounts": rows,
@@ -175,6 +309,17 @@ class CloudAccountRegistryService:
                 r.get("mapping_status") == "unknown" or r.get("status") == "unknown" for r in rows
             ),
             "average_governance": round(sum(scores) / len(scores), 1) if scores else "Not assessed",
+            "pending_review": sum(
+                r.get("resolution_status") in {None, "DISCOVERED", "PENDING_REVIEW"} for r in rows
+            ),
+            "partially_mapped": sum(r.get("resolution_status") == "PARTIALLY_MAPPED" for r in rows),
+            "ready_for_approval": sum(
+                r.get("resolution_status") == "READY_FOR_APPROVAL" for r in rows
+            ),
+            "approved": sum(r.get("resolution_status") in {"APPROVED", "ACTIVE"} for r in rows),
+            "quarantined_spend": getattr(posture, "quarantined_spend", 0),
+            "resolved_spend": getattr(posture, "resolved_spend", 0),
+            "allocation_coverage": getattr(posture, "allocation_coverage_percentage", 0),
         }
 
     def save(
@@ -237,9 +382,7 @@ class CloudAccountRegistryService:
             context,
             {
                 **next(
-                    r
-                    for r in self.list_accounts(context)
-                    if str(r.get("id")) == str(registry_id)
+                    r for r in self.list_accounts(context) if str(r.get("id")) == str(registry_id)
                 ),
                 "status": status,
             },
