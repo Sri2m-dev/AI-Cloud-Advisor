@@ -46,13 +46,39 @@ landing paths and outside P4.2.4 scope.
 ## Browser certification status
 
 The automated Streamlit AppTest checks prove that Finance and Operations render with
-local authentication, no Supabase configuration, and no traceback. In-app browser
-control was unavailable because the browser runtime rejected its sandbox metadata
-before opening a tab. Manual screenshots are therefore still required for:
-
-- `finance@company.com` / FinOps Dashboard;
-- `operations@company.com` / Operations Workspace;
-- `auditor@company.com` / Audit Timeline regression.
+local authentication, no Supabase configuration, and no traceback. The acceptance owner
+subsequently completed manual browser certification for every supported persona. Admin,
+CEO, CIO, CTO alias, Finance, Auditor, and Operations all passed login, identity and
+organization display, landing-page routing, sidebar navigation, direct-route RBAC,
+logout, and no-traceback checks.
 
 This local certification validates UI/runtime behavior only. It does not certify real
 DEV financial values or Supabase data posture.
+
+## Final completion gate
+
+```text
+P4_2_4_PERSONA_RUNTIME_COMPLETE
+
+Status:
+✔ Admin certified
+✔ CEO certified
+✔ CIO certified
+✔ CTO alias certified
+✔ Finance certified
+✔ Auditor certified
+✔ Operations certified
+
+Manual browser certification:
+PASS
+
+Hosted CI:
+PASS
+
+Full regression:
+818 passed
+2 skipped
+
+Recommendation:
+PR #42 is ready for reviewer approval and merge.
+```
