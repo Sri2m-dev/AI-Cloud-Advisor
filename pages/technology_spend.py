@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 import os
 import sys
 
@@ -55,7 +57,9 @@ render_page_header(
 # KPI Summary
 # --------------------------------------------------
 
-kpis = TechnologySpendService.get_kpis()
+kpis = TechnologySpendService().get_kpis(
+    st.session_state.get("organization_id")
+)
 
 col1, col2, col3, col4, col5 = st.columns(5)
 

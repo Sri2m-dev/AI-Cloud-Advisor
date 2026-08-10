@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
 import os
 import sys
 
@@ -12,30 +13,16 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from components.sidebar_navigation import render_sidebar_navigation
-from services.reporting_service import get_executive_summary
-from services.supabase_client import supabase
 from services.technology_spend_service import TechnologySpendService
 from shared.auth import require_role
 from shared.session import init_session
 from shared.styles import configure_page
 
 
-def fetch_rows(table_name):
-    try:
-        response = supabase.table(table_name).select("*").execute()
-        return response.data or []
-    except Exception:
-        return []
-
-
 def numeric_total(df, columns):
     for column in columns:
         if column in df.columns:
-            return float(
-                pd.to_numeric(df[column], errors="coerce")
-                .fillna(0)
-                .sum()
-            )
+            return float(pd.to_numeric(df[column], errors="coerce").fillna(0).sum())
     return 0.0
 
 
@@ -99,7 +86,8 @@ def panel_card(title, items):
             min-height:190px;
             box-shadow:0 1px 2px rgba(0,0,0,0.04);
         ">
-            <div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:8px;">{title}</div>
+            <div style="font-size:18px;font-weight:700;color:#111827;
+                        margin-bottom:8px;">{title}</div>
             {rows}
         </div>
         """,
@@ -154,25 +142,27 @@ configure_page(
 
 init_session()
 
-require_role([
-    "finance",
-    "super_admin",
-])
+require_role(
+    [
+        "finance",
+        "super_admin",
+    ]
+)
 
 role = st.session_state.get("role", "Unknown")
 render_sidebar_navigation(role)
 
 st.title("FinOps Dashboard")
-st.caption(
-    "Technology financial management, budgeting and forecasting"
-)
+st.caption("Technology financial management, budgeting and forecasting")
 
-kpis = TechnologySpendService.get_kpis()
-executive_summary = get_executive_summary() or {}
+organization_id = st.session_state.get("organization_id")
+technology_spend = TechnologySpendService()
+kpis = technology_spend.get_kpis(organization_id)
+executive_summary = technology_spend.get_executive_summary(organization_id)
 
-budget_df = pd.DataFrame(fetch_rows("mart_budget_vs_actual"))
-forecast_df = pd.DataFrame(fetch_rows("mart_enterprise_forecast"))
-recommendations_df = pd.DataFrame(fetch_rows("recommendations"))
+budget_df = pd.DataFrame(technology_spend.get_budget_vs_actual(organization_id))
+forecast_df = pd.DataFrame(technology_spend.get_enterprise_forecast(organization_id))
+recommendations_df = pd.DataFrame(technology_spend.get_recommendations(organization_id))
 
 total_spend = safe_float(kpis.get("total_spend"))
 cloud_cost = safe_float(kpis.get("cloud_cost"))
@@ -205,14 +195,17 @@ forecast_total = numeric_total(
     ],
 )
 
-savings_identified = (
-    safe_float(executive_summary.get("optimization_savings"))
-    or safe_float(executive_summary.get("optimization"))
+savings_identified = safe_float(executive_summary.get("optimization_savings")) or safe_float(
+    executive_summary.get("optimization")
 )
 
 savings_realized = safe_float(executive_summary.get("savings_realized"))
 
-if not savings_realized and not recommendations_df.empty and "estimated_savings" in recommendations_df.columns:
+if (
+    not savings_realized
+    and not recommendations_df.empty
+    and "estimated_savings" in recommendations_df.columns
+):
     statuses = (
         recommendations_df.get("status", pd.Series(dtype="object"))
         .fillna("")
@@ -224,9 +217,7 @@ if not savings_realized and not recommendations_df.empty and "estimated_savings"
         errors="coerce",
     ).fillna(0)
     savings_realized = float(
-        savings[
-            statuses.isin(["IMPLEMENTED", "COMPLETED", "RESOLVED", "CLOSED"])
-        ].sum()
+        savings[statuses.isin(["IMPLEMENTED", "COMPLETED", "RESOLVED", "CLOSED"])].sum()
     )
 
 variance_status = "green" if budget_variance <= 0 else "yellow"
@@ -237,7 +228,9 @@ st.markdown("### Financial KPIs")
 
 kpi_cols = st.columns(5)
 with kpi_cols[0]:
-    kpi_card("Total Technology Spend", compact_currency(total_spend), "Cloud + SaaS + MSP + Licenses")
+    kpi_card(
+        "Total Technology Spend", compact_currency(total_spend), "Cloud + SaaS + MSP + Licenses"
+    )
 with kpi_cols[1]:
     kpi_card("Budget Variance", compact_currency(budget_variance), "Actual minus budget")
 with kpi_cols[2]:
@@ -251,47 +244,51 @@ st.divider()
 
 st.markdown("### Financial Attention Required")
 
-render_attention_panel([
-    attention_item(
-        variance_status,
-        "Technology spend is within budget"
-        if budget_variance <= 0
-        else f"Budget variance requires review: {compact_currency(budget_variance)} over plan",
-    ),
-    attention_item(
-        "yellow" if forecast_total and forecast_total > actual_total else "green",
-        f"Forecasted spend is {compact_currency(forecast_total)}"
-        if forecast_total
-        else "No forecast exposure currently available",
-    ),
-    attention_item(
-        "yellow" if savings_identified else "green",
-        f"{compact_currency(savings_identified)} optimization potential identified"
-        if savings_identified
-        else "No material optimization opportunity currently identified",
-    ),
-    attention_item(
-        "green" if savings_realized else "yellow",
-        f"{compact_currency(savings_realized)} savings realized"
-        if savings_realized
-        else "Savings realization needs follow-up",
-    ),
-    attention_item(
-        "green",
-        "Technology spend remains allocated across Cloud, SaaS, MSP and Licenses",
-    ),
-])
+render_attention_panel(
+    [
+        attention_item(
+            variance_status,
+            "Technology spend is within budget"
+            if budget_variance <= 0
+            else f"Budget variance requires review: {compact_currency(budget_variance)} over plan",
+        ),
+        attention_item(
+            "yellow" if forecast_total and forecast_total > actual_total else "green",
+            f"Forecasted spend is {compact_currency(forecast_total)}"
+            if forecast_total
+            else "No forecast exposure currently available",
+        ),
+        attention_item(
+            "yellow" if savings_identified else "green",
+            f"{compact_currency(savings_identified)} optimization potential identified"
+            if savings_identified
+            else "No material optimization opportunity currently identified",
+        ),
+        attention_item(
+            "green" if savings_realized else "yellow",
+            f"{compact_currency(savings_realized)} savings realized"
+            if savings_realized
+            else "Savings realization needs follow-up",
+        ),
+        attention_item(
+            "green",
+            "Technology spend remains allocated across Cloud, SaaS, MSP and Licenses",
+        ),
+    ]
+)
 
 st.divider()
 
 st.markdown("### Technology Spend Allocation")
 
-allocation_df = pd.DataFrame([
-    {"Category": "Cloud", "Amount": cloud_cost},
-    {"Category": "SaaS", "Amount": saas_cost},
-    {"Category": "MSP", "Amount": msp_cost},
-    {"Category": "License", "Amount": license_cost},
-])
+allocation_df = pd.DataFrame(
+    [
+        {"Category": "Cloud", "Amount": cloud_cost},
+        {"Category": "SaaS", "Amount": saas_cost},
+        {"Category": "MSP", "Amount": msp_cost},
+        {"Category": "License", "Amount": license_cost},
+    ]
+)
 
 allocation_display_df = allocation_df.copy()
 allocation_display_df["Amount"] = allocation_display_df["Amount"].apply(compact_currency)
@@ -322,10 +319,12 @@ st.markdown("### Budget vs Actual / Forecast")
 budget_col, forecast_col = st.columns(2)
 
 with budget_col:
-    budget_chart_df = pd.DataFrame([
-        {"Category": "Budget", "Amount": budget_total},
-        {"Category": "Actual", "Amount": actual_total},
-    ])
+    budget_chart_df = pd.DataFrame(
+        [
+            {"Category": "Budget", "Amount": budget_total},
+            {"Category": "Actual", "Amount": actual_total},
+        ]
+    )
     fig = px.bar(
         budget_chart_df,
         x="Category",
@@ -356,37 +355,45 @@ with optimization_cols[0]:
 with optimization_cols[1]:
     kpi_card("Savings Realized", compact_currency(savings_realized), "Implemented savings")
 with optimization_cols[2]:
-    kpi_card("SaaS + License", compact_currency(saas_cost + license_cost), "Subscription and license spend")
+    kpi_card(
+        "SaaS + License",
+        compact_currency(saas_cost + license_cost),
+        "Subscription and license spend",
+    )
 with optimization_cols[3]:
-    kpi_card("MSP + Cloud", compact_currency(msp_cost + cloud_cost), "Infrastructure and services spend")
+    kpi_card(
+        "MSP + Cloud", compact_currency(msp_cost + cloud_cost), "Infrastructure and services spend"
+    )
 
 st.divider()
 
 st.markdown("### Recommended Financial Actions")
 
-render_attention_panel([
-    attention_item(
-        "red" if variance_status == "red" else "yellow" if budget_variance > 0 else "green",
-        "Review budget variance and update forecast assumptions"
-        if budget_variance > 0
-        else "Maintain current budget controls",
-    ),
-    attention_item(
-        "yellow" if savings_identified else "green",
-        "Prioritize optimization opportunities with finance-approved savings targets"
-        if savings_identified
-        else "Continue monitoring optimization pipeline",
-    ),
-    attention_item(
-        "yellow",
-        "Review SaaS and license spend for consolidation opportunities",
-    ),
-    attention_item(
-        "green" if savings_realized else "yellow",
-        "Track realized savings against forecasted benefits",
-    ),
-    attention_item(
-        "green",
-        "Keep technology financial management across Cloud, SaaS, MSP and License spend",
-    ),
-])
+render_attention_panel(
+    [
+        attention_item(
+            "red" if variance_status == "red" else "yellow" if budget_variance > 0 else "green",
+            "Review budget variance and update forecast assumptions"
+            if budget_variance > 0
+            else "Maintain current budget controls",
+        ),
+        attention_item(
+            "yellow" if savings_identified else "green",
+            "Prioritize optimization opportunities with finance-approved savings targets"
+            if savings_identified
+            else "Continue monitoring optimization pipeline",
+        ),
+        attention_item(
+            "yellow",
+            "Review SaaS and license spend for consolidation opportunities",
+        ),
+        attention_item(
+            "green" if savings_realized else "yellow",
+            "Track realized savings against forecasted benefits",
+        ),
+        attention_item(
+            "green",
+            "Keep technology financial management across Cloud, SaaS, MSP and License spend",
+        ),
+    ]
+)

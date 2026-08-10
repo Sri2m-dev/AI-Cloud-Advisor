@@ -1,5 +1,3 @@
-import os
-
 import streamlit as st
 
 from auth.role_constants import normalize_role
@@ -7,7 +5,8 @@ from components.sidebar_navigation import DEFAULT_ROLE_PAGE
 from services import audit_service
 from services.local_auth_service import (
     authenticate_local_user,
-    ensure_default_tenant_administrator,
+    ensure_nonproduction_personas,
+    local_auth_enabled,
 )
 from shared.session import init_session
 from utils.auth import login_user as supabase_login_user
@@ -22,18 +21,10 @@ st.set_page_config(page_title="NEXORA Login", page_icon="🔐", layout="wide")
 # Dev-only Local Users
 # ------------------------------------------------------------------
 
-AUTH_MODE = os.getenv("AUTH_MODE", "").strip().lower()
-ENVIRONMENT = (
-    os.getenv("ENVIRONMENT", os.getenv("CLOUD_ADVISOR_ENV", "development")).strip().lower()
-)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-DEV_AUTH_ENABLED = AUTH_MODE in {"dev", "demo", "local"} or (
-    ENVIRONMENT != "production" and not SUPABASE_URL
-)
-DEV_ORG_ID = "bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c"
+DEV_AUTH_ENABLED = local_auth_enabled()
 
 if DEV_AUTH_ENABLED:
-    ensure_default_tenant_administrator()
+    ensure_nonproduction_personas()
 
 
 def get_profile_org_id(profile):
@@ -88,6 +79,7 @@ def login_with_dev_user(username, password):
         email=user.email,
         role=user.role,
         org_id=user.organization_id,
+        user_id=user.email,
     )
     st.session_state["auth_backend"] = "local"
     st.session_state["authorized_organization_ids"] = [user.organization_id]
@@ -156,19 +148,16 @@ if st.session_state.get("authenticated"):
     route_user(role)
 
 else:
-    username = st.text_input("Username")
+    username = st.text_input("Username", placeholder="you@example.com")
 
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
         try:
-            try:
-                login_success = login_with_supabase(username, password)
-            except Exception:
-                login_success = False
-
-            if not login_success:
+            if DEV_AUTH_ENABLED:
                 login_success = login_with_dev_user(username, password)
+            else:
+                login_success = login_with_supabase(username, password)
 
         except Exception:
             login_success = False
@@ -181,6 +170,7 @@ else:
                     org_id=st.session_state["organization_id"],
                     ip_address=None,  # Would come from request context in production
                     user_agent=None,  # Would come from request context in production
+                    actor_role=st.session_state["role"],
                 )
             except Exception:
                 pass
@@ -190,26 +180,15 @@ else:
             route_user(st.session_state["role"])
 
         else:
+            if DEV_AUTH_ENABLED:
+                audit_service.log_event(
+                    event_type="USER_LOGIN_FAILED",
+                    user_id="anonymous",
+                    action="login_failed",
+                    resource_type="authentication",
+                    resource_id="unknown",
+                    org_id="bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c",
+                    details={"status": "invalid_credentials"},
+                    status="failure",
+                )
             st.error("Invalid credentials")
-
-
-# ------------------------------------------------------------------
-# Development Auto Login, enabled only with AUTH_MODE=dev.
-# ------------------------------------------------------------------
-
-try:
-    params = st.query_params
-    auto_login = params.get("auto_login")
-
-    if DEV_AUTH_ENABLED and auto_login == "1" and not st.session_state.get("authenticated"):
-        set_login_session(email="ceo@company.com", role="executive", org_id=DEV_ORG_ID)
-
-        # Automatically log the auto-login event
-        audit_service.log_user_login(
-            user_id="ceo@company.com", org_id=st.session_state["organization_id"]
-        )
-
-        route_user("executive")
-
-except Exception:
-    pass

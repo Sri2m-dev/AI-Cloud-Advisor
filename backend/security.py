@@ -4,23 +4,15 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.jwt_utils import verify_jwt
+from auth.role_constants import normalize_role as normalize_canonical_role
 from auth.tenant_authorization import TenantAuthorizationContext, TenantAuthorizationError
 from backend.token_store import is_token_revoked
 from core.user_profile import get_user_profile
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-ROLE_ALIASES = {
-    "global_admin": "SuperAdmin",
-    "client_admin": "CustomerAdmin",
-    "finops": "FinOpsManager",
-    "admin": "SuperAdmin",
-    "viewer": "Viewer",
-    "auditor": "Auditor",
-}
-
 ROLE_PERMISSIONS = {
-    "SuperAdmin": {
+    "super_admin": {
         "tenant:any",
         "cost:read",
         "optimization:read",
@@ -28,7 +20,7 @@ ROLE_PERMISSIONS = {
         "governance:read",
         "alerts:send",
     },
-    "CustomerAdmin": {
+    "client_admin": {
         "tenant:scoped",
         "cost:read",
         "optimization:read",
@@ -36,19 +28,19 @@ ROLE_PERMISSIONS = {
         "governance:read",
         "alerts:send",
     },
-    "FinOpsManager": {
+    "finance": {
         "tenant:scoped",
         "cost:read",
         "optimization:read",
         "optimization:run",
     },
-    "Viewer": {
+    "viewer": {
         "tenant:scoped",
         "cost:read",
         "optimization:read",
         "governance:read",
     },
-    "Auditor": {
+    "auditor": {
         "tenant:scoped",
         "governance:read",
     },
@@ -56,18 +48,7 @@ ROLE_PERMISSIONS = {
 
 
 def normalize_role(role: str) -> str:
-    raw = str(role or "").strip()
-
-    if raw in ROLE_PERMISSIONS:
-        return raw
-
-    lowered = raw.lower()
-    mapped = ROLE_ALIASES.get(lowered)
-
-    if mapped:
-        return mapped
-
-    return raw
+    return normalize_canonical_role(role)
 
 
 def _resolve_user_role(user_data: dict) -> str:
@@ -92,7 +73,7 @@ def _resolve_user_role(user_data: dict) -> str:
         # Ignore Supabase lookup failures
         pass
 
-    return normalize_role(user_data.get("role", "Viewer"))
+    return normalize_role(user_data.get("role", "viewer"))
 
 
 def get_current_user(

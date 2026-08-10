@@ -3,8 +3,10 @@ Audit timeline service: business logic for audit timeline,
 compliance, and reporting.
 """
 
-from services.supabase_client import supabase
 from core.errors.error_handler import with_error_handling
+from repositories.audit_repository import SupabaseAuditRepository
+from services import audit_service
+from services.audit_composition import audit_repository
 
 PRIMARY_AUDIT_TABLE = "audit_events"
 LEGACY_AUDIT_TABLES = [
@@ -65,7 +67,10 @@ def _normalize_legacy_event(row, table_name):
         "event_data": event_data,
         "action": event_data["action"],
         "status": event_data["status"],
-        "created_at": row.get("created_at") or row.get("timestamp") or row.get("recorded_at") or row.get("updated_at"),
+        "created_at": row.get("created_at")
+        or row.get("timestamp")
+        or row.get("recorded_at")
+        or row.get("updated_at"),
     }
 
 
@@ -82,11 +87,7 @@ def _event_matches(event, event_types):
         return True
 
     event_type = str(event.get("event_type") or "").upper()
-    action = str(
-        event.get("action")
-        or (event.get("event_data") or {}).get("action")
-        or ""
-    ).upper()
+    action = str(event.get("action") or (event.get("event_data") or {}).get("action") or "").upper()
 
     return event_type in event_types or action in event_types
 
@@ -104,21 +105,17 @@ def _primary_org_matches(row, org_id):
 
 
 def _get_legacy_events(event_types=None, org_id=None, limit=100):
+    repository = audit_repository()
+    if not isinstance(repository, SupabaseAuditRepository):
+        return []
+    supabase = repository.client
     legacy_events = []
 
     for table_name in LEGACY_AUDIT_TABLES:
         try:
             # Legacy audit tables are read-only fallbacks for historical data.
             # New writes go to audit_events through services.audit_service.
-            rows = (
-                supabase
-                .table(table_name)
-                .select("*")
-                .limit(limit)
-                .execute()
-                .data
-                or []
-            )
+            rows = supabase.table(table_name).select("*").limit(limit).execute().data or []
         except Exception:
             continue
 
@@ -140,31 +137,8 @@ def _get_legacy_events(event_types=None, org_id=None, limit=100):
 
 def _get_events(event_types=None, org_id=None, limit=100):
     try:
-        query = (
-            supabase
-            .table(PRIMARY_AUDIT_TABLE)
-            .select("*")
-        )
-
-        organization_id = _coerce_org_id(org_id)
-        if organization_id is not None:
-            query = query.eq("organization_id", organization_id)
-
-        if event_types:
-            query = query.in_("event_type", event_types)
-
-        response = (
-            query
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-
-        primary_events = [
-            row
-            for row in response.data or []
-            if _primary_org_matches(row, org_id)
-        ]
+        primary_events = audit_service.get_events(org_id=org_id, limit=limit)
+        primary_events = [row for row in primary_events if _event_matches(row, event_types)]
         if primary_events:
             return primary_events
 
@@ -185,7 +159,6 @@ def _get_events(event_types=None, org_id=None, limit=100):
 
 @with_error_handling
 def get_approvals_assignments_timeline(org_id):
-
     events = _get_events(
         TIMELINE_EVENT_TYPES["approvals_assignments"],
         org_id=org_id,
@@ -201,7 +174,6 @@ def get_approvals_assignments_timeline(org_id):
 
 @with_error_handling
 def get_governance_changes_timeline(org_id):
-
     events = _get_events(
         TIMELINE_EVENT_TYPES["governance_changes"],
         org_id=org_id,
@@ -217,7 +189,6 @@ def get_governance_changes_timeline(org_id):
 
 @with_error_handling
 def get_workflow_transitions_timeline(org_id):
-
     events = _get_events(
         TIMELINE_EVENT_TYPES["workflow_transitions"],
         org_id=org_id,
@@ -233,7 +204,6 @@ def get_workflow_transitions_timeline(org_id):
 
 @with_error_handling
 def get_ai_recommendation_actions_timeline(org_id):
-
     events = _get_events(
         TIMELINE_EVENT_TYPES["ai_recommendation_actions"],
         org_id=org_id,
@@ -249,7 +219,6 @@ def get_ai_recommendation_actions_timeline(org_id):
 
 @with_error_handling
 def get_kpi_changes_timeline(org_id):
-
     events = _get_events(
         TIMELINE_EVENT_TYPES["kpi_changes"],
         org_id=org_id,
@@ -265,7 +234,6 @@ def get_kpi_changes_timeline(org_id):
 
 @with_error_handling
 def get_alerts_reports_timeline(org_id):
-
     events = _get_events(
         TIMELINE_EVENT_TYPES["alerts_reports"],
         org_id=org_id,

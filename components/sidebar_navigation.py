@@ -332,14 +332,32 @@ ROLE_PAGES = {
     ],
     "auditor": [
         "Cloud Account Registry",
+        "Account Resolution",
         "Audit Timeline",
         "Reports",
+    ],
+    "operations": [
+        "Operations Workspace",
+        "Cloud Account Registry",
+        "Account Resolution",
+        "Service Explorer",
+        "Technical Analytics",
+        "Audit Timeline",
     ],
 }
 
 for _registry_role in ("super_admin", "client_admin", "executive", "finance", "cio", "auditor"):
     if _registry_role in ROLE_PAGES and "Cloud Account Registry" not in ROLE_PAGES[_registry_role]:
         ROLE_PAGES[_registry_role].append("Cloud Account Registry")
+
+for _classification_role in (
+    "super_admin", "client_admin", "executive", "finance", "cio", "operations", "auditor"
+):
+    if (
+        _classification_role in ROLE_PAGES
+        and "Account Resolution" not in ROLE_PAGES[_classification_role]
+    ):
+        ROLE_PAGES[_classification_role].append("Account Resolution")
 
 PAGE_PATHS = {
     "Executive Dashboard": "pages/executive_dashboard.py",
@@ -348,6 +366,7 @@ PAGE_PATHS = {
     "Enterprise Spend": "pages/enterprise_spend.py",
     "Cloud Cost Imports": "pages/cloud_cost_imports.py",
     "Cloud Account Registry": "pages/cloud_account_registry.py",
+    "Account Resolution": "pages/account_resolution.py",
     "Cloud Connections": "pages/cloud_connections.py",
     "Cost Upload Center": "pages/cost_upload_center.py",
     "Service Explorer": "pages/service_explorer.py",
@@ -432,6 +451,8 @@ DEFAULT_ROLE_PAGE = {
     "cio": PAGE_PATHS["Technology Portfolio Overview"],
     "finance": PAGE_PATHS["FinOps Dashboard"],
     "technical": PAGE_PATHS["Operations Workspace"],
+    "operations": PAGE_PATHS["Operations Workspace"],
+    "auditor": PAGE_PATHS["Audit Timeline"],
 }
 
 
