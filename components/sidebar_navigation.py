@@ -59,6 +59,7 @@ ROLE_PAGES = {
         "Data Quality Dashboard",
         "Enterprise Data Fabric",
         "Entity Registry",
+        "Enterprise Registry",
         "Scheduler Operations",
         "Enterprise Observability",
         "Incident Timeline",
@@ -418,6 +419,7 @@ PAGE_PATHS = {
     "Data Quality Dashboard": "pages/data_quality_dashboard.py",
     "Enterprise Data Fabric": "pages/enterprise_data_fabric.py",
     "Entity Registry": "pages/entity_registry.py",
+    "Enterprise Registry": "pages/enterprise_registry.py",
     "Scheduler Operations": "pages/scheduler_operations.py",
     "Enterprise Observability": "pages/enterprise_observability.py",
     "Incident Timeline": "pages/incident_timeline.py",
@@ -444,6 +446,20 @@ PAGE_PATHS = {
     "Risk & Governance": "pages/risk_governance.py",
     "Reports": "pages/reports.py",
 }
+
+for _enterprise_registry_role in (
+    "client_admin",
+    "executive",
+    "cio",
+    "finance",
+    "auditor",
+    "operations",
+):
+    if (
+        _enterprise_registry_role in ROLE_PAGES
+        and "Enterprise Registry" not in ROLE_PAGES[_enterprise_registry_role]
+    ):
+        ROLE_PAGES[_enterprise_registry_role].append("Enterprise Registry")
 
 DEFAULT_ROLE_PAGE = {
     "super_admin": PAGE_PATHS["Executive Dashboard"],
