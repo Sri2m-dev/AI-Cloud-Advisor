@@ -35,6 +35,11 @@ class EnterpriseRelationship:
     lineage: EntityLineage | None = None
     provenance: EntityProvenance | None = None
     quality: EntityQuality | None = None
+    evidence: tuple[str, ...] = ()
+    discovery_timestamp: datetime | None = None
+    last_validation: datetime | None = None
+    lineage_reference: str | None = None
+    provenance_reference: str | None = None
 
     def __post_init__(self) -> None:
         self.relationship_type = normalize_enum(
@@ -44,3 +49,4 @@ class EnterpriseRelationship:
         )
         self.confidence_score = validate_score(self.confidence_score, "confidence_score")
         self.quality_score = validate_score(self.quality_score, "quality_score")
+        self.evidence = tuple(str(value).strip() for value in self.evidence if str(value).strip())

@@ -121,6 +121,7 @@ def test_sidebar_visibility_matches_persona_authority():
         "Audit Timeline",
         "Reports",
         "Enterprise Registry",
+        "Relationship Explorer",
     ]
     assert "Executive Dashboard" not in get_role_pages("operations")
     assert "Operations Workspace" in get_role_pages("operations")
