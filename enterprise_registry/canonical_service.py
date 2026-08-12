@@ -186,6 +186,13 @@ class EnterpriseRegistryService:
         entity = self.get_entity(canonical_id)
         if self.classifications is None:
             return ()
+        if hasattr(self.classifications, "current_for_entity"):
+            return tuple(
+                _classification_mapping(result)
+                for result in self.classifications.current_for_entity(
+                    self.context, entity.entity_type.value, entity.source_identifier
+                )
+            )
         results = []
         domain_id = entity.source_identifier
         for field_name in CLASSIFICATION_FIELDS:

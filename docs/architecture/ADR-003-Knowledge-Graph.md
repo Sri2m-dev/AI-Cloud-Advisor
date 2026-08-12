@@ -12,6 +12,13 @@ Nexora needed to connect business units, capabilities, services, applications, t
 
 Treat the Knowledge Graph as a core intelligence engine rather than a single page feature.
 
+P4.3.3 clarification: the Enterprise Knowledge Graph is a read-only projection over
+canonical P3 entities, P4.2 classifications, P3 relationships/P4.3.2 traversal, and
+Financial Data Fabric references. It must not own or cache duplicate nodes, edges, or
+financial facts. Canonical IDs are graph node identities; P3 relationship IDs are edge
+identities. Legacy name-based graph services are not authoritative for the governed
+Enterprise Knowledge Graph route.
+
 The Knowledge Graph supports:
 
 - Business-to-technology relationships
@@ -42,3 +49,15 @@ Relationship intelligence is foundational to executive decision support, digital
 - Expand graph relationships through E8 Data Fabric connectors.
 - Add graph-based AI reasoning.
 - Add historical relationship changes and confidence scoring.
+
+## P4.3.3 Sequence
+
+```text
+Authenticated persona
+  -> Enterprise Knowledge Graph page
+  -> Knowledge Graph composition
+  -> Canonical Enterprise Registry
+  -> Relationship Intelligence traversal
+  -> Classification + financial context references
+  -> evidence-bearing explanation/path/impact response
+```
