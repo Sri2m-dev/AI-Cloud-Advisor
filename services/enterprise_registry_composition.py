@@ -66,11 +66,13 @@ def enterprise_registry_service(
     selected_client = client or supabase
     if configured:
         source = SupabaseEnterpriseRegistrySource(selected_client)
+        source_mode = "supabase"
         classifications = SupabaseClassificationRepository(selected_client)
         financial = SupabaseEntityFinancialContext(selected_client)
     else:
         kwargs = {"connection_factory": connection_factory} if connection_factory else {}
         source = SQLiteEnterpriseRegistrySource(**kwargs)
+        source_mode = "sqlite"
         classifications = None
         financial = None
 
@@ -99,4 +101,5 @@ def enterprise_registry_service(
         classifications=classifications,
         financial=financial,
         versions=versions,
+        source_mode=source_mode,
     )

@@ -3,7 +3,9 @@ from __future__ import annotations
 # ruff: noqa: E402
 import os
 import sys
-from dataclasses import asdict, is_dataclass
+from collections.abc import Mapping
+from dataclasses import fields, is_dataclass
+from enum import Enum
 
 import pandas as pd
 import streamlit as st
@@ -26,11 +28,15 @@ def _serializable(value):
     if value is None:
         return {}
     if is_dataclass(value):
-        return asdict(value)
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, (list, tuple)):
+        return {item.name: _serializable(getattr(value, item.name)) for item in fields(value)}
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Mapping):
+        return {str(key): _serializable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [_serializable(item) for item in value]
+    if isinstance(value, (str, int, float, bool)):
+        return value
     return str(value)
 
 
@@ -45,7 +51,10 @@ service = enterprise_registry_service(authenticated.fabric_context, role=authent
 entities = service.list_entities()
 
 st.title("Enterprise Registry")
-st.caption("Canonical identity index across governed enterprise sources")
+st.caption(
+    "Canonical identity index across governed enterprise sources"
+    f" · Repository: {service.source_mode}"
+)
 
 type_counts = {}
 for entity in entities:

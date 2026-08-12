@@ -53,3 +53,21 @@ and returned no evidence for the selected account. The registry degrades to docu
 A deterministic local 500-entity benchmark measured canonical detail lookup at
 0.087 ms, registry search at 41.764 ms, and composed detail/relationship retrieval at
 0.496 ms. These results are within the P4.3.1 limits of 250 ms, 1 s, and 2 s.
+
+## Population remediation
+
+Browser investigation on 2026-08-11 confirmed that an unconfigured development
+runtime correctly selected the SQLite fallback, whose governed local domain tables
+contained zero rows. The empty page was not caused by tenant filtering and no local
+row was synthesized to conceal the missing source data.
+
+With the valid `AI-Cloud-Advisor-Dev` Supabase runtime selected, the same tenant-scoped
+composition projects 67 discovered cloud accounts from
+`tenant_cloud_account_posture`. Account `727482365532` is present as
+`cloud_account:e099f2ab-32d7-5f50-b03a-364c78d60098`; the populated page renders all
+67 records without a traceback. The UI now identifies the selected repository mode.
+
+Populated execution also revealed a Versions-tab serialization defect: Python's
+generic dataclass conversion attempted to deep-copy immutable mapping proxies. The
+page now serializes dataclass fields, enums, mappings, and collections recursively,
+preserving immutable version evidence without copying or mutating source records.

@@ -8,6 +8,7 @@ from time import perf_counter
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import services.enterprise_registry_composition as registry_composition
 from classification_engine.models import (
     ApprovalStatus,
     ClassificationResult,
@@ -42,12 +43,57 @@ from services.enterprise_registry_composition import (
 
 ORG_A = "11111111-1111-4111-8111-111111111111"
 ORG_B = "22222222-2222-4222-8222-222222222222"
+DEV_ORG = "71cf875a-2103-47a0-8886-41a97c5750ec"
 
 
 class _Financial:
     def get_financial_context(self, context, entity):
         context.assert_record_matches(entity)
         return {"total_spend": 42.0} if entity.entity_type is EntityType.CLOUD_ACCOUNT else {}
+
+
+class _Response:
+    def __init__(self, data):
+        self.data = data
+
+
+class _EmptyQuery:
+    def select(self, *args, **kwargs):
+        return self
+
+    def eq(self, *args, **kwargs):
+        return self
+
+    def execute(self):
+        return _Response([])
+
+
+class _DevAccountClient:
+    def table(self, _name):
+        return _EmptyQuery()
+
+    def rpc(self, name, params):
+        assert params["requested_organization_id"] == DEV_ORG
+        if name == "tenant_cloud_account_posture":
+            return _RpcQuery(
+                [
+                    {
+                        "account_id": "727482365532",
+                        "mapping_status": "unknown",
+                        "unblended_spend": 37143.2080151701,
+                        "currency": "USD",
+                    }
+                ]
+            )
+        return _RpcQuery([])
+
+
+class _RpcQuery:
+    def __init__(self, data):
+        self.data = data
+
+    def execute(self):
+        return _Response(self.data)
 
 
 def _service(context=None, role="super_admin", classifications=None):
@@ -311,6 +357,7 @@ def test_composition_fallback_and_production_fail_closed(tmp_path):
         connection_factory=connect,
     )
     assert selected.list_entities() == ()
+    assert selected.source_mode == "sqlite"
     with pytest.raises(EnterpriseRegistryConfigurationError):
         enterprise_registry_service(
             TenantContext(ORG_A, ORG_A),
@@ -319,6 +366,24 @@ def test_composition_fallback_and_production_fail_closed(tmp_path):
             supabase_url="",
             supabase_key="",
         )
+
+
+def test_configured_repository_projects_discovered_dev_account():
+    selected = enterprise_registry_service(
+        TenantContext(DEV_ORG, DEV_ORG),
+        role="auditor",
+        environment="development",
+        supabase_url="https://tenant.supabase.co",
+        supabase_key="valid-key",
+        client=_DevAccountClient(),
+    )
+
+    matches = selected.search_entities("727482365532")
+    assert selected.source_mode == "supabase"
+    assert len(matches) == 1
+    assert matches[0].canonical_id == ("cloud_account:e099f2ab-32d7-5f50-b03a-364c78d60098")
+    assert matches[0].organization_id == DEV_ORG
+    assert matches[0].tenant_id == DEV_ORG
 
 
 def test_enterprise_registry_page_renders_without_supabase(monkeypatch):
@@ -342,3 +407,41 @@ def test_enterprise_registry_page_renders_without_supabase(monkeypatch):
     app.run()
     assert not app.exception
     assert any("Enterprise Registry" in title.value for title in app.title)
+
+
+def test_enterprise_registry_page_renders_populated_canonical_projection(monkeypatch):
+    service = _service()
+    entity = service.register_entity(
+        _account(
+            account_name="HG_AWS01",
+            classification_status="NEEDS_REVIEW",
+            confidence=0.84,
+            financial_context_reference="tenant_cloud_account_posture:727482365532",
+        )
+    )
+    monkeypatch.setattr(
+        registry_composition,
+        "enterprise_registry_service",
+        lambda *args, **kwargs: service,
+    )
+    app = AppTest.from_file("pages/enterprise_registry.py", default_timeout=30)
+    for key, value in {
+        "authenticated": True,
+        "auth_backend": "local",
+        "user": "auditor@company.com",
+        "user_id": "auditor@company.com",
+        "email": "auditor@company.com",
+        "role": "auditor",
+        "organization_id": ORG_A,
+        "organization_name": "Default Org",
+        "authorized_organization_ids": [ORG_A],
+        "permissions": [],
+    }.items():
+        app.session_state[key] = value
+    app.run()
+    assert not app.exception
+    assert any(
+        metric.label == "Enterprise Entities" and metric.value == "1" for metric in app.metric
+    )
+    assert len(app.dataframe[0].value) == 1
+    assert app.dataframe[0].value.iloc[0]["Canonical ID"] == entity.canonical_id

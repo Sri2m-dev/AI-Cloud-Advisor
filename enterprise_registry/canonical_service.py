@@ -89,6 +89,7 @@ class EnterpriseRegistryService:
         lineage: LineageTracker | None = None,
         provenance: ProvenanceTracker | None = None,
         versions: VersionStore | None = None,
+        source_mode: str = "in_memory",
     ) -> None:
         if role not in READ_ROLES:
             raise PermissionError("enterprise registry read denied")
@@ -102,6 +103,7 @@ class EnterpriseRegistryService:
         self.lineage = lineage
         self.provenance = provenance
         self.versions = versions
+        self.source_mode = str(source_mode).strip().lower()
 
     def register_entity(self, entity: EnterpriseEntity) -> EnterpriseEntity:
         if self.role not in MUTATION_ROLES:
