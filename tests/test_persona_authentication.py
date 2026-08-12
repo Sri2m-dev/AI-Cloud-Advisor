@@ -123,6 +123,7 @@ def test_sidebar_visibility_matches_persona_authority():
         "Enterprise Registry",
         "Relationship Explorer",
         "Enterprise Intelligence",
+        "Enterprise Search",
     ]
     assert "Executive Dashboard" not in get_role_pages("operations")
     assert "Operations Workspace" in get_role_pages("operations")
