@@ -2,6 +2,7 @@ from auth.role_constants import normalize_role
 
 ROLE_PAGES = {
     "super_admin": [
+        "Component Showcase",
         "Executive Dashboard",
         "Technology Portfolio Overview",
         "FinOps Dashboard",
@@ -366,6 +367,7 @@ for _scenario_role in ("super_admin", "executive", "finance", "cio", "operations
         ROLE_PAGES[_scenario_role].append("Scenario Intelligence")
 
 PAGE_PATHS = {
+    "Component Showcase": "pages/component_showcase.py",
     "Executive Dashboard": "pages/executive_dashboard.py",
     "Technology Portfolio Overview": "pages/cio_dashboard.py",
     "FinOps Dashboard": "pages/finance_dashboard.py",
