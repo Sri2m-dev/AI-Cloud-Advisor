@@ -19,10 +19,49 @@ from enterprise_intelligence import SearchRequest
 class EnterpriseAIOrchestrator:
     """Policy -> route -> retrieve -> ground -> provider -> cited response."""
 
-    def __init__(self, *, search, intelligence, providers=None):
+    def __init__(self, *, search, intelligence, providers=None, scenario_service=None):
         self.search = search
         self.intelligence = intelligence
         self.providers = providers or default_providers()
+        self.scenario_service = scenario_service
+
+    def explain_scenario(self, request: CopilotRequest, scenario_request) -> CopilotResponse:
+        """Explain an explicit ScenarioRequest without silently changing its inputs."""
+
+        started = perf_counter()
+        if self.scenario_service is None:
+            raise RuntimeError("ScenarioService is not configured")
+        if request.tenant_context != scenario_request.tenant_context:
+            raise PermissionError("copilot scenario crosses tenant boundary")
+        if request.persona != self.intelligence.role:
+            raise PermissionError("copilot persona does not match authorization scope")
+        result = self.scenario_service.simulate(scenario_request)
+        answer = (
+            f"SIMULATION — NOT AUTHORIZATION. {result.subject['name']} has "
+            f"{len(result.impacted_entities)} governed downstream impact(s). "
+            f"Baseline spend {result.financial_impact['baseline_spend']}; simulated spend "
+            f"{result.financial_impact['simulated_spend']}. "
+            f"Assumptions: {dict(result.assumptions)}. Unknowns: {result.unknowns or ('none',)}."
+        )
+        return CopilotResponse(
+            CopilotResponse.identifier(),
+            answer,
+            "scenario",
+            None,
+            (),
+            result.confidence,
+            None,
+            ("scenario_analysis_only",),
+            "deterministic",
+            False,
+            False,
+            {
+                "latency_ms": (perf_counter() - started) * 1000,
+                "scenario_id": result.scenario_id,
+                "authoritative": False,
+            },
+            CopilotResponse.now(),
+        )
 
     def ask(self, request: CopilotRequest) -> CopilotResponse:
         started = perf_counter()

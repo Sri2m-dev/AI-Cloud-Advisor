@@ -120,6 +120,7 @@ def test_sidebar_visibility_matches_persona_authority():
         "Account Resolution",
         "Audit Timeline",
         "Reports",
+        "Scenario Intelligence",
         "Enterprise Registry",
         "Relationship Explorer",
         "Enterprise Intelligence",

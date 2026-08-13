@@ -361,6 +361,10 @@ for _classification_role in (
     ):
         ROLE_PAGES[_classification_role].append("Account Resolution")
 
+for _scenario_role in ("super_admin", "executive", "finance", "cio", "operations", "auditor"):
+    if _scenario_role in ROLE_PAGES and "Scenario Intelligence" not in ROLE_PAGES[_scenario_role]:
+        ROLE_PAGES[_scenario_role].append("Scenario Intelligence")
+
 PAGE_PATHS = {
     "Executive Dashboard": "pages/executive_dashboard.py",
     "Technology Portfolio Overview": "pages/cio_dashboard.py",
@@ -386,6 +390,7 @@ PAGE_PATHS = {
     "Dependency Analysis": "pages/dependency_analysis.py",
     "Impact Analysis": "pages/impact_analysis.py",
     "Simulation Center": "pages/simulation_center.py",
+    "Scenario Intelligence": "pages/scenario_intelligence.py",
     "AI Reasoning Center": "pages/ai_reasoning.py",
     "Forecasting": "pages/predictive_forecasting.py",
     "Risk Prediction": "pages/risk_prediction.py",
