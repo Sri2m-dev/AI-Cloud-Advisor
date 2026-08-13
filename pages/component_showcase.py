@@ -3,13 +3,22 @@ from __future__ import annotations
 import streamlit as st
 
 from components.executive_foundation import (
+    EXECUTIVE_UI_VERSION,
     ComponentState,
+    DeltaView,
+    KpiKind,
+    KpiView,
+    SparklinePlaceholder,
+    ThresholdView,
+    TrendDirection,
+    TrendView,
     executive_columns,
     render_authority_badge,
     render_component_state,
     render_confidence_badge,
     render_evidence_badge,
     render_executive_shell,
+    render_kpi_card,
     render_materiality_badge,
     render_page_header,
     render_section_header,
@@ -30,12 +39,132 @@ if st.session_state.get("role") != "super_admin":
 with render_executive_shell():
     render_page_header(
         "Component Showcase",
-        "Isolated P5.1.1 foundation states for design, accessibility, and regression review.",
+        "Isolated Executive UI components for design, accessibility, and regression review.",
         breadcrumbs=("Developer Tools",),
         persona="Developer",
         scope="Presentation fixtures only",
         period="Not applicable",
     )
+
+    render_section_header(
+        "Executive KPI library",
+        "All values and semantic states are supplied presentation metadata.",
+        eyebrow=f"Executive UI v{EXECUTIVE_UI_VERSION}",
+    )
+    kpi_fixtures = (
+        KpiView(
+            "Enterprise services",
+            "128",
+            "Governed services in the current scope.",
+            "Enterprise Registry",
+            "Current checkpoint",
+            "Observed 8 min ago",
+            kind=KpiKind.EXECUTIVE,
+            status="Healthy",
+            delta=DeltaView("+6", "prior checkpoint", "positive"),
+            trend=TrendView("Growing", TrendDirection.UP, "30 days"),
+            confidence="High",
+            coverage="96%",
+            evidence="24 sources",
+            materiality="Not assessed",
+            sparkline=SparklinePlaceholder(),
+        ),
+        KpiView(
+            "Current spend",
+            "$4.82M",
+            "Authoritative reconciled spend supplied upstream.",
+            "Financial Data Fabric",
+            "August 2026 MTD",
+            "Reconciled 12 min ago",
+            kind=KpiKind.FINANCIAL,
+            unit="USD",
+            delta=DeltaView("+$120K", "July MTD", "warning"),
+            trend=TrendView("Increasing", TrendDirection.UP, "month to date"),
+            confidence="Supplied: high",
+            evidence="Reconciled",
+            metadata=(("Value state", "Current spend"),),
+        ),
+        KpiView(
+            "Technology health",
+            "Supported dimensions",
+            "No composite health model is approved.",
+            "Governed Query",
+            "Current checkpoint",
+            "Observed 18 min ago",
+            kind=KpiKind.HEALTH,
+            status="Partial",
+            coverage="74%",
+            evidence="18 sources",
+            threshold=ThresholdView("No approved composite threshold"),
+        ),
+        KpiView(
+            "Material risk",
+            "Critical",
+            "Severity and materiality remain distinct upstream states.",
+            "Decision Intelligence",
+            "Current checkpoint",
+            "Observed 5 min ago",
+            kind=KpiKind.RISK,
+            status="Critical",
+            materiality="Material",
+            trend=TrendView("Worsening", TrendDirection.UP, "7 days"),
+            evidence="Governed",
+        ),
+        KpiView(
+            "Service trend",
+            "12%",
+            "Upstream trend for the selected business service.",
+            "Governed Query",
+            "Last 30 days",
+            "Observed 10 min ago",
+            kind=KpiKind.TREND,
+            trend=TrendView("Up 12%", TrendDirection.UP, "30 days"),
+            evidence="Complete",
+            sparkline=SparklinePlaceholder("Placeholder only"),
+        ),
+        KpiView(
+            "Decision waiting",
+            "Renewal approval",
+            "Actual governed decision awaiting an authorized actor.",
+            "WP-011 Decision",
+            "Due 20 Aug 2026",
+            "Observed 3 min ago",
+            kind=KpiKind.DECISION,
+            status="Watch",
+            authority="Decision",
+            evidence="Package EV-204",
+            metadata=(("Owner", "CIO"),),
+        ),
+    )
+    for start in range(0, len(kpi_fixtures), 3):
+        kpi_columns = executive_columns(3)
+        for column, fixture in zip(kpi_columns, kpi_fixtures[start : start + 3], strict=False):
+            with column:
+                render_kpi_card(fixture)
+
+    render_section_header(
+        "KPI state coverage", "The shared foundation state frame remains authoritative."
+    )
+    kpi_state_columns = executive_columns(4)
+    state_fixtures = (
+        ComponentState.LOADING,
+        ComponentState.PARTIAL,
+        ComponentState.UNKNOWN,
+        ComponentState.UNAUTHORIZED,
+    )
+    for column, state in zip(kpi_state_columns, state_fixtures, strict=True):
+        with column:
+            render_kpi_card(
+                KpiView(
+                    "Executive KPI",
+                    "Not displayed",
+                    "State fixture.",
+                    "Presentation fixture",
+                    "Current scope",
+                    "Not applicable",
+                    state=state,
+                )
+            )
 
     render_section_header(
         "Badges", "Semantic labels supplement color and preserve authority boundaries."
@@ -114,4 +243,7 @@ with render_executive_shell():
                 unsafe_allow_html=True,
             )
 
-    st.caption("P5.1.1 • No business logic • No service or repository access • WCAG 2.2 AA target")
+    st.caption(
+        f"Executive UI v{EXECUTIVE_UI_VERSION} • No business logic • "
+        "No service or repository access • WCAG 2.2 AA target"
+    )

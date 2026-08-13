@@ -48,11 +48,29 @@ def foundation_css(mode: str = "light") -> str:
 .nexora-state h3 {{ color:var(--nexora-text); font-size:1rem; line-height:1.375rem; margin:0 0 .25rem; }}
 .nexora-state p {{ color:var(--nexora-text-muted); font-size:.9375rem; line-height:1.5rem; margin:0; }}
 .nexora-state__meta {{ display:block; color:var(--nexora-text-muted); font-size:.8125rem; margin-top:.5rem; }}
+.nexora-kpi {{ min-height:290px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:.75rem; padding:1.25rem; background:var(--nexora-surface); border:1px solid var(--nexora-border); border-radius:12px; box-shadow:var(--nexora-shadow-card); }}
+.nexora-kpi__top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:.75rem; }}
+.nexora-kpi h3 {{ color:var(--nexora-text); font-size:1rem; line-height:1.375rem; margin:0; }}
+.nexora-kpi__value {{ color:var(--nexora-text); font-size:2rem; line-height:2.5rem; font-weight:700; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }}
+.nexora-kpi__unit {{ color:var(--nexora-text-muted); font-size:.8125rem; font-weight:600; margin-left:.4rem; }}
+.nexora-kpi__movement {{ display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; min-height:1.75rem; }}
+.nexora-delta,.nexora-trend {{ display:inline-flex; align-items:center; gap:.2rem; border-radius:8px; padding:.25rem .5rem; background:var(--nexora-surface-alt); color:var(--nexora-text); font-size:.8125rem; font-weight:600; }}
+.nexora-delta small {{ color:var(--nexora-text-muted); font-weight:400; }}
+.nexora-trend--up {{ color:var(--nexora-status-healthy); }}
+.nexora-trend--down {{ color:var(--nexora-status-critical); }}
+.nexora-trend--stable,.nexora-trend--unknown {{ color:var(--nexora-text-muted); }}
+.nexora-kpi__meaning {{ color:var(--nexora-text-muted); font-size:.9375rem; line-height:1.5rem; margin:0; min-height:3rem; }}
+.nexora-kpi__badges {{ display:flex; flex-wrap:wrap; margin-top:auto; }}
+.nexora-kpi__metadata {{ display:flex; flex-wrap:wrap; gap:.25rem .75rem; padding-top:.65rem; border-top:1px solid var(--nexora-border); color:var(--nexora-text-muted); font-size:.75rem; }}
+.nexora-threshold {{ color:var(--nexora-text-muted); font-size:.75rem; }}
+.nexora-threshold__track {{ height:6px; border:1px solid var(--nexora-border); border-radius:999px; margin-top:.35rem; background:linear-gradient(90deg,var(--nexora-surface-alt) 0 33%,var(--nexora-border) 33% 66%,var(--nexora-surface-alt) 66% 100%); }}
+.nexora-sparkline {{ color:var(--nexora-primary); display:flex; flex-direction:column; gap:.125rem; font-family:var(--nexora-mono); }}
+.nexora-sparkline small {{ color:var(--nexora-text-muted); font-family:var(--nexora-font); }}
 .nexora-skeleton {{ background:linear-gradient(90deg,var(--nexora-surface-alt) 25%,var(--nexora-border) 37%,var(--nexora-surface-alt) 63%); background-size:400% 100%; border-radius:6px; height:.875rem; margin:.55rem 0; animation:nexora-shimmer 1.4s ease infinite; }}
 @keyframes nexora-shimmer {{ from {{ background-position:100% 0; }} to {{ background-position:0 0; }} }}
 @media (prefers-reduced-motion: reduce) {{ .nexora-skeleton {{ animation:none; }} }}
 @media (max-width:1023px) {{ .nexora-executive-shell {{ padding-left:1rem; padding-right:1rem; }} }}
-@media (max-width:767px) {{ .nexora-executive-shell {{ padding:.75rem; }} .nexora-section-heading {{ display:block; }} .nexora-page-heading h1 {{ font-size:1.5rem; line-height:2rem; }} }}
+@media (max-width:767px) {{ .nexora-executive-shell {{ padding:.75rem; }} .nexora-section-heading {{ display:block; }} .nexora-page-heading h1 {{ font-size:1.5rem; line-height:2rem; }} .nexora-kpi {{ min-height:0; }} }}
 </style>
 """
 

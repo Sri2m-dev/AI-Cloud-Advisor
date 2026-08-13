@@ -9,14 +9,40 @@ from components.executive_foundation.badges import (
     render_status_badge,
 )
 from components.executive_foundation.headers import render_page_header, render_section_header
+from components.executive_foundation.kpi import (
+    DeltaView,
+    KpiKind,
+    KpiView,
+    SparklinePlaceholder,
+    ThresholdView,
+    TrendDirection,
+    TrendView,
+    render_decision_kpi,
+    render_executive_kpi,
+    render_financial_kpi,
+    render_health_kpi,
+    render_kpi_card,
+    render_risk_kpi,
+    render_trend_kpi,
+)
 from components.executive_foundation.layout import executive_columns, render_executive_shell
 from components.executive_foundation.states import ComponentState, render_component_state
 from components.executive_foundation.styles import foundation_css, inject_foundation_styles
+from components.executive_foundation.version import EXECUTIVE_UI_RELEASE, EXECUTIVE_UI_VERSION
 
 __all__ = [
     "BadgeKind",
     "BadgeSpec",
     "ComponentState",
+    "DeltaView",
+    "EXECUTIVE_UI_RELEASE",
+    "EXECUTIVE_UI_VERSION",
+    "KpiKind",
+    "KpiView",
+    "SparklinePlaceholder",
+    "ThresholdView",
+    "TrendDirection",
+    "TrendView",
     "executive_columns",
     "foundation_css",
     "inject_foundation_styles",
@@ -25,9 +51,16 @@ __all__ = [
     "render_component_state",
     "render_confidence_badge",
     "render_evidence_badge",
+    "render_executive_kpi",
     "render_executive_shell",
     "render_materiality_badge",
+    "render_financial_kpi",
+    "render_health_kpi",
+    "render_kpi_card",
     "render_page_header",
     "render_section_header",
     "render_status_badge",
+    "render_risk_kpi",
+    "render_trend_kpi",
+    "render_decision_kpi",
 ]
