@@ -424,6 +424,7 @@ PAGE_PATHS = {
     "Enterprise Intelligence": "pages/enterprise_intelligence.py",
     "Enterprise Search": "pages/enterprise_search.py",
     "Enterprise AI Copilot": "pages/enterprise_ai_copilot.py",
+    "Decision Intelligence": "pages/decision_intelligence.py",
     "Relationship Explorer": "pages/relationship_explorer.py",
     "Scheduler Operations": "pages/scheduler_operations.py",
     "Enterprise Observability": "pages/enterprise_observability.py",
@@ -492,6 +493,8 @@ for _intelligence_role in (
         ROLE_PAGES[_intelligence_role].append("Enterprise Search")
     if "Enterprise AI Copilot" not in ROLE_PAGES[_intelligence_role]:
         ROLE_PAGES[_intelligence_role].append("Enterprise AI Copilot")
+    if "Decision Intelligence" not in ROLE_PAGES[_intelligence_role]:
+        ROLE_PAGES[_intelligence_role].append("Decision Intelligence")
 
 DEFAULT_ROLE_PAGE = {
     "super_admin": PAGE_PATHS["Executive Dashboard"],
