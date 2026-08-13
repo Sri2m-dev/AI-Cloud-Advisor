@@ -1,5 +1,6 @@
 """Governed, analysis-only Enterprise Scenario Intelligence."""
 
+from .composition import enterprise_scenario_service
 from .models import (
     ScenarioComparison,
     ScenarioRequest,
@@ -16,4 +17,5 @@ __all__ = [
     "ScenarioService",
     "ScenarioType",
     "TopologyState",
+    "enterprise_scenario_service",
 ]

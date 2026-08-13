@@ -304,3 +304,22 @@ def test_formal_performance_certification():
         }
         assert report[name]["p95_ms"] < limits[name]
     print(f"PERFORMANCE_CERTIFICATION={report}")
+
+
+def test_standard_copilot_composition_wires_scenario_service(monkeypatch):
+    from enterprise_copilot import composition
+
+    intelligence = SimpleNamespace(context=CTX, role="super_admin")
+    search = SimpleNamespace()
+    scenarios = SimpleNamespace(simulate=lambda request: request)
+    monkeypatch.setattr(
+        composition, "enterprise_intelligence_service", lambda *a, **k: intelligence
+    )
+    monkeypatch.setattr(composition, "enterprise_search_service", lambda *a, **k: search)
+    monkeypatch.setattr(composition, "enterprise_scenario_service", lambda *a, **k: scenarios)
+
+    copilot = composition.enterprise_ai_copilot(CTX, role="super_admin")
+
+    assert copilot.intelligence is intelligence
+    assert copilot.search is search
+    assert copilot.scenario_service is scenarios
