@@ -22,7 +22,7 @@
 
 ## Current candidate evidence
 
-- Full regression: **1,031 passed, 2 skipped**.
+- Full regression: **1,033 passed, 2 skipped**.
 - Active-source compilation: **1,279 Python files passed**.
 - Focused GA, security, integrity, and packaging tests: **13 passed**.
 - Connector runtime imports: **PASS**.
@@ -34,6 +34,8 @@
   lint debt remains outside this bounded capability.
 - Browser automation: **UNAVAILABLE** because the certification sandbox did not initialize;
   manual customer-browser certification remains a release-acceptance item.
+- Hosted CI: **PASS** on implementation candidate `55901a04` for both push and
+  pull-request workflows.
 
 ## Manual gates
 

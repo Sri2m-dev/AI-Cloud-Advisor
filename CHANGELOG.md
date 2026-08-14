@@ -18,7 +18,8 @@
 ### Validation
 - Local GA certification: 1,031 passed, 2 skipped; 1,279 active Python files compiled;
   connector imports, Docker Compose validation, critical Ruff checks, and nine performance
-  workloads passed. Hosted CI remains pending publication.
+  workloads passed. Both hosted CI workflows passed on implementation candidate
+  `55901a04`.
 
 ## Unreleased — v1.2.0-data-fabric release candidate
 

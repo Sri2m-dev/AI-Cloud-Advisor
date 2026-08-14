@@ -46,7 +46,9 @@ values are not represented as certified production-scale measurements.
 
 ## Hosted and manual certification
 
-Hosted GitHub Actions: **PENDING PUBLICATION**.
+Hosted GitHub Actions: **PASS** on implementation candidate
+`55901a04118e8f2f45f52ece8b35b8dedf1e459f` (push and pull-request runs: 1m20s and
+1m10s).
 
 Browser automation: **UNAVAILABLE** because the browser certification sandbox could not
 initialize. This is recorded as a tooling limitation, not as a browser PASS. Manual
