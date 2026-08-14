@@ -1,6 +1,10 @@
-# Nexora Enterprise Intelligence Platform
+# Nexora
 
-Nexora is an Enterprise Technology Intelligence Platform spanning executive and CIO workspaces, business architecture, financial intelligence, governance, Universal Connectors, and a canonical Enterprise Data Fabric.
+**Enterprise Decision Intelligence Platform**
+
+Nexora connects executive and CIO workspaces, business architecture, financial
+intelligence, governance, Universal Connectors, and a canonical Enterprise Data Fabric into
+an evidence-backed environment for enterprise technology decisions.
 
 ## Current release-candidate baseline
 

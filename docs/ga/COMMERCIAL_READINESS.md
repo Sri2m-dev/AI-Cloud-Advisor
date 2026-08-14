@@ -66,4 +66,5 @@ Nexora integrates with these systems; it does not claim to replace them.
 **How is demo data protected?** It is immutable, opt-in, and restricted to `demo-*` tenants.
 
 **How is value measured?** From customer baselines and finance-validated realized outcomes.
+
 **What is excluded?** New intelligence frameworks, autonomous remediation, and v3.0 modules.
