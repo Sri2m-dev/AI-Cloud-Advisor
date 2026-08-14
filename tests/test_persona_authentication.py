@@ -116,6 +116,8 @@ def test_sidebar_visibility_matches_persona_authority():
     assert "Cloud Account Registry" in get_role_pages("finance")
     assert "Account Resolution" in get_role_pages("finance")
     assert get_role_pages("auditor") == [
+        "Board Intelligence",
+        "Executive Command Center",
         "Cloud Account Registry",
         "Account Resolution",
         "Audit Timeline",

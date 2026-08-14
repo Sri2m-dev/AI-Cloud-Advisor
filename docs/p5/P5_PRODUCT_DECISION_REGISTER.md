@@ -1,66 +1,49 @@
 # P5 Product Decision Register
 
-Status: **OPEN — PRODUCT DESIGN REQUIRED**
+Status: **APPROVED — PRODUCT GOVERNANCE BASELINE**
 
-This register converts the Executive Intelligence blueprint into explicit decisions.
-Engineering must not choose these business rules implicitly.
+Approval authority: Product Owner under Product Governance v2.0
 
-| ID | Decision | Proposed owner | Required output | Status |
-|---|---|---|---|---|
-| P5-D01 | CEO first-view measures and materiality | CEO sponsor + Product | Five measures, thresholds, comparison period | OPEN |
-| P5-D02 | CIO first-view measures and materiality | CIO sponsor + Product | Five measures, thresholds, portfolio scope | OPEN |
-| P5-D03 | CFO first-view measures and materiality | CFO sponsor + Finance governance | Five measures, periods, variance thresholds | OPEN |
-| P5-D04 | Enterprise Health policy | Risk + Data Governance | Dimensions, weights or no composite, missing-data treatment, version | OPEN |
-| P5-D05 | Business-service criticality | Business Architecture | Vocabulary, ownership, criticality and impact rules | OPEN |
-| P5-D06 | Forecast validity | Finance + Model Risk | Approved horizons, models, confidence and unsupported behavior | OPEN |
-| P5-D07 | Vendor concentration | Procurement + Risk | Entity definition, materiality, dependency and escalation rules | OPEN |
-| P5-D08 | Technical debt | CIO + Enterprise Architecture | Measures, lifecycle policy, value/risk interpretation | OPEN |
-| P5-D09 | Executive urgency | Governance + Executive sponsors | Attention ranking, due dates, escalation, acknowledgement | OPEN |
-| P5-D10 | Board report governance | Company Secretary + Security | Audience, cadence, classification, sign-off, retention | OPEN |
-| P5-D11 | Evidence visibility by persona | Security + Data Governance | Field-level entitlement and export rules | OPEN |
-| P5-D12 | Narrative policy | Communications + Legal + AI Governance | Tone, length, disclaimers, human review and attribution | OPEN |
-| P5-D13 | Market positioning | Product Marketing + Legal | Sourced comparison method and approved external claims | OPEN |
-| P5-D14 | P4.3 manual browser gate | Release owner | Pass evidence or formal release disposition | OPEN |
+Effective date: 2026-08-14
+Traceability: `docs/product/NEXORA_PRODUCT_FREEZE_V2_0.md`
 
-## Persona workshop prompts
+This register preserves the original P5-D01–D14 identifiers. The approval package
+used capability-oriented headings; the dispositions below map those policies back
+to the original decision records so prior specifications and dependency tables
+remain stable.
 
-Each sponsor should answer using real decisions from the last quarter:
+## Approved decisions
 
-1. What did you need to know but could not obtain quickly?
-2. Which five signals changed a decision?
-3. What is awareness versus required action?
-4. What amount or risk is material?
-5. Which words do you use for the issue?
-6. What evidence makes you trust or reject the conclusion?
-7. Where should the drill-down stop for your role?
-8. What belongs in a board pack but not the live workspace?
+| ID | Original decision | Approved disposition | Status |
+|---|---|---|---|
+| P5-D01 | CEO measures/materiality | Use certified upstream business-service health, customer impact, financial exposure, security/regulatory exposure, and decisions requiring authority. Materiality is supplied by governed intelligence and is never inferred from cost alone. | APPROVED |
+| P5-D02 | CIO measures/materiality | Use certified technology health, operational health, application/business-service exposure, architecture/technical-debt evidence, and governed decisions. UI does not calculate materiality. | APPROVED |
+| P5-D03 | CFO measures/materiality | Use certified financial health, actual/budget/forecast outputs, allocation and reconciliation, vendor exposure, and governed value states. Projected value never appears as realized value. | APPROVED |
+| P5-D04 | Enterprise Health policy | Display Technology, Financial, Security & Compliance, Operational, Business Service, and Governance dimensions. A composite may be shown only when a versioned, configured weighting policy is supplied by certified services. `UNKNOWN` never equals zero; missing data lowers confidence/coverage, not health. Always disclose score or state, confidence, and coverage. | APPROVED |
+| P5-D05 | Business-service criticality | Vocabulary is Mission Critical, Business Critical, Important, Standard, and Non-Critical. The business service owns criticality; dependent infrastructure may inherit it through governed relationships. | APPROVED |
+| P5-D06 | Forecast validity | Show confidence, freshness, coverage, and model version. Suppress the forecast value when the governed configurable confidence policy says it is unsupported. No numeric threshold is hard-coded in P5. | APPROVED |
+| P5-D07 | Vendor concentration | Present certified concentration across spend, applications, business services, and critical workloads. P5 does not calculate concentration or invent recommendations. | APPROVED |
+| P5-D08 | Technical debt | Present only certified evidence-based technical-debt outputs with trend, confidence, and coverage. No UI heuristic or duplicate formula is permitted. | APPROVED |
+| P5-D09 | Executive urgency | Vocabulary is Critical, High, Medium, Low, and Informational. Urgency and recommendation order come from existing Decision Intelligence; P5 never guesses or independently reorders them. | APPROVED |
+| P5-D10 | Board governance | Board artifacts are checkpointed, reviewed, approved, versioned, and signed. Draft artifacts are visibly watermarked. Audience, cadence, classification, retention, reviewers, and signatories are required governed inputs; absent inputs keep export/sign-off `UNSUPPORTED`. | APPROVED |
+| P5-D11 | Evidence visibility | Executives receive summarized evidence, auditors complete entitled evidence, operations operational evidence, and finance financial evidence. RBAC, tenant, purpose, and field entitlements are enforced before composition and export. | APPROVED |
+| P5-D12 | Narrative policy | Narratives preserve the order Facts → Evidence → Unknowns → Assumptions → Recommendations. Assumptions never appear as facts. AI may phrase or recommend but cannot approve, authorize, execute, or create authoritative decisions. Human decisions alone become authoritative. | APPROVED |
+| P5-D13 | Product metrics/positioning | Track executive adoption, dashboard/search/AI usage, recommendation acceptance, and Board-report generation as aggregate product analytics only. No behavioral profiling or unapproved competitive claim is permitted. | APPROVED |
+| P5-D14 | Browser release gate | Browser certification is a release gate, not an engineering gate. Engineering may implement, automatically certify, publish to the feature branch, and update PR evidence. Manual browser certification remains mandatory before merge, tag, or release. | APPROVED |
 
-## Required artifacts before P5.1
+## Configuration and authority rules
 
-- approved CEO, CIO, and CFO first-viewport wireframes;
-- one golden-path story for a cost increase;
-- one golden-path story for business-service degradation;
-- one incomplete-topology/unknown-data story;
-- one recommendation-to-scenario-to-human-decision story;
-- Board Report outline with sign-off and confidentiality rules;
-- field-level persona entitlement matrix;
-- versioned health and materiality policy decisions;
-- usability findings and disposition log.
+- Health weights, materiality thresholds, forecast-confidence thresholds, and
+  escalation thresholds are governed configuration supplied by authoritative
+  services. They are not design tokens and are never hard-coded in P5.
+- If an upstream model, policy version, entitlement, or required Board-governance
+  input is absent, the UI renders `UNKNOWN`, `PARTIAL`, `UNAUTHORIZED`, or
+  `UNSUPPORTED`; it does not manufacture a substitute.
+- Recommendation ranking is preserved exactly as supplied by Decision Intelligence.
+- P5 remains a non-authoritative presentation and composition layer over P4.3 RC1.
 
-## Decision record template
+## Release disposition
 
-```text
-Decision ID:
-Owner:
-Approved date:
-Business question:
-Chosen rule:
-Alternatives rejected:
-Materiality/threshold:
-Data and evidence required:
-Unknown/missing-data behavior:
-Persona visibility:
-Authority impact:
-Version/effective date:
-Review cadence:
-```
+P5.2 engineering is authorized under the previously approved RT1–RT8 release train.
+No merge, release tag, or production rollout is authorized by this record. Manual
+browser certification must be completed before any such release action.

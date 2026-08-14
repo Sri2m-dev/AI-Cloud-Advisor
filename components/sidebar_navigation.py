@@ -88,7 +88,6 @@ ROLE_PAGES = {
         "Risk & Governance",
         "Reports",
     ],
-
     "client_admin": [
         "AI Copilot",
         "AI Workflow Center",
@@ -137,7 +136,6 @@ ROLE_PAGES = {
         "Cloud Connections",
         "Reports",
     ],
-
     "executive": [
         "Executive Dashboard",
         "Enterprise Spend",
@@ -188,7 +186,6 @@ ROLE_PAGES = {
         "Approvals",
         "Reports",
     ],
-
     "cio": [
         "Technology Portfolio Overview",
         "Cloud Cost Imports",
@@ -253,7 +250,6 @@ ROLE_PAGES = {
         "Approvals",
         "Reports",
     ],
-
     "finance": [
         "FinOps Dashboard",
         "Enterprise Spend",
@@ -287,7 +283,6 @@ ROLE_PAGES = {
         "Approvals",
         "Reports",
     ],
-
     "technical": [
         "Operations Workspace",
         "AI Execution Center",
@@ -349,12 +344,53 @@ ROLE_PAGES = {
     ],
 }
 
+EXECUTIVE_EXPERIENCE_PAGES = {
+    "super_admin": [
+        "Executive Command Center",
+        "CEO Workspace",
+        "CIO Workspace",
+        "CFO Workspace",
+        "Enterprise Architect Workspace",
+        "Operations Command Center",
+        "FinOps Workspace",
+        "Board Intelligence",
+    ],
+    "client_admin": [
+        "Executive Command Center",
+        "Enterprise Architect Workspace",
+        "Operations Command Center",
+    ],
+    "executive": ["Executive Command Center", "CEO Workspace", "Board Intelligence"],
+    "cio": [
+        "Executive Command Center",
+        "CIO Workspace",
+        "Enterprise Architect Workspace",
+        "FinOps Workspace",
+    ],
+    "finance": ["Executive Command Center", "CFO Workspace", "FinOps Workspace"],
+    "technical": ["Operations Command Center"],
+    "operations": ["Executive Command Center", "Operations Command Center"],
+    "auditor": ["Executive Command Center", "Board Intelligence"],
+}
+
+for _experience_role, _experience_pages in EXECUTIVE_EXPERIENCE_PAGES.items():
+    if _experience_role in ROLE_PAGES:
+        for _experience_page in _experience_pages:
+            if _experience_page not in ROLE_PAGES[_experience_role]:
+                ROLE_PAGES[_experience_role].insert(0, _experience_page)
+
 for _registry_role in ("super_admin", "client_admin", "executive", "finance", "cio", "auditor"):
     if _registry_role in ROLE_PAGES and "Cloud Account Registry" not in ROLE_PAGES[_registry_role]:
         ROLE_PAGES[_registry_role].append("Cloud Account Registry")
 
 for _classification_role in (
-    "super_admin", "client_admin", "executive", "finance", "cio", "operations", "auditor"
+    "super_admin",
+    "client_admin",
+    "executive",
+    "finance",
+    "cio",
+    "operations",
+    "auditor",
 ):
     if (
         _classification_role in ROLE_PAGES
@@ -367,6 +403,14 @@ for _scenario_role in ("super_admin", "executive", "finance", "cio", "operations
         ROLE_PAGES[_scenario_role].append("Scenario Intelligence")
 
 PAGE_PATHS = {
+    "Executive Command Center": "pages/executive_command_center.py",
+    "CEO Workspace": "pages/ceo_workspace.py",
+    "CIO Workspace": "pages/cio_workspace.py",
+    "CFO Workspace": "pages/cfo_workspace.py",
+    "Enterprise Architect Workspace": "pages/enterprise_architect_workspace.py",
+    "Operations Command Center": "pages/operations_command_center.py",
+    "FinOps Workspace": "pages/finops_workspace.py",
+    "Board Intelligence": "pages/board_intelligence.py",
     "Component Showcase": "pages/component_showcase.py",
     "Executive Dashboard": "pages/executive_dashboard.py",
     "Technology Portfolio Overview": "pages/cio_dashboard.py",
