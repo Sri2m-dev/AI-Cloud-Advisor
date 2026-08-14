@@ -32,7 +32,7 @@ def _view(**overrides):
 
 
 def test_ui_library_has_independent_semantic_version():
-    assert EXECUTIVE_UI_VERSION == "2.4.0"
+    assert EXECUTIVE_UI_VERSION == "2.5.0"
 
 
 def test_kpi_escapes_content_and_discloses_provenance():

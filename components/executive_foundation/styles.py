@@ -92,6 +92,14 @@ def foundation_css(mode: str = "light") -> str:
 .nexora-assumptions h4 {{ margin:0 0 .35rem; }}
 .nexora-assumptions ul {{ margin:.25rem 0; }}
 .nexora-citation-footer {{ display:block; margin-top:.75rem; }}
+.nexora-interaction {{ background:var(--nexora-surface); border:1px solid var(--nexora-border); border-radius:12px; padding:1rem; }}
+.nexora-interaction__header {{ display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }}
+.nexora-interaction h3 {{ color:var(--nexora-text); font-size:1rem; margin:0; }}
+.nexora-interaction p {{ color:var(--nexora-text-muted); font-size:.875rem; }}
+.nexora-interaction__options,.nexora-interaction__context-row,.nexora-interaction__authority {{ display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }}
+.nexora-interaction__option,.nexora-interaction__context,.nexora-interaction__intent {{ padding:.35rem .55rem; border:1px solid var(--nexora-border); border-radius:8px; color:var(--nexora-text); background:var(--nexora-surface-alt); font-size:.8125rem; }}
+.nexora-interaction__option[aria-current="true"] {{ border-color:var(--nexora-primary); }}
+.nexora-interaction__option[aria-disabled="true"] {{ opacity:.6; }}
 .nexora-skeleton {{ background:linear-gradient(90deg,var(--nexora-surface-alt) 25%,var(--nexora-border) 37%,var(--nexora-surface-alt) 63%); background-size:400% 100%; border-radius:6px; height:.875rem; margin:.55rem 0; animation:nexora-shimmer 1.4s ease infinite; }}
 @keyframes nexora-shimmer {{ from {{ background-position:100% 0; }} to {{ background-position:0 0; }} }}
 @media (prefers-reduced-motion: reduce) {{ .nexora-skeleton {{ animation:none; }} }}

@@ -11,6 +11,9 @@ from components.executive_foundation import (
     EvidenceEventView,
     EvidenceItemView,
     EvidenceSummaryView,
+    InteractionKind,
+    InteractionOption,
+    InteractionView,
     KpiKind,
     KpiView,
     NarrativeKind,
@@ -32,6 +35,7 @@ from components.executive_foundation import (
     render_evidence_summary,
     render_evidence_timeline,
     render_executive_shell,
+    render_interaction,
     render_kpi_card,
     render_materiality_badge,
     render_narrative,
@@ -61,6 +65,61 @@ with render_executive_shell():
         scope="Presentation fixtures only",
         period="Not applicable",
     )
+
+    render_section_header(
+        "Executive interaction library",
+        "Controls expose context-preserving presentation intents without executing them.",
+        eyebrow=f"Executive UI v{EXECUTIVE_UI_VERSION}",
+    )
+    interaction_kinds = tuple(InteractionKind)
+    for start in range(0, len(interaction_kinds), 2):
+        columns = executive_columns(2)
+        for column, kind in zip(columns, interaction_kinds[start : start + 2], strict=False):
+            with column:
+                render_interaction(
+                    InteractionView(
+                        kind.value.replace("-", " ").title(),
+                        kind,
+                        "Presentation-only control using explicit authorized context.",
+                        (
+                            InteractionOption("Summary", "summary", selected=True),
+                            InteractionOption("Detailed", "detailed"),
+                            InteractionOption("Execute", "execute", enabled=False),
+                        ),
+                        (("Persona", "CEO"), ("Scope", "Enterprise"), ("Period", "August 2026")),
+                        primary_intent=f"open_{kind.value}",
+                    )
+                )
+
+    render_section_header(
+        "Interaction certification matrix",
+        "Every interaction component supports the complete standard state contract.",
+    )
+    interaction_states = (
+        ComponentState.LOADING,
+        ComponentState.EMPTY,
+        ComponentState.PARTIAL,
+        ComponentState.STALE,
+        ComponentState.UNKNOWN,
+        ComponentState.CONFLICTED,
+        ComponentState.UNAUTHORIZED,
+        ComponentState.UNSUPPORTED,
+        ComponentState.ERROR,
+    )
+    for kind in interaction_kinds:
+        st.caption(kind.value.replace("-", " ").title())
+        columns = executive_columns(3)
+        for index, state in enumerate(interaction_states):
+            with columns[index % 3]:
+                render_interaction(
+                    InteractionView(
+                        f"{kind.value} · {state.value}",
+                        kind,
+                        "Certification fixture.",
+                        state=state,
+                        state_reason="Certification fixture; no product data.",
+                    )
+                )
 
     narrative_fixture = NarrativeView(
         "Executive summary",

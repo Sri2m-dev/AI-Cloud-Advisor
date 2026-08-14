@@ -36,7 +36,7 @@ def view(**changes):
 
 
 def test_version_and_stability_contract():
-    assert EXECUTIVE_UI_VERSION == "2.4.0"
+    assert EXECUTIVE_UI_VERSION == "2.5.0"
     assert {item.value for item in SemanticStability} == {"stable", "controlled", "experimental"}
 
 
