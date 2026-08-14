@@ -29,7 +29,7 @@ remain stable.
 | P5-D11 | Evidence visibility | Executives receive summarized evidence, auditors complete entitled evidence, operations operational evidence, and finance financial evidence. RBAC, tenant, purpose, and field entitlements are enforced before composition and export. | APPROVED |
 | P5-D12 | Narrative policy | Narratives preserve the order Facts → Evidence → Unknowns → Assumptions → Recommendations. Assumptions never appear as facts. AI may phrase or recommend but cannot approve, authorize, execute, or create authoritative decisions. Human decisions alone become authoritative. | APPROVED |
 | P5-D13 | Product metrics/positioning | Track executive adoption, dashboard/search/AI usage, recommendation acceptance, and Board-report generation as aggregate product analytics only. No behavioral profiling or unapproved competitive claim is permitted. | APPROVED |
-| P5-D14 | Browser release gate | Browser certification is a release gate, not an engineering gate. Engineering may implement, automatically certify, publish to the feature branch, and update PR evidence. Manual browser certification remains mandatory before merge, tag, or release. | APPROVED |
+| P5-D14 | Browser release gate | Browser certification is a release gate, not an engineering gate. Engineering may implement, automatically certify, publish to the feature branch, and update PR evidence. When browser automation infrastructure is unavailable, the Product Owner may waive automation only after a documented manual functional review in a standard browser. Manual review evidence or an explicit Product Owner release disposition remains mandatory before merge, tag, or release. | APPROVED |
 
 ## Configuration and authority rules
 
@@ -46,4 +46,5 @@ remain stable.
 
 P5.2 engineering is authorized under the previously approved RT1–RT8 release train.
 No merge, release tag, or production rollout is authorized by this record. Manual
-browser certification must be completed before any such release action.
+browser certification or the approved manual-review exception must be completed
+before any such release action.

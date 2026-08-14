@@ -200,7 +200,8 @@ def test_migration_has_tenant_rls_unique_identity_and_no_delete_grant():
 def test_active_navigation_registers_route_and_authorized_personas():
     assert PAGE_PATHS["Cloud Account Registry"] == "pages/cloud_account_registry.py"
     authorized = {role for role, pages in ROLE_PAGES.items() if "Cloud Account Registry" in pages}
-    assert {"super_admin", "client_admin", "executive", "cio", "finance", "auditor"} <= authorized
+    assert {"super_admin", "client_admin", "cio", "finance", "auditor"} <= authorized
+    assert "executive" not in authorized
     for role in ("executive", "cio", "finance"):
         items = build_persona_navigation_items(role=role, page_paths=PAGE_PATHS)
         assert any(

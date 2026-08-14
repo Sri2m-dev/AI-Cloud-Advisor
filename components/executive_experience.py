@@ -120,7 +120,7 @@ WORKSPACES = {
         "cfo",
         "CFO Workspace",
         "Are we financially controlled, on plan, and realizing approved value?",
-        ("super_admin", "finance"),
+        ("super_admin", "finance", "executive"),
         (
             SurfaceLink(
                 "Enterprise Spend", "pages/enterprise_spend.py", "Reconciled enterprise spend"

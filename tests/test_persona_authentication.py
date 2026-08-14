@@ -110,7 +110,15 @@ def test_persona_landing_pages_are_role_specific():
 
 
 def test_sidebar_visibility_matches_persona_authority():
-    assert "Executive Dashboard" in get_role_pages("CEO")
+    assert get_role_pages("CEO") == [
+        "Executive Overview",
+        "Enterprise Dashboard",
+        "Financial Health",
+        "Business Services",
+        "Strategic Risks",
+        "Executive Decisions",
+        "Reports",
+    ]
     assert "FinOps Dashboard" not in get_role_pages("CEO")
     assert "Technology Portfolio Overview" in get_role_pages("CTO")
     assert "Cloud Account Registry" in get_role_pages("finance")

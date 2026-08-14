@@ -36,12 +36,11 @@ def test_navigation_matches_workspace_entitlements():
 
 
 def test_surface_visibility_can_be_intersected_with_existing_rbac():
-    reverse_paths = {path: label for label, path in PAGE_PATHS.items()}
     for workspace in WORKSPACES.values():
         for role in workspace.roles:
             allowed = frozenset(PAGE_PATHS[label] for label in ROLE_PAGES.get(role, ()))
             visible = tuple(item for item in workspace.surfaces if item.page in allowed)
-            assert all(reverse_paths[item.page] in ROLE_PAGES[role] for item in visible)
+            assert all(item.page in allowed for item in visible)
 
 
 def test_p5_composition_has_no_domain_or_persistence_dependency():

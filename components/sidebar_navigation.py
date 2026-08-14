@@ -137,53 +137,12 @@ ROLE_PAGES = {
         "Reports",
     ],
     "executive": [
-        "Executive Dashboard",
-        "Enterprise Spend",
-        "Cloud Cost Imports",
-        "Technology Knowledge Graph",
-        "Technology Copilot",
-        "AI Copilot",
-        "AI Workflow Center",
-        "AI Execution Center",
-        "Automation Center",
-        "Enterprise Knowledge Graph",
-        "Dependency Analysis",
-        "Impact Analysis",
-        "Simulation Center",
-        "AI Reasoning Center",
-        "Forecasting",
-        "Risk Prediction",
-        "Capacity Planning",
-        "Financial Forecasting",
-        "Predictive AI",
-        "Prediction Performance",
-        "Predictive Center",
-        "Goal Center",
-        "Agent Registry",
-        "Multi-Agent Collaboration",
-        "Workflow Designer",
-        "Governance & Authorization",
-        "Execution Center",
-        "Learning Analytics",
-        "Execution Plans",
-        "Agent Console",
-        "Learning Center",
-        "Twin Explorer",
-        "Enterprise Digital Twin",
-        "Enterprise Twin Dashboard",
-        "Connector Health Dashboard",
-        "Platform Health Dashboard",
-        "Security Dashboard",
-        "Performance Dashboard",
-        "Compliance Dashboard",
-        "Disaster Recovery Dashboard",
-        "Enterprise Readiness",
-        "Data Quality Dashboard",
-        "Scheduler Operations",
-        "Enterprise Observability",
-        "Incident Timeline",
-        "Savings Governance",
-        "Approvals",
+        "Executive Overview",
+        "Enterprise Dashboard",
+        "Financial Health",
+        "Business Services",
+        "Strategic Risks",
+        "Executive Decisions",
         "Reports",
     ],
     "cio": [
@@ -360,7 +319,7 @@ EXECUTIVE_EXPERIENCE_PAGES = {
         "Enterprise Architect Workspace",
         "Operations Command Center",
     ],
-    "executive": ["Executive Command Center", "CEO Workspace", "Board Intelligence"],
+    "executive": [],
     "cio": [
         "Executive Command Center",
         "CIO Workspace",
@@ -379,14 +338,13 @@ for _experience_role, _experience_pages in EXECUTIVE_EXPERIENCE_PAGES.items():
             if _experience_page not in ROLE_PAGES[_experience_role]:
                 ROLE_PAGES[_experience_role].insert(0, _experience_page)
 
-for _registry_role in ("super_admin", "client_admin", "executive", "finance", "cio", "auditor"):
+for _registry_role in ("super_admin", "client_admin", "finance", "cio", "auditor"):
     if _registry_role in ROLE_PAGES and "Cloud Account Registry" not in ROLE_PAGES[_registry_role]:
         ROLE_PAGES[_registry_role].append("Cloud Account Registry")
 
 for _classification_role in (
     "super_admin",
     "client_admin",
-    "executive",
     "finance",
     "cio",
     "operations",
@@ -398,11 +356,16 @@ for _classification_role in (
     ):
         ROLE_PAGES[_classification_role].append("Account Resolution")
 
-for _scenario_role in ("super_admin", "executive", "finance", "cio", "operations", "auditor"):
+for _scenario_role in ("super_admin", "finance", "cio", "operations", "auditor"):
     if _scenario_role in ROLE_PAGES and "Scenario Intelligence" not in ROLE_PAGES[_scenario_role]:
         ROLE_PAGES[_scenario_role].append("Scenario Intelligence")
 
 PAGE_PATHS = {
+    "Executive Overview": "pages/executive_command_center.py",
+    "Enterprise Dashboard": "pages/executive_dashboard.py",
+    "Financial Health": "pages/cfo_workspace.py",
+    "Strategic Risks": "pages/risk_governance.py",
+    "Executive Decisions": "pages/decision_intelligence.py",
     "Executive Command Center": "pages/executive_command_center.py",
     "CEO Workspace": "pages/ceo_workspace.py",
     "CIO Workspace": "pages/cio_workspace.py",
@@ -506,7 +469,6 @@ PAGE_PATHS = {
 
 for _enterprise_registry_role in (
     "client_admin",
-    "executive",
     "cio",
     "finance",
     "auditor",
@@ -520,7 +482,6 @@ for _enterprise_registry_role in (
 
 for _relationship_role in (
     "client_admin",
-    "executive",
     "cio",
     "finance",
     "auditor",
@@ -532,7 +493,6 @@ for _relationship_role in (
 for _intelligence_role in (
     "super_admin",
     "client_admin",
-    "executive",
     "cio",
     "finance",
     "auditor",
