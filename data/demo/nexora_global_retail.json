@@ -1,0 +1,71 @@
+{
+  "classification": "SYNTHETIC_DEMONSTRATION_DATA",
+  "organization_id": "demo-nexora-global-retail",
+  "organization_name": "Nexora Global Retail (Synthetic Demo)",
+  "as_of": "2026-08-14T00:00:00Z",
+  "source": "Nexora deterministic GA demonstration dataset v2.0",
+  "metrics": {
+    "employees": 58000,
+    "countries": 42,
+    "cloud_accounts": 620,
+    "applications": 1850,
+    "business_services": 340,
+    "technologies": 4260,
+    "saas_products": 487,
+    "vendors": 120,
+    "annual_technology_spend": 214000000,
+    "annual_cloud_spend": 87000000,
+    "identified_savings": 12400000,
+    "verified_realized_savings": 3100000,
+    "allocation_coverage": 92.4,
+    "critical_risks": 7,
+    "pending_decisions": 4,
+    "technology_health": 78
+  },
+  "story": {
+    "yesterday": "Cloud and SaaS costs were reviewed independently, obscuring the total cost and dependency impact of the digital-commerce estate.",
+    "today": "Certified evidence connects $214M of technology investment to 340 business services across 42 countries.",
+    "risk": "Checkout services depend on two end-of-support technologies and one concentrated payment vendor; delay increases peak-season continuity risk.",
+    "recommendation": "Approve the phased checkout modernization and consolidate 38 overlapping SaaS subscriptions, subject to the documented service migration controls.",
+    "business_outcome": "The governed plan protects checkout continuity and identifies $12.4M of annual opportunity without presenting it as realized value.",
+    "action": "CIO and CFO review investment option NXR-INV-204; the Risk Committee confirms migration controls before approval."
+  },
+  "decisions": [
+    {
+      "id": "NXR-INV-204",
+      "type": "technology_investment",
+      "title": "Modernize global checkout platform",
+      "status": "PENDING_EXECUTIVE_REVIEW",
+      "financial_impact": 8200000,
+      "business_service": "Global Digital Checkout",
+      "confidence": 88,
+      "evidence_coverage": 94
+    },
+    {
+      "id": "NXR-PORT-118",
+      "type": "portfolio_rationalization",
+      "title": "Consolidate overlapping collaboration and analytics SaaS",
+      "status": "PENDING_FINANCE_REVIEW",
+      "financial_impact": 4200000,
+      "business_service": "Enterprise Collaboration",
+      "confidence": 91,
+      "evidence_coverage": 96
+    },
+    {
+      "id": "NXR-RISK-071",
+      "type": "executive_technology_risk",
+      "title": "Reduce payment-provider concentration exposure",
+      "status": "MITIGATION_REQUIRED",
+      "financial_impact": 0,
+      "business_service": "Payments Authorization",
+      "confidence": 84,
+      "evidence_coverage": 89
+    }
+  ],
+  "trend": [
+    {"period": "Q3 FY25", "technology_spend": 49200000, "risk_exposure": 11},
+    {"period": "Q4 FY25", "technology_spend": 51800000, "risk_exposure": 10},
+    {"period": "Q1 FY26", "technology_spend": 53600000, "risk_exposure": 9},
+    {"period": "Q2 FY26", "technology_spend": 59400000, "risk_exposure": 7}
+  ]
+}

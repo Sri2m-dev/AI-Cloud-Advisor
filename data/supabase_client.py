@@ -1,11 +1,14 @@
-from supabase import create_client
 import os
+
 from dotenv import load_dotenv
+
+from supabase import create_client
 
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+
 
 class _SupabaseProxy:
     def __init__(self):
@@ -18,10 +21,6 @@ class _SupabaseProxy:
 
             if not SUPABASE_SERVICE_KEY:
                 raise ValueError("SUPABASE_SERVICE_KEY is missing")
-
-            print("===================================")
-            print("SUPABASE URL:", SUPABASE_URL)
-            print("===================================")
 
             self._client = create_client(
                 SUPABASE_URL,

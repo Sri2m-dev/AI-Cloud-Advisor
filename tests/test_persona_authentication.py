@@ -100,6 +100,7 @@ def test_role_aliases_normalize_centrally(alias, canonical):
 def test_persona_landing_pages_are_role_specific():
     assert DEFAULT_ROLE_PAGE == {
         "super_admin": "pages/executive_dashboard.py",
+        "client_admin": "pages/executive_command_center.py",
         "executive": "pages/executive_dashboard.py",
         "cio": "pages/cio_dashboard.py",
         "finance": "pages/finance_dashboard.py",

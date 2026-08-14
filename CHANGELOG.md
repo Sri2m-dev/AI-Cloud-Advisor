@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## Unreleased - Nexora v2.0 GA candidate
+
+### Added
+- Certified Executive Experience composition with decision storytelling.
+- Immutable, opt-in, `demo-*` tenant-isolated demonstration data.
+- GA deployment, commercial-readiness, traceability, and certification guidance.
+- Governed PowerPoint board-pack and Excel evidence-workbook exports.
+- Pinned AWS and Azure connector runtime dependencies.
+
+### Changed
+- Missing certified data remains `UNKNOWN`; synthetic financial and risk fallbacks are removed.
+- Frontend container starts the certified `app_main.py` entry point.
+- Container context excludes secrets, local databases, logs, caches, and generated artifacts.
+- Tenant scoping now applies to every backend report data read and report-history record.
+
+### Validation
+- Local GA certification: 1,031 passed, 2 skipped; 1,279 active Python files compiled;
+  connector imports, Docker Compose validation, critical Ruff checks, and nine performance
+  workloads passed. Hosted CI remains pending publication.
+
 ## Unreleased — v1.2.0-data-fabric release candidate
 
 ### Added

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import sys
@@ -44,13 +44,15 @@ configure_page(
 
 init_session()
 
-require_role([
-    "executive",
-    "cio",
-    "technical",
-    "finance",
-    "super_admin",
-])
+require_role(
+    [
+        "executive",
+        "cio",
+        "technical",
+        "finance",
+        "super_admin",
+    ]
+)
 
 role = st.session_state.get("role", "Unknown")
 render_enterprise_sidebar(
@@ -89,7 +91,8 @@ def render_certification_summary() -> None:
         {
             "title": "Executive Summary",
             "description": "Estate-level risk and governance summary for CIO certification, financial reconciliation, and business architecture context.",
-            "narrative": dashboard.get("executive_summary") or "Risk & Governance certification summary is unavailable.",
+            "narrative": dashboard.get("executive_summary")
+            or "Risk & Governance certification summary is unavailable.",
             "metrics": [
                 {
                     "label": "Governance Confidence",
@@ -166,6 +169,19 @@ def _show_dataframe(df: pd.DataFrame, empty_message: str) -> None:
 
 
 def render_governance_content():
+    if not dashboard["data_available"]:
+        st.warning("Risk data source has not been configured for this tenant.")
+        render_insight_card(
+            "Risk Intelligence",
+            "Unavailable",
+            description=(
+                "Risk posture cannot currently be assessed. Configure a certified "
+                "governance data source before using this page for decisions."
+            ),
+            icon="governance",
+            status="warning",
+        )
+        return
     render_certification_summary()
 
     # --------------------------------------------------
@@ -188,11 +204,22 @@ def render_governance_content():
             status="healthy" if governance_score >= 75 else "warning",
         )
     with k2:
-        render_metric_card("Active Risk Signals", active_risks, icon="risk", status="warning" if active_risks else "healthy")
+        render_metric_card(
+            "Active Risk Signals",
+            active_risks,
+            icon="risk",
+            status="warning" if active_risks else "healthy",
+        )
     with k3:
-        render_risk_card("High-Priority Risks", int(critical_risks), status="critical" if critical_risks else "healthy")
+        render_risk_card(
+            "High-Priority Risks",
+            int(critical_risks),
+            status="critical" if critical_risks else "healthy",
+        )
     with k4:
-        render_approval_card("Decision Queue", pending_count, status="watch" if pending_count else "healthy")
+        render_approval_card(
+            "Decision Queue", pending_count, status="watch" if pending_count else "healthy"
+        )
     with k5:
         render_metric_card("Optimization Signals", optimization_items, icon="ai", status="info")
     with k6:
@@ -281,10 +308,11 @@ def render_governance_content():
         divider=True,
     )
 
-    if not optimization_df.empty and {"service_name", "total_cost"}.issubset(optimization_df.columns):
+    if not optimization_df.empty and {"service_name", "total_cost"}.issubset(
+        optimization_df.columns
+    ):
         top_optimization_df = (
-            optimization_df
-            .copy()
+            optimization_df.copy()
             .assign(
                 total_cost=pd.to_numeric(
                     optimization_df["total_cost"],
@@ -431,7 +459,8 @@ def render_governance_content():
             pending_df = pd.DataFrame(pending_approvals)
             if not pending_df.empty:
                 visible_columns = [
-                    column for column in [
+                    column
+                    for column in [
                         "id",
                         "request_type",
                         "title",
@@ -458,7 +487,8 @@ def render_governance_content():
 
         if not recommendation_df.empty:
             visible_columns = [
-                column for column in [
+                column
+                for column in [
                     "service",
                     "description",
                     "estimated_savings",
@@ -490,4 +520,3 @@ render_page(
     breadcrumbs=["Home", "Governance", "Risk & Governance"],
     content=render_governance_content,
 )
-

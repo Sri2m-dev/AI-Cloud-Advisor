@@ -7,13 +7,7 @@ from services.supabase_client import supabase
 
 def _fetch(table_name, limit=1000):
     try:
-        response = (
-            supabase
-            .table(table_name)
-            .select("*")
-            .limit(limit)
-            .execute()
-        )
+        response = supabase.table(table_name).select("*").limit(limit).execute()
         return response.data or []
     except Exception:
         return []
@@ -54,14 +48,12 @@ def get_saas_summary():
 
     total_users = len(users)
 
-    total_cost = sum(
-        float(r.get("cost", 0))
-        for r in costs
-    )
+    total_cost = sum(float(r.get("cost", 0)) for r in costs)
 
     return {
         "total_users": total_users,
         "total_cost": total_cost,
+        "data_available": bool(users or costs),
     }
 
 

@@ -37,12 +37,14 @@ configure_page(
 
 init_session()
 
-require_role([
-    "executive",
-    "cio",
-    "finance",
-    "super_admin",
-])
+require_role(
+    [
+        "executive",
+        "cio",
+        "finance",
+        "super_admin",
+    ]
+)
 
 current_role = st.session_state.get("role", "").lower()
 is_ceo_view = current_role == "executive"
@@ -95,6 +97,20 @@ cloud_optimization_opportunity = metrics["cloud_optimization_opportunity"]
 saas_waste = metrics["saas_waste"]
 license_waste = metrics["license_waste"]
 contract_renewals_at_risk = metrics["contract_renewals_at_risk"]
+source_availability = metrics["source_availability"]
+
+
+def money_or_unknown(value, source: str) -> str:
+    return f"${value:,.0f}" if source_availability[source] else "UNKNOWN"
+
+
+def compact_or_unknown(value, source: str) -> str:
+    return format_compact_currency(value) if source_availability[source] else "UNKNOWN"
+
+
+def percent_or_unknown(value, source: str) -> str:
+    return f"{value:,.0f}%" if source_availability[source] else "UNKNOWN"
+
 
 def render_spend_content():
     posture = dashboard["financial_posture"]
@@ -129,23 +145,39 @@ def render_spend_content():
     with r1:
         render_insight_card(
             "Reconciliation Status",
-            reconciliation_cards["status"].title(),
-            subtitle=f"Variance: {posture.reconciliation_variance:,.2f} {posture.currency}",
+            reconciliation_cards["status"].title() if source_availability["spend"] else "UNKNOWN",
+            subtitle=(
+                f"Variance: {posture.reconciliation_variance:,.2f} {posture.currency}"
+                if source_availability["spend"]
+                else "Certified spend source unavailable"
+            ),
             icon="governance",
-            status="healthy" if reconciliation_cards["status"] == "reconciled" else "warning",
+            status=(
+                "healthy"
+                if source_availability["spend"] and reconciliation_cards["status"] == "reconciled"
+                else "warning"
+            ),
         )
     with r2:
         render_risk_card(
             "Quarantined Spend",
-            f"{posture.quarantined_spend:,.2f} {posture.currency}",
-            subtitle=f"{posture.unknown_account_count} unknown cloud accounts",
+            f"{posture.quarantined_spend:,.2f} {posture.currency}"
+            if source_availability["spend"]
+            else "UNKNOWN",
+            subtitle=(
+                f"{posture.unknown_account_count} unknown cloud accounts"
+                if source_availability["spend"]
+                else "Certified spend source unavailable"
+            ),
             icon="risk",
             status="warning" if posture.quarantined_spend else "healthy",
         )
     with r3:
         render_metric_card(
             "Allocation Coverage",
-            reconciliation_cards["allocation_coverage_display"],
+            reconciliation_cards["allocation_coverage_display"]
+            if source_availability["spend"]
+            else "UNKNOWN",
             icon="finance",
             status="healthy" if reconciliation_cards["allocation_coverage"] >= 90 else "warning",
         )
@@ -154,21 +186,21 @@ def render_spend_content():
     with r4:
         render_kpi_card(
             "Allocated Spend",
-            format_compact_currency(financial_model.get("allocated_spend")),
+            compact_or_unknown(financial_model.get("allocated_spend"), "spend"),
             icon="cost",
             status="healthy",
         )
     with r5:
         render_kpi_card(
             "Unallocated Resolved Spend",
-            format_compact_currency(financial_model.get("unallocated_spend")),
+            compact_or_unknown(financial_model.get("unallocated_spend"), "spend"),
             icon="cost",
             status="warning" if reconciliation_cards["unallocated_spend"] else "healthy",
         )
     with r6:
         render_risk_card(
             "Unknown Cloud Accounts",
-            posture.unknown_account_count,
+            posture.unknown_account_count if source_availability["spend"] else "UNKNOWN",
             icon="risk",
             status="warning" if posture.unknown_account_count else "healthy",
         )
@@ -182,15 +214,31 @@ def render_spend_content():
     c1, c2, c3, c4, c5 = st.columns(5)
 
     with c1:
-        render_kpi_card("Total Technology Spend", f"${total_spend:,.0f}", icon="cost", status="healthy")
+        render_kpi_card(
+            "Total Technology Spend",
+            money_or_unknown(total_spend, "spend"),
+            icon="cost",
+            status="healthy" if source_availability["spend"] else "warning",
+        )
     with c2:
-        render_metric_card("Cloud Spend", f"${cloud_cost:,.0f}", icon="cloud", status="info")
+        render_metric_card(
+            "Cloud Spend", money_or_unknown(cloud_cost, "spend"), icon="cloud", status="info"
+        )
     with c3:
-        render_metric_card("SaaS Spend", f"${saas_cost:,.0f}", icon="marketplace", status="info")
+        render_metric_card(
+            "SaaS Spend", money_or_unknown(saas_cost, "spend"), icon="marketplace", status="info"
+        )
     with c4:
-        render_metric_card("Managed Services", f"${msp_cost:,.0f}", icon="platform", status="info")
+        render_metric_card(
+            "Managed Services", money_or_unknown(msp_cost, "spend"), icon="platform", status="info"
+        )
     with c5:
-        render_metric_card("License Spend", f"${license_cost:,.0f}", icon="governance", status="info")
+        render_metric_card(
+            "License Spend",
+            money_or_unknown(license_cost, "spend"),
+            icon="governance",
+            status="info",
+        )
 
     render_section(
         "Budget & Forecast",
@@ -201,25 +249,56 @@ def render_spend_content():
     b1, b2, b3 = st.columns(3)
 
     with b1:
-        render_kpi_card("Budget", f"${budget_total:,.0f}", icon="finance", status="healthy")
+        render_kpi_card(
+            "Budget",
+            money_or_unknown(budget_total, "budget"),
+            icon="finance",
+            status="healthy" if source_availability["budget"] else "warning",
+        )
     with b2:
-        render_kpi_card("Actual", f"${actual_total:,.0f}", icon="cost", status="healthy" if budget_variance >= 0 else "warning")
+        render_kpi_card(
+            "Actual",
+            money_or_unknown(actual_total, "budget"),
+            icon="cost",
+            status="healthy"
+            if source_availability["budget"] and budget_variance >= 0
+            else "warning",
+        )
     with b3:
         render_risk_card(
             "Variance",
-            format_signed_currency(budget_variance),
-            subtitle="Under Budget" if budget_variance >= 0 else "Over Budget",
+            format_signed_currency(budget_variance) if source_availability["budget"] else "UNKNOWN",
+            subtitle=("Under Budget" if budget_variance >= 0 else "Over Budget")
+            if source_availability["budget"]
+            else "Certified budget data unavailable",
             status="healthy" if budget_variance >= 0 else "warning",
         )
 
     f1, f2, f3 = st.columns(3)
 
     with f1:
-        render_metric_card("Projected Annual Spend", f"${forecast_total:,.0f}", icon="trend_up", status="info")
+        render_metric_card(
+            "Projected Annual Spend",
+            money_or_unknown(forecast_total, "forecast"),
+            icon="trend_up",
+            status="info",
+        )
     with f2:
-        render_metric_card("Current Run Rate", f"${current_run_rate:,.0f}", icon="finance", status="info")
+        render_metric_card(
+            "Current Run Rate",
+            money_or_unknown(current_run_rate, "budget"),
+            icon="finance",
+            status="info",
+        )
     with f3:
-        render_risk_card("Forecast Growth", f"+{forecast_growth:,.0f}%", icon="trend_up", status="warning" if forecast_growth > 10 else "healthy")
+        render_risk_card(
+            "Forecast Growth",
+            percent_or_unknown(forecast_growth, "forecast"),
+            icon="trend_up",
+            status="warning"
+            if not source_availability["forecast"] or forecast_growth > 10
+            else "healthy",
+        )
 
     render_section(
         "Savings Summary",
@@ -230,9 +309,21 @@ def render_spend_content():
     s1, s2 = st.columns(2)
 
     with s1:
-        render_kpi_card("Savings Realized", f"${savings_realized:,.0f}", icon="cost", status="healthy")
+        render_kpi_card(
+            "Savings Realized",
+            money_or_unknown(savings_realized, "recommendations"),
+            icon="cost",
+            status="healthy" if source_availability["recommendations"] else "warning",
+        )
     with s2:
-        render_insight_card("Savings Opportunity", f"${savings_opportunity:,.0f}", icon="ai", status="warning" if savings_opportunity else "healthy")
+        render_insight_card(
+            "Savings Opportunity",
+            money_or_unknown(savings_opportunity, "recommendations"),
+            icon="ai",
+            status="warning"
+            if not source_availability["recommendations"] or savings_opportunity
+            else "healthy",
+        )
 
     render_section(
         "Enterprise Spend Mix",
@@ -240,14 +331,11 @@ def render_spend_content():
         divider=True,
     )
 
-    fig = px.pie(
-        spend_mix_df,
-        names="category",
-        values="cost",
-        hole=0.45,
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+    if source_availability["spend"] and spend_mix_df["cost"].sum() > 0:
+        fig = px.pie(spend_mix_df, names="category", values="cost", hole=0.45)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Spend mix is UNKNOWN until certified spend data is available.")
 
     render_section(
         "Spend Risk Summary",
@@ -257,13 +345,23 @@ def render_spend_content():
 
     risk_cols = st.columns(4)
     with risk_cols[0]:
-        render_risk_card("Cloud Optimization", format_compact_currency(cloud_optimization_opportunity), status="warning")
+        render_risk_card(
+            "Cloud Optimization",
+            compact_or_unknown(cloud_optimization_opportunity, "risk"),
+            status="warning",
+        )
     with risk_cols[1]:
-        render_risk_card("SaaS Waste", format_compact_currency(saas_waste), status="warning")
+        render_risk_card("SaaS Waste", compact_or_unknown(saas_waste, "risk"), status="warning")
     with risk_cols[2]:
-        render_risk_card("License Waste", format_compact_currency(license_waste), status="warning")
+        render_risk_card(
+            "License Waste", compact_or_unknown(license_waste, "risk"), status="warning"
+        )
     with risk_cols[3]:
-        render_risk_card("Renewals at Risk", format_compact_currency(contract_renewals_at_risk), status="critical")
+        render_risk_card(
+            "Renewals at Risk",
+            compact_or_unknown(contract_renewals_at_risk, "risk"),
+            status="warning",
+        )
 
     st.dataframe(
         risk_summary_df,
@@ -299,20 +397,15 @@ def render_spend_content():
         )
 
     if not is_ceo_view:
-
         col1, col2 = st.columns(2)
 
         with col1:
             render_section("Cost Trend - Last 12 Months", divider=True)
 
             if not cost_df.empty and "usage_date" in cost_df.columns:
-                cost_df["usage_date"] = pd.to_datetime(
-                    cost_df["usage_date"],
-                    errors="coerce"
-                )
+                cost_df["usage_date"] = pd.to_datetime(cost_df["usage_date"], errors="coerce")
                 cost_df["cost"] = pd.to_numeric(
-                    cost_df.get("cost", cost_df.get("amount")),
-                    errors="coerce"
+                    cost_df.get("cost", cost_df.get("amount")), errors="coerce"
                 ).fillna(0)
                 trend_df = (
                     cost_df.dropna(subset=["usage_date"])
@@ -341,9 +434,7 @@ def render_spend_content():
 
             if not forecast_df.empty:
                 date_column = (
-                    "usage_date"
-                    if "usage_date" in forecast_df.columns
-                    else forecast_df.columns[0]
+                    "usage_date" if "usage_date" in forecast_df.columns else forecast_df.columns[0]
                 )
                 value_column = next(
                     (
@@ -361,8 +452,7 @@ def render_spend_content():
 
                 if value_column:
                     forecast_df[value_column] = pd.to_numeric(
-                        forecast_df[value_column],
-                        errors="coerce"
+                        forecast_df[value_column], errors="coerce"
                     ).fillna(0)
                     fig = px.line(
                         forecast_df.head(12),
@@ -390,20 +480,30 @@ def render_spend_content():
         divider=True,
     )
 
-    evidence_tabs = st.tabs([
-        "Source Data",
-        "Data Coverage",
-        "Financial Reconciliation",
-        "AI Interpretation",
-        "Raw Evidence",
-    ])
+    evidence_tabs = st.tabs(
+        [
+            "Source Data",
+            "Data Coverage",
+            "Financial Reconciliation",
+            "AI Interpretation",
+            "Raw Evidence",
+        ]
+    )
 
     with evidence_tabs[0]:
-        st.dataframe(pd.DataFrame(evidence["source_data"]), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(evidence["source_data"]), use_container_width=True, hide_index=True
+        )
     with evidence_tabs[1]:
-        st.dataframe(pd.DataFrame(evidence["data_coverage"]), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(evidence["data_coverage"]), use_container_width=True, hide_index=True
+        )
     with evidence_tabs[2]:
-        st.dataframe(pd.DataFrame(evidence["financial_reconciliation"]), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(evidence["financial_reconciliation"]),
+            use_container_width=True,
+            hide_index=True,
+        )
     with evidence_tabs[3]:
         st.write(evidence["ai_interpretation"])
     with evidence_tabs[4]:
@@ -413,9 +513,9 @@ def render_spend_content():
             use_container_width=True,
             hide_index=True,
         )
-        st.caption("Fallback Risk Signals")
+        st.caption("Source Availability")
         st.dataframe(
-            pd.DataFrame(evidence["raw_evidence"]["Fallback Risk Signals"]),
+            pd.DataFrame(evidence["raw_evidence"]["Source Availability"]),
             use_container_width=True,
             hide_index=True,
         )

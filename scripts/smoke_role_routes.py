@@ -1,40 +1,23 @@
 #!/usr/bin/env python3
-"""Smoke test for role -> page routing (mirrors app_main.py logic).
+"""Smoke test for canonical role-to-page routing used by app_main.py.
 Run: python scripts/smoke_role_routes.py
 """
 
-try:
-    from auth.role_constants import normalize_role
-except Exception:
-    import importlib.util
-    import pathlib
-    import sys
+import sys
+from pathlib import Path
 
-    repo_root = pathlib.Path(__file__).resolve().parent
-    role_file = repo_root.joinpath("..", "auth", "role_constants.py").resolve()
-    spec = importlib.util.spec_from_file_location("role_constants", str(role_file))
-    role_mod = importlib.util.module_from_spec(spec)
-    sys.modules["role_constants"] = role_mod
-    spec.loader.exec_module(role_mod)
-    normalize_role = role_mod.normalize_role
+REPOSITORY_ROOT = Path(__file__).parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from auth.role_constants import normalize_role  # noqa: E402
+from components.sidebar_navigation import DEFAULT_ROLE_PAGE  # noqa: E402
 
 
 def route_for_role(role, authenticated=True):
     if not authenticated:
         return "pages/login.py"
-    r = normalize_role(role)
-    if r in [
-        "executive",
-        "technical",
-        "super_admin",
-    ]:
-        return "pages/executive_dashboard.py"
-    elif r in [
-        "finance",
-    ]:
-        return "pages/operations_workspace.py"
-    else:
-        return "pages/login.py"
+    return DEFAULT_ROLE_PAGE.get(normalize_role(role), "pages/login.py")
 
 
 if __name__ == "__main__":

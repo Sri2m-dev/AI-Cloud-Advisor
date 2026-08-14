@@ -509,6 +509,7 @@ for _intelligence_role in (
 
 DEFAULT_ROLE_PAGE = {
     "super_admin": PAGE_PATHS["Executive Dashboard"],
+    "client_admin": PAGE_PATHS["Executive Command Center"],
     "executive": PAGE_PATHS["Executive Dashboard"],
     "cio": PAGE_PATHS["Technology Portfolio Overview"],
     "finance": PAGE_PATHS["FinOps Dashboard"],

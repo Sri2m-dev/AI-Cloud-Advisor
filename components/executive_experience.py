@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+import pandas as pd
 import streamlit as st
 
 from components.executive_foundation import (
@@ -21,6 +23,9 @@ from components.executive_foundation import (
     render_page_header,
     render_section_header,
 )
+
+if TYPE_CHECKING:
+    from services.executive_workspace_composition_service import WorkspaceSnapshot
 
 
 @dataclass(frozen=True)
@@ -226,7 +231,12 @@ WORKSPACES = {
 
 
 def render_workspace(
-    key: str, *, role: str, tenant_id: str, allowed_page_paths: frozenset[str]
+    key: str,
+    *,
+    role: str,
+    tenant_id: str,
+    allowed_page_paths: frozenset[str],
+    snapshot: WorkspaceSnapshot,
 ) -> None:
     definition = WORKSPACES[key]
     if role not in definition.roles:
@@ -241,6 +251,11 @@ def render_workspace(
             scope=f"Tenant {tenant_id}",
             period="Current governed checkpoint",
         )
+        if snapshot.synthetic:
+            st.warning(
+                "SYNTHETIC DEMONSTRATION DATA — this isolated tenant does not contain "
+                "customer or production records."
+            )
         render_section_header(
             "Shared executive context", "Filters preserve tenant, scope, persona, and checkpoint."
         )
@@ -260,42 +275,80 @@ def render_workspace(
         render_section_header(
             "Certified posture", "P5 displays only upstream-certified values and policies."
         )
-        cols = executive_columns(3)
-        for column, title, kind in zip(
-            cols,
-            ("Health", "Material change", "Decisions required"),
-            (KpiKind.HEALTH, KpiKind.TREND, KpiKind.DECISION),
-            strict=True,
-        ):
+        cols = executive_columns(len(snapshot.metrics))
+        kinds = {
+            "executive": KpiKind.EXECUTIVE,
+            "financial": KpiKind.FINANCIAL,
+            "health": KpiKind.HEALTH,
+            "risk": KpiKind.RISK,
+            "trend": KpiKind.TREND,
+            "decision": KpiKind.DECISION,
+        }
+        for column, metric in zip(cols, snapshot.metrics, strict=True):
             with column:
                 render_kpi_card(
                     KpiView(
-                        title,
-                        "UNKNOWN",
-                        "Awaiting a certified tenant-scoped upstream result.",
-                        "P4.3 certified services",
+                        metric.title,
+                        metric.value,
+                        metric.meaning,
+                        metric.source,
                         "Current checkpoint",
-                        "UNKNOWN",
-                        kind=kind,
-                        state=ComponentState.UNKNOWN,
-                        state_reason="No certified value was supplied to this composition surface.",
+                        "Current" if metric.available else "UNKNOWN",
+                        kind=kinds.get(metric.kind, KpiKind.EXECUTIVE),
+                        confidence=snapshot.story.confidence if metric.available else None,
+                        evidence=snapshot.story.evidence if metric.available else None,
+                        state=None if metric.available else ComponentState.UNKNOWN,
+                        state_reason=(
+                            None
+                            if metric.available
+                            else "No certified value was supplied to this composition surface."
+                        ),
                     )
                 )
-        render_narrative(
-            NarrativeView(
-                "Executive narrative",
-                "Facts, evidence, unknowns, assumptions, and recommendations remain separate.",
-                NarrativeKind.EXECUTIVE,
-                "Current checkpoint",
-                "Non-authoritative presentation",
-                "Awaiting evidence",
-                "UNKNOWN",
-                "No evidence supplied",
-                unknowns=("Tenant-scoped narrative not supplied by P4.3.",),
-                state=ComponentState.UNKNOWN,
-                state_reason="Narrative remains unavailable until certified facts are supplied.",
-            )
+        render_section_header(
+            "Executive decision story",
+            "A governed sequence from change and risk to recommendation and accountable action.",
         )
+        story_steps = (
+            ("Yesterday", snapshot.story.yesterday, NarrativeKind.STRATEGIC),
+            ("Today", snapshot.story.today, NarrativeKind.EXECUTIVE),
+            ("Risk", snapshot.story.risk, NarrativeKind.RISK),
+            ("Recommendation", snapshot.story.recommendation, NarrativeKind.RECOMMENDATION),
+            ("Business outcome", snapshot.story.outcome, NarrativeKind.INSIGHT),
+            ("Action", snapshot.story.action, NarrativeKind.DECISION),
+        )
+        for title, text, kind in story_steps:
+            render_narrative(
+                NarrativeView(
+                    title,
+                    text,
+                    kind,
+                    "Current governed checkpoint",
+                    "Human decision authority",
+                    "Synthetic" if snapshot.synthetic else "Certified composition",
+                    snapshot.story.confidence,
+                    snapshot.story.evidence,
+                    materiality="Decision context",
+                    ai_assisted=False,
+                )
+            )
+        if snapshot.trend:
+            render_section_header(
+                "Decision trend",
+                "Accessible visual context for the current governed story.",
+            )
+            trend_frame = pd.DataFrame(snapshot.trend).set_index("period")
+            st.line_chart(trend_frame, use_container_width=True)
+            with st.expander("Decision trend data"):
+                st.dataframe(trend_frame, use_container_width=True)
+        if snapshot.decisions:
+            render_section_header(
+                "Decisions requiring action",
+                "Synthetic decision records retain status, evidence coverage, and confidence.",
+            )
+            st.dataframe(
+                pd.DataFrame(snapshot.decisions), hide_index=True, use_container_width=True
+            )
         render_section_header(
             "Canonical intelligence surfaces",
             "Open existing P4.3 capabilities without duplicating their logic.",
