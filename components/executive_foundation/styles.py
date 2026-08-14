@@ -66,6 +66,18 @@ def foundation_css(mode: str = "light") -> str:
 .nexora-threshold__track {{ height:6px; border:1px solid var(--nexora-border); border-radius:999px; margin-top:.35rem; background:linear-gradient(90deg,var(--nexora-surface-alt) 0 33%,var(--nexora-border) 33% 66%,var(--nexora-surface-alt) 66% 100%); }}
 .nexora-sparkline {{ color:var(--nexora-primary); display:flex; flex-direction:column; gap:.125rem; font-family:var(--nexora-mono); }}
 .nexora-sparkline small {{ color:var(--nexora-text-muted); font-family:var(--nexora-font); }}
+.nexora-evidence-summary,.nexora-evidence-card {{ background:var(--nexora-surface); border:1px solid var(--nexora-border); border-radius:12px; padding:1.25rem; }}
+.nexora-evidence-summary {{ display:flex; flex-wrap:wrap; gap:.5rem; }}
+.nexora-evidence-card h3,.nexora-evidence-timeline h3 {{ color:var(--nexora-text); font-size:1rem; margin:0 0 .75rem; }}
+.nexora-evidence-grid {{ display:flex; flex-wrap:wrap; gap:.5rem; }}
+.nexora-evidence-indicator {{ display:inline-flex; gap:.25rem; padding:.35rem .55rem; border:1px solid var(--nexora-border); border-radius:8px; color:var(--nexora-text); background:var(--nexora-surface-alt); font-size:.8125rem; }}
+.nexora-citation {{ display:flex; flex-direction:column; gap:.35rem; margin-top:1rem; padding:.75rem; border-left:3px solid var(--nexora-evidence); background:var(--nexora-surface-alt); color:var(--nexora-text); font-style:normal; }}
+.nexora-citation blockquote {{ margin:.25rem 0; color:var(--nexora-text-muted); }}
+.nexora-citation code {{ overflow-wrap:anywhere; }}
+.nexora-evidence-timeline {{ list-style:none; padding:0; margin:0; }}
+.nexora-evidence-timeline li {{ display:grid; grid-template-columns:1rem 1fr; gap:.75rem; padding:0 0 1.25rem; }}
+.nexora-evidence-timeline__marker {{ width:.625rem; height:.625rem; margin-top:.35rem; border-radius:999px; background:var(--nexora-evidence); }}
+.nexora-evidence-timeline p {{ color:var(--nexora-text-muted); font-size:.8125rem; margin:.15rem 0; }}
 .nexora-skeleton {{ background:linear-gradient(90deg,var(--nexora-surface-alt) 25%,var(--nexora-border) 37%,var(--nexora-surface-alt) 63%); background-size:400% 100%; border-radius:6px; height:.875rem; margin:.55rem 0; animation:nexora-shimmer 1.4s ease infinite; }}
 @keyframes nexora-shimmer {{ from {{ background-position:100% 0; }} to {{ background-position:0 0; }} }}
 @media (prefers-reduced-motion: reduce) {{ .nexora-skeleton {{ animation:none; }} }}

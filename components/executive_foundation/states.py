@@ -16,6 +16,7 @@ class ComponentState(str, Enum):
     STALE = "stale"
     CONFLICTED = "conflicted"
     ERROR = "error"
+    UNSUPPORTED = "unsupported"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,11 @@ _PRESENTATIONS = {
         "Unable to display",
         "The component could not load safely. Try again or use the reference below.",
         "var(--nexora-status-critical)",
+    ),
+    ComponentState.UNSUPPORTED: StatePresentation(
+        "Unsupported",
+        "No approved capability or presentation contract is available.",
+        "var(--nexora-status-unsupported)",
     ),
 }
 

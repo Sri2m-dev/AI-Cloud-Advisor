@@ -4,8 +4,13 @@ import streamlit as st
 
 from components.executive_foundation import (
     EXECUTIVE_UI_VERSION,
+    CitationView,
     ComponentState,
     DeltaView,
+    EvidenceDrawerView,
+    EvidenceEventView,
+    EvidenceItemView,
+    EvidenceSummaryView,
     KpiKind,
     KpiView,
     SparklinePlaceholder,
@@ -14,14 +19,20 @@ from components.executive_foundation import (
     TrendView,
     executive_columns,
     render_authority_badge,
+    render_citation,
     render_component_state,
     render_confidence_badge,
     render_evidence_badge,
+    render_evidence_card,
+    render_evidence_drawer,
+    render_evidence_summary,
+    render_evidence_timeline,
     render_executive_shell,
     render_kpi_card,
     render_materiality_badge,
     render_page_header,
     render_section_header,
+    render_source_badge,
     render_status_badge,
 )
 from shared.styles import configure_page
@@ -45,6 +56,117 @@ with render_executive_shell():
         scope="Presentation fixtures only",
         period="Not applicable",
     )
+
+    evidence_citation = CitationView(
+        "AWS CUR line item", "evidence://EV-204", "AWS", "Authorized fixture excerpt."
+    )
+    evidence_item = EvidenceItemView(
+        "Reconciled spend fact",
+        "AWS",
+        "13 Aug 2026 15:00 UTC",
+        "v3",
+        "High",
+        "Fresh",
+        "Internal",
+        "Governed fact",
+        evidence_citation,
+    )
+    evidence_summary = EvidenceSummaryView(
+        "8 sources",
+        "92%",
+        "Updated 2 hours ago",
+        "High",
+        "Governed fact",
+        unknowns="2 fields",
+        conflicts="None disclosed",
+    )
+    evidence_events = (
+        EvidenceEventView(
+            "Source observed",
+            "13 Aug 14:55 UTC",
+            "13 Aug 15:00 UTC",
+            "AWS",
+            "Governed fact",
+            "EV-204",
+        ),
+        EvidenceEventView(
+            "Reconciliation completed",
+            "13 Aug 15:02 UTC",
+            "13 Aug 15:03 UTC",
+            "Financial Data Fabric",
+            "Verified",
+            "EV-205",
+        ),
+    )
+    render_section_header(
+        "Evidence component library",
+        "Entitlement-safe evidence presentation with explicit uncertainty.",
+        eyebrow=f"Executive UI v{EXECUTIVE_UI_VERSION}",
+    )
+    evidence_columns = executive_columns(2)
+    with evidence_columns[0]:
+        render_evidence_summary(evidence_summary)
+        render_evidence_card(evidence_item)
+        render_citation(evidence_citation)
+    with evidence_columns[1]:
+        render_evidence_timeline(evidence_events)
+        for source in ("AWS", "Azure", "GitHub", "CMDB", "ServiceNow", "Manual"):
+            render_source_badge(source)
+    with st.expander("Evidence Drawer certification fixture", expanded=False):
+        render_evidence_drawer(
+            EvidenceDrawerView(
+                "Enterprise spend",
+                evidence_summary,
+                (evidence_item,),
+                ("AWS CUR → Financial Data Fabric → Executive view",),
+                ("Reporting period supplied upstream",),
+                ("Two allocation fields unknown",),
+            )
+        )
+
+    render_section_header(
+        "Evidence certification matrix",
+        "Every evidence component supports the complete required state contract.",
+    )
+    certification_states = (
+        ("Fresh", None),
+        ("Loading", ComponentState.LOADING),
+        ("Empty", ComponentState.EMPTY),
+        ("Partial", ComponentState.PARTIAL),
+        ("Stale", ComponentState.STALE),
+        ("Unknown", ComponentState.UNKNOWN),
+        ("Conflicted", ComponentState.CONFLICTED),
+        ("Unauthorized", ComponentState.UNAUTHORIZED),
+        ("Unsupported", ComponentState.UNSUPPORTED),
+        ("Error", ComponentState.ERROR),
+    )
+    evidence_components = (
+        "Drawer",
+        "Summary",
+        "Card",
+        "Timeline",
+        "Citation",
+        "Source badge",
+        "Freshness",
+        "Coverage",
+        "Unknown",
+        "Conflict",
+        "Authority",
+        "Version",
+    )
+    for component_name in evidence_components:
+        st.caption(component_name)
+        columns = executive_columns(4)
+        for index, (label, state) in enumerate(certification_states):
+            with columns[index % 4]:
+                if state is None:
+                    render_status_badge(label, tone="healthy")
+                else:
+                    render_component_state(
+                        state,
+                        title=f"{component_name} · {label}",
+                        description="Certification fixture; no product data.",
+                    )
 
     render_section_header(
         "Executive KPI library",
