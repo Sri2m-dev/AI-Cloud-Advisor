@@ -13,6 +13,10 @@ from components.executive_foundation import (
     EvidenceSummaryView,
     KpiKind,
     KpiView,
+    NarrativeKind,
+    NarrativeLength,
+    NarrativeView,
+    SemanticStability,
     SparklinePlaceholder,
     ThresholdView,
     TrendDirection,
@@ -30,6 +34,7 @@ from components.executive_foundation import (
     render_executive_shell,
     render_kpi_card,
     render_materiality_badge,
+    render_narrative,
     render_page_header,
     render_section_header,
     render_source_badge,
@@ -56,6 +61,113 @@ with render_executive_shell():
         scope="Presentation fixtures only",
         period="Not applicable",
     )
+
+    narrative_fixture = NarrativeView(
+        "Executive summary",
+        "Technology cost increased while governed service coverage improved. "
+        "The supplied intelligence identifies two material drivers and one unresolved owner.",
+        NarrativeKind.EXECUTIVE,
+        "August 2026",
+        "Insight",
+        "Informational",
+        "High",
+        "EV-204",
+        materiality="Material",
+        importance="Board attention",
+        unknowns=("Business owner could not be determined from available governed evidence.",),
+        assumptions=("Reporting period and currency were supplied by Financial Data Fabric.",),
+        citations=(CitationView("Cost claim", "evidence://EV-204", "Financial Data Fabric"),),
+        length=NarrativeLength.MEDIUM,
+        stability=SemanticStability.CONTROLLED,
+        ai_assisted=True,
+    )
+    render_section_header(
+        "Executive narrative library",
+        "Supplied explanations preserve evidence and authority boundaries.",
+        eyebrow=f"Executive UI v{EXECUTIVE_UI_VERSION}",
+    )
+    narrative_kinds = (
+        NarrativeKind.EXECUTIVE,
+        NarrativeKind.STRATEGIC,
+        NarrativeKind.OPERATIONAL,
+        NarrativeKind.FINANCIAL,
+        NarrativeKind.RISK,
+        NarrativeKind.INSIGHT,
+        NarrativeKind.RECOMMENDATION,
+        NarrativeKind.DECISION,
+        NarrativeKind.SCENARIO,
+        NarrativeKind.FINDING,
+    )
+    for start in range(0, len(narrative_kinds), 2):
+        columns = executive_columns(2)
+        for column, kind in zip(columns, narrative_kinds[start : start + 2], strict=False):
+            with column:
+                values = {
+                    name: getattr(narrative_fixture, name)
+                    for name in narrative_fixture.__dataclass_fields__
+                }
+                values["kind"] = kind
+                values["title"] = f"{kind.value.title()} narrative"
+                values["authority"] = (
+                    "Recommendation proposal"
+                    if kind is NarrativeKind.RECOMMENDATION
+                    else "Decision"
+                    if kind is NarrativeKind.DECISION
+                    else "Simulation — not authorization"
+                    if kind is NarrativeKind.SCENARIO
+                    else "Finding"
+                    if kind is NarrativeKind.FINDING
+                    else "Insight"
+                )
+                render_narrative(NarrativeView(**values))
+
+    render_section_header(
+        "Narrative certification matrix",
+        "Every narrative component supports the complete standard state contract.",
+    )
+    narrative_states = (
+        ComponentState.LOADING,
+        ComponentState.EMPTY,
+        ComponentState.PARTIAL,
+        ComponentState.UNKNOWN,
+        ComponentState.STALE,
+        ComponentState.CONFLICTED,
+        ComponentState.UNAUTHORIZED,
+        ComponentState.UNSUPPORTED,
+        ComponentState.ERROR,
+    )
+    narrative_components = (
+        "Executive narrative",
+        "Insight card",
+        "Recommendation card",
+        "Decision card",
+        "Scenario card",
+        "Finding card",
+        "Materiality ribbon",
+        "Assumption panel",
+        "Narrative block",
+        "Unknown statement",
+        "Citation footer",
+    )
+    for component_name in narrative_components:
+        st.caption(component_name)
+        columns = executive_columns(3)
+        for index, state in enumerate(narrative_states):
+            with columns[index % 3]:
+                render_narrative(
+                    NarrativeView(
+                        f"{component_name} · {state.value.title()}",
+                        "Certification fixture.",
+                        NarrativeKind.EXECUTIVE,
+                        "Fixture",
+                        "Insight",
+                        "Unknown",
+                        "Unknown",
+                        "Not supplied",
+                        state=state,
+                        state_reason="Certification fixture; no product data.",
+                    )
+                )
 
     evidence_citation = CitationView(
         "AWS CUR line item", "evidence://EV-204", "AWS", "Authorized fixture excerpt."

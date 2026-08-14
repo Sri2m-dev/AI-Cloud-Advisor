@@ -39,7 +39,7 @@ def item(**changes):
 
 
 def test_version_and_state_baseline():
-    assert EXECUTIVE_UI_VERSION == "2.3.0"
+    assert EXECUTIVE_UI_VERSION == "2.4.0"
     assert ComponentState.UNSUPPORTED in STATES
 
 

@@ -78,6 +78,20 @@ def foundation_css(mode: str = "light") -> str:
 .nexora-evidence-timeline li {{ display:grid; grid-template-columns:1rem 1fr; gap:.75rem; padding:0 0 1.25rem; }}
 .nexora-evidence-timeline__marker {{ width:.625rem; height:.625rem; margin-top:.35rem; border-radius:999px; background:var(--nexora-evidence); }}
 .nexora-evidence-timeline p {{ color:var(--nexora-text-muted); font-size:.8125rem; margin:.15rem 0; }}
+.nexora-narrative {{ position:relative; background:var(--nexora-surface); border:1px solid var(--nexora-border); border-radius:12px; padding:1.25rem; overflow:hidden; }}
+.nexora-materiality-ribbon {{ position:absolute; top:0; right:0; padding:.3rem .65rem; background:var(--nexora-surface-alt); color:var(--nexora-materiality); font-size:.75rem; font-weight:600; }}
+.nexora-narrative__header {{ display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; padding-right:5rem; }}
+.nexora-narrative h3 {{ color:var(--nexora-text); font-size:1.125rem; margin:0; }}
+.nexora-narrative__text {{ color:var(--nexora-text); font-size:.9375rem; line-height:1.5rem; max-width:840px; }}
+.nexora-narrative--short .nexora-narrative__text {{ max-width:60ch; }}
+.nexora-narrative--medium .nexora-narrative__text {{ max-width:72ch; }}
+.nexora-narrative--long .nexora-narrative__text {{ max-width:85ch; }}
+.nexora-narrative__badges,.nexora-narrative__meta {{ display:flex; flex-wrap:wrap; gap:.4rem; }}
+.nexora-narrative__meta {{ color:var(--nexora-text-muted); font-size:.8125rem; padding-top:.65rem; border-top:1px solid var(--nexora-border); }}
+.nexora-unknown-statement,.nexora-assumptions {{ margin-top:.75rem; padding:.75rem; border-left:3px solid var(--nexora-status-unknown); background:var(--nexora-surface-alt); color:var(--nexora-text); }}
+.nexora-assumptions h4 {{ margin:0 0 .35rem; }}
+.nexora-assumptions ul {{ margin:.25rem 0; }}
+.nexora-citation-footer {{ display:block; margin-top:.75rem; }}
 .nexora-skeleton {{ background:linear-gradient(90deg,var(--nexora-surface-alt) 25%,var(--nexora-border) 37%,var(--nexora-surface-alt) 63%); background-size:400% 100%; border-radius:6px; height:.875rem; margin:.55rem 0; animation:nexora-shimmer 1.4s ease infinite; }}
 @keyframes nexora-shimmer {{ from {{ background-position:100% 0; }} to {{ background-position:0 0; }} }}
 @media (prefers-reduced-motion: reduce) {{ .nexora-skeleton {{ animation:none; }} }}

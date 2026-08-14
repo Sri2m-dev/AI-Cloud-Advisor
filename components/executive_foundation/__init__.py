@@ -39,6 +39,19 @@ from components.executive_foundation.kpi import (
     render_trend_kpi,
 )
 from components.executive_foundation.layout import executive_columns, render_executive_shell
+from components.executive_foundation.narrative import (
+    NarrativeKind,
+    NarrativeLength,
+    NarrativeView,
+    SemanticStability,
+    render_decision_card,
+    render_executive_narrative,
+    render_finding_card,
+    render_insight_card,
+    render_narrative,
+    render_recommendation_card,
+    render_scenario_card,
+)
 from components.executive_foundation.states import ComponentState, render_component_state
 from components.executive_foundation.styles import foundation_css, inject_foundation_styles
 from components.executive_foundation.version import EXECUTIVE_UI_RELEASE, EXECUTIVE_UI_VERSION
@@ -57,6 +70,10 @@ __all__ = [
     "EXECUTIVE_UI_VERSION",
     "KpiKind",
     "KpiView",
+    "NarrativeKind",
+    "NarrativeLength",
+    "NarrativeView",
+    "SemanticStability",
     "SparklinePlaceholder",
     "ThresholdView",
     "TrendDirection",
@@ -87,4 +104,11 @@ __all__ = [
     "render_risk_kpi",
     "render_trend_kpi",
     "render_decision_kpi",
+    "render_decision_card",
+    "render_executive_narrative",
+    "render_finding_card",
+    "render_insight_card",
+    "render_narrative",
+    "render_recommendation_card",
+    "render_scenario_card",
 ]
