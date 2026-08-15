@@ -39,6 +39,7 @@ class WorkspaceSnapshot:
     trend: tuple[dict[str, Any], ...] = ()
     decisions: tuple[dict[str, Any], ...] = ()
     analytics: dict[str, tuple[dict[str, Any], ...]] | None = None
+    journeys: tuple[dict[str, Any], ...] = ()
 
 
 def _money(value: Any) -> str:
@@ -133,32 +134,55 @@ class ExecutiveWorkspaceCompositionService:
     @staticmethod
     def _demo_snapshot(key: str, payload: dict[str, Any]) -> WorkspaceSnapshot:
         values = payload["metrics"]
-        story = payload["story"]
-        metrics = (
+        workspace = (payload.get("workspaces") or {}).get(key) or {}
+        story = workspace.get("story") or payload["story"]
+        metric_definitions = workspace.get("metrics") or (
+            {
+                "title": "Technology investment",
+                "field": "annual_technology_spend",
+                "format": "money",
+                "meaning": (
+                    "Synthetic annual technology investment for the demonstration enterprise."
+                ),
+                "kind": "financial",
+            },
+            {
+                "title": "Technology health",
+                "field": "technology_health",
+                "format": "percent",
+                "meaning": "Synthetic governed health posture across the demonstration estate.",
+                "kind": "health",
+            },
+            {
+                "title": "Decisions required",
+                "field": "pending_decisions",
+                "format": "integer",
+                "meaning": "Synthetic executive decisions awaiting accountable review.",
+                "kind": "decision",
+            },
+        )
+
+        def display(metric: dict[str, Any]) -> str:
+            value = values[metric["field"]]
+            if metric["format"] == "money":
+                return _money(value)
+            if metric["format"] == "percent":
+                return f"{value}%"
+            return f"{value:,}" if isinstance(value, int) else str(value)
+
+        metrics = tuple(
             WorkspaceMetric(
-                "Technology investment",
-                _money(values["annual_technology_spend"]),
-                "Synthetic annual technology investment for the demonstration enterprise.",
+                metric["title"],
+                display(metric),
+                metric["meaning"],
                 payload["source"],
                 True,
-                "financial",
-            ),
-            WorkspaceMetric(
-                "Technology health",
-                f"{values['technology_health']}%",
-                "Synthetic governed health posture across the demonstration estate.",
-                payload["source"],
-                True,
-                "health",
-            ),
-            WorkspaceMetric(
-                "Decisions required",
-                str(values["pending_decisions"]),
-                "Synthetic executive decisions awaiting accountable review.",
-                payload["source"],
-                True,
-                "decision",
-            ),
+                metric["kind"],
+            )
+            for metric in metric_definitions
+        )
+        selected_analytics = workspace.get("analytics") or tuple(
+            (payload.get("analytics") or {}).keys()
         )
         return WorkspaceSnapshot(
             metrics,
@@ -176,8 +200,11 @@ class ExecutiveWorkspaceCompositionService:
             trend=tuple(payload.get("trend") or ()),
             decisions=tuple(payload.get("decisions") or ()),
             analytics={
-                name: tuple(rows) for name, rows in (payload.get("analytics") or {}).items()
+                name: tuple((payload.get("analytics") or {})[name])
+                for name in selected_analytics
+                if name in (payload.get("analytics") or {})
             },
+            journeys=tuple(payload.get("journeys") or ()),
         )
 
     @staticmethod

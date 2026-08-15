@@ -482,6 +482,18 @@ def render_workspace(
             with st.expander("Decision trend data"):
                 st.dataframe(trend_frame, use_container_width=True)
         _render_decision_analytics(snapshot)
+        if snapshot.journeys:
+            render_section_header(
+                "Three decisions, one enterprise story",
+                "Follow the evidence from signal to accountable executive action.",
+            )
+            for journey in snapshot.journeys:
+                with st.expander(f"{journey['title']} · {journey['decision_id']}"):
+                    st.markdown(f"**What changed:** {journey['change']}")
+                    st.markdown(f"**Why it matters:** {journey['impact']}")
+                    st.markdown(f"**Recommended decision:** {journey['recommendation']}")
+                    st.markdown(f"**Evidence:** {journey['evidence']}")
+                    st.markdown(f"**Accountable next step:** {journey['next_step']}")
         if snapshot.decisions:
             render_section_header(
                 "Decisions requiring action",

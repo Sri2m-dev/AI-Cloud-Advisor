@@ -56,3 +56,39 @@ def test_demo_classification_is_mandatory(
 
     assert payload["classification"] == "SYNTHETIC_DEMONSTRATION_DATA"
     assert payload["organization_id"].startswith("demo-")
+
+
+def test_demo_personas_share_evidence_but_speak_in_decision_language(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
+    payload = demo_tenant_service.load_demo_tenant("demo-nexora-global-retail")
+
+    ceo = ExecutiveWorkspaceCompositionService._demo_snapshot("ceo", payload)
+    cio = ExecutiveWorkspaceCompositionService._demo_snapshot("cio", payload)
+    cfo = ExecutiveWorkspaceCompositionService._demo_snapshot("cfo", payload)
+
+    assert [metric.title for metric in ceo.metrics] == [
+        "Technology investment",
+        "Business services",
+        "Leadership decisions",
+    ]
+    assert [metric.title for metric in cio.metrics] == [
+        "Technology health",
+        "Technologies governed",
+        "Critical risks",
+    ]
+    assert [metric.title for metric in cfo.metrics] == [
+        "Technology investment",
+        "Qualified opportunity",
+        "Verified realized",
+    ]
+    assert len(ceo.journeys) == len(cio.journeys) == len(cfo.journeys) == 3
+    assert {journey["decision_id"] for journey in ceo.journeys} == {
+        "NXR-INV-204",
+        "NXR-PORT-118",
+        "NXR-RISK-071",
+    }
+    assert ceo.story.today != cio.story.today != cfo.story.today
+    assert cfo.metrics[1].value == "$12.4M"
+    assert cfo.metrics[2].value == "$3.1M"

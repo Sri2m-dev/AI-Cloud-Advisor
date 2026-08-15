@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nexora Value Case Calculator</title>
+  <style>
+    :root { color-scheme: light; --ink:#10233f; --blue:#2563eb; --teal:#0f766e; --paper:#f7f9fc; --line:#d8e0ec; }
+    * { box-sizing:border-box; } body { margin:0; font:16px/1.5 Inter,Segoe UI,sans-serif; color:var(--ink); background:var(--paper); }
+    main { max-width:1120px; margin:auto; padding:48px 24px 64px; } h1 { font-size:42px; line-height:1.05; margin:8px 0 12px; }
+    .kicker { color:var(--blue); font-weight:800; letter-spacing:.12em; text-transform:uppercase; font-size:12px; }
+    .sub { max-width:760px; color:#4b5d75; } .grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:32px; }
+    section { background:white; border:1px solid var(--line); border-radius:18px; padding:26px; box-shadow:0 12px 32px rgba(16,35,63,.06); }
+    label { display:block; margin:17px 0 6px; font-weight:700; } input { width:100%; padding:12px; border:1px solid #b8c5d8; border-radius:9px; font:inherit; }
+    .metric { border-bottom:1px solid var(--line); padding:16px 0; } .metric:last-child { border:0; }
+    .metric span { display:block; color:#61718a; font-size:14px; } .metric strong { display:block; font-size:30px; margin-top:3px; }
+    .primary strong { color:var(--teal); } .note { margin-top:24px; padding:16px; background:#eef4ff; border-left:4px solid var(--blue); }
+    details { margin-top:18px; } code { color:#5b21b6; } @media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:34px}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="kicker">Value case · transparent assumptions</div>
+  <h1>Nexora ROI Calculator</h1>
+  <p class="sub">Build an illustrative business case from buyer-provided assumptions. Results are not certified savings, guarantees, or customer benchmarks.</p>
+  <div class="grid">
+    <section aria-labelledby="inputs"><h2 id="inputs">Customer assumptions</h2>
+      <label for="spend">Annual technology spend ($)</label><input id="spend" type="number" min="0" value="214000000">
+      <label for="opportunity">Evidence-qualified opportunity (%)</label><input id="opportunity" type="number" min="0" max="100" step="0.1" value="5.8">
+      <label for="realization">Expected realization of qualified value (%)</label><input id="realization" type="number" min="0" max="100" step="1" value="35">
+      <label for="decisions">Material decisions per year</label><input id="decisions" type="number" min="0" value="24">
+      <label for="hours">Hours saved per decision</label><input id="hours" type="number" min="0" value="80">
+      <label for="rate">Blended decision-team cost per hour ($)</label><input id="rate" type="number" min="0" value="175">
+      <label for="investment">Annual Nexora program investment ($)</label><input id="investment" type="number" min="0" value="1200000">
+    </section>
+    <section aria-labelledby="results"><h2 id="results">Illustrative value case</h2>
+      <div class="metric"><span>Evidence-qualified opportunity</span><strong id="qualified">—</strong></div>
+      <div class="metric"><span>Potential realized value</span><strong id="realized">—</strong></div>
+      <div class="metric"><span>Decision productivity value</span><strong id="productivity">—</strong></div>
+      <div class="metric primary"><span>Total modeled annual value</span><strong id="total">—</strong></div>
+      <div class="metric primary"><span>Modeled net benefit</span><strong id="net">—</strong></div>
+      <div class="metric"><span>Modeled ROI</span><strong id="roi">—</strong></div>
+      <div class="metric"><span>Illustrative payback</span><strong id="payback">—</strong></div>
+    </section>
+  </div>
+  <div class="note"><strong>Integrity rule:</strong> This calculator separates opportunity from potential realization. Replace every default with customer-approved inputs and measurement definitions before using a result in a proposal.</div>
+  <details><summary>Formula disclosure</summary><p><code>qualified = spend × opportunity%</code><br><code>potential realized = qualified × realization%</code><br><code>productivity = decisions × hours saved × hourly cost</code><br><code>ROI = (total modeled value − investment) ÷ investment</code></p></details>
+</main>
+<script>
+  const ids=['spend','opportunity','realization','decisions','hours','rate','investment'];
+  const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
+  function value(id){return Number(document.getElementById(id).value)||0}
+  function render(){
+    const qualified=value('spend')*value('opportunity')/100;
+    const realized=qualified*value('realization')/100;
+    const productivity=value('decisions')*value('hours')*value('rate');
+    const total=realized+productivity, investment=value('investment'), net=total-investment;
+    document.getElementById('qualified').textContent=money.format(qualified);
+    document.getElementById('realized').textContent=money.format(realized);
+    document.getElementById('productivity').textContent=money.format(productivity);
+    document.getElementById('total').textContent=money.format(total);
+    document.getElementById('net').textContent=money.format(net);
+    document.getElementById('roi').textContent=investment?`${(net/investment*100).toFixed(0)}%`:'UNKNOWN';
+    document.getElementById('payback').textContent=total?`${(investment/total*12).toFixed(1)} months`:'UNKNOWN';
+  }
+  ids.forEach(id=>document.getElementById(id).addEventListener('input',render)); render();
+</script>
+</body>
+</html>
