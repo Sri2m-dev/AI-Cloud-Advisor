@@ -56,7 +56,7 @@
       "type": "executive_technology_risk",
       "title": "Reduce payment-provider concentration exposure",
       "status": "MITIGATION_REQUIRED",
-      "financial_impact": 0,
+      "financial_impact": null,
       "business_service": "Payments Authorization",
       "confidence": 84,
       "evidence_coverage": 89
@@ -67,5 +67,47 @@
     {"period": "Q4 FY25", "technology_spend": 51800000, "risk_exposure": 10},
     {"period": "Q1 FY26", "technology_spend": 53600000, "risk_exposure": 9},
     {"period": "Q2 FY26", "technology_spend": 59400000, "risk_exposure": 7}
-  ]
+  ],
+  "analytics": {
+    "budget_vs_actual": [
+      {"quarter": "Q3 FY25", "budget": 50000000, "actual": 49200000},
+      {"quarter": "Q4 FY25", "budget": 50500000, "actual": 51800000},
+      {"quarter": "Q1 FY26", "budget": 52000000, "actual": 53600000},
+      {"quarter": "Q2 FY26", "budget": 54500000, "actual": 59400000}
+    ],
+    "vendor_concentration": [
+      {"vendor": "Hyperscale Cloud A", "annual_spend": 42800000, "share": 20.0},
+      {"vendor": "Enterprise Software B", "annual_spend": 26700000, "share": 12.5},
+      {"vendor": "Cloud Platform C", "annual_spend": 22100000, "share": 10.3},
+      {"vendor": "Payment Network D", "annual_spend": 15400000, "share": 7.2},
+      {"vendor": "Other certified vendors", "annual_spend": 107000000, "share": 50.0}
+    ],
+    "business_service_health": [
+      {"service": "Digital Checkout", "health": 61, "risk": "Critical"},
+      {"service": "Payments Authorization", "health": 66, "risk": "High"},
+      {"service": "Store Fulfilment", "health": 74, "risk": "Moderate"},
+      {"service": "Customer Identity", "health": 82, "risk": "Controlled"},
+      {"service": "Merchandising", "health": 88, "risk": "Controlled"}
+    ],
+    "technology_portfolio": [
+      {"category": "Strategic", "count": 1380},
+      {"category": "Tolerate", "count": 1640},
+      {"category": "Modernize", "count": 910},
+      {"category": "Retire", "count": 330}
+    ],
+    "savings_waterfall": [
+      {"stage": "Identified", "value": 12400000},
+      {"stage": "Evidence qualified", "value": 9600000},
+      {"stage": "Approved", "value": 6800000},
+      {"stage": "Executed", "value": 4300000},
+      {"stage": "Verified realized", "value": 3100000}
+    ],
+    "recommendation_pipeline": [
+      {"status": "Evidence review", "count": 14},
+      {"status": "Executive review", "count": 8},
+      {"status": "Approved", "count": 5},
+      {"status": "In execution", "count": 3},
+      {"status": "Outcome verified", "count": 2}
+    ]
+  }
 }

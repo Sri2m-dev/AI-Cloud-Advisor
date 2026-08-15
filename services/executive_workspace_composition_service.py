@@ -38,6 +38,7 @@ class WorkspaceSnapshot:
     synthetic: bool = False
     trend: tuple[dict[str, Any], ...] = ()
     decisions: tuple[dict[str, Any], ...] = ()
+    analytics: dict[str, tuple[dict[str, Any], ...]] | None = None
 
 
 def _money(value: Any) -> str:
@@ -174,6 +175,9 @@ class ExecutiveWorkspaceCompositionService:
             synthetic=True,
             trend=tuple(payload.get("trend") or ()),
             decisions=tuple(payload.get("decisions") or ()),
+            analytics={
+                name: tuple(rows) for name, rows in (payload.get("analytics") or {}).items()
+            },
         )
 
     @staticmethod

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from components.executive_foundation import (
@@ -230,6 +231,145 @@ WORKSPACES = {
 }
 
 
+def _chart_layout(figure, title: str, y_title: str = ""):
+    figure.update_layout(
+        title={"text": title, "font": {"size": 18}},
+        margin={"l": 24, "r": 16, "t": 54, "b": 24},
+        height=360,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend_title_text="",
+        yaxis_title=y_title,
+        xaxis_title="",
+    )
+    return figure
+
+
+def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
+    analytics = snapshot.analytics or {}
+    required = {
+        "budget_vs_actual",
+        "vendor_concentration",
+        "business_service_health",
+        "technology_portfolio",
+        "savings_waterfall",
+        "recommendation_pipeline",
+    }
+    if not required.issubset(analytics):
+        return
+
+    render_section_header(
+        "Executive visual intelligence",
+        "Each visual answers a named decision question using supplied demonstration evidence.",
+    )
+    left, right = st.columns(2)
+
+    budget = pd.DataFrame(analytics["budget_vs_actual"])
+    with left:
+        st.caption("Are technology costs on plan?")
+        figure = px.bar(
+            budget,
+            x="quarter",
+            y=["budget", "actual"],
+            barmode="group",
+            color_discrete_sequence=["#94A3B8", "#2563EB"],
+        )
+        st.plotly_chart(
+            _chart_layout(figure, "Budget vs actual", "Quarterly spend ($)"),
+            use_container_width=True,
+        )
+
+    vendors = pd.DataFrame(analytics["vendor_concentration"])
+    with right:
+        st.caption("Where is commercial concentration highest?")
+        figure = px.bar(
+            vendors.sort_values("annual_spend"),
+            x="annual_spend",
+            y="vendor",
+            orientation="h",
+            color="share",
+            color_continuous_scale=["#BFDBFE", "#1D4ED8"],
+        )
+        st.plotly_chart(
+            _chart_layout(figure, "Vendor concentration", "Annual spend ($)"),
+            use_container_width=True,
+        )
+
+    services = pd.DataFrame(analytics["business_service_health"])
+    with left:
+        st.caption("Which business services need intervention?")
+        figure = px.bar(
+            services.sort_values("health"),
+            x="health",
+            y="service",
+            orientation="h",
+            color="risk",
+            color_discrete_map={
+                "Critical": "#B91C1C",
+                "High": "#EA580C",
+                "Moderate": "#D97706",
+                "Controlled": "#15803D",
+            },
+        )
+        st.plotly_chart(
+            _chart_layout(figure, "Business service health", "Health score"),
+            use_container_width=True,
+        )
+
+    portfolio = pd.DataFrame(analytics["technology_portfolio"])
+    with right:
+        st.caption("How should the technology estate change?")
+        figure = px.treemap(
+            portfolio,
+            path=["category"],
+            values="count",
+            color="category",
+            color_discrete_map={
+                "Strategic": "#15803D",
+                "Tolerate": "#64748B",
+                "Modernize": "#2563EB",
+                "Retire": "#B91C1C",
+            },
+        )
+        st.plotly_chart(
+            _chart_layout(figure, "Technology portfolio disposition"),
+            use_container_width=True,
+        )
+
+    savings = pd.DataFrame(analytics["savings_waterfall"])
+    with left:
+        st.caption("How much opportunity has become verified value?")
+        figure = px.funnel(
+            savings,
+            x="value",
+            y="stage",
+            color_discrete_sequence=["#0F766E"],
+        )
+        st.plotly_chart(
+            _chart_layout(figure, "Value realization funnel", "Value ($)"),
+            use_container_width=True,
+        )
+
+    pipeline = pd.DataFrame(analytics["recommendation_pipeline"])
+    with right:
+        st.caption("Where are recommendations waiting for action?")
+        figure = px.funnel(
+            pipeline,
+            x="count",
+            y="status",
+            color_discrete_sequence=["#7C3AED"],
+        )
+        st.plotly_chart(
+            _chart_layout(figure, "Recommendation pipeline", "Recommendations"),
+            use_container_width=True,
+        )
+
+    with st.expander("Accessible visual intelligence data"):
+        for name in sorted(required):
+            st.markdown(f"**{name.replace('_', ' ').title()}**")
+            st.dataframe(pd.DataFrame(analytics[name]), hide_index=True, use_container_width=True)
+
+
 def render_workspace(
     key: str,
     *,
@@ -341,6 +481,7 @@ def render_workspace(
             st.line_chart(trend_frame, use_container_width=True)
             with st.expander("Decision trend data"):
                 st.dataframe(trend_frame, use_container_width=True)
+        _render_decision_analytics(snapshot)
         if snapshot.decisions:
             render_section_header(
                 "Decisions requiring action",

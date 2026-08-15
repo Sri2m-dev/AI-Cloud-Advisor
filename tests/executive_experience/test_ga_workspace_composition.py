@@ -34,6 +34,16 @@ def test_demo_snapshot_is_labeled_and_decision_ready(
     assert "$214.0M" in snapshot.metrics[0].value
     assert "NXR-INV-204" in snapshot.story.action
     assert "realized" in snapshot.story.outcome
+    assert set(snapshot.analytics or {}) == {
+        "budget_vs_actual",
+        "vendor_concentration",
+        "business_service_health",
+        "technology_portfolio",
+        "savings_waterfall",
+        "recommendation_pipeline",
+    }
+    assert snapshot.decisions[2]["financial_impact"] is None
+    assert sum(row["count"] for row in snapshot.analytics["technology_portfolio"]) == 4260
 
 
 def test_demo_classification_is_mandatory(
