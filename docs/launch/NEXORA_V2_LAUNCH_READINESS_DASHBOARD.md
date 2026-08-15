@@ -1,9 +1,13 @@
 # Nexora v2.0 Launch Readiness Dashboard
 
-**Candidate:** Nexora v2.0 RC2  
-**Branch:** `feature/p4-3-enterprise-intelligence-layer`  
-**Pull request:** PR #43 — Open, Draft, Unmerged  
-**Lifecycle:** Feature complete; launch readiness in progress  
+**Candidate:** Nexora v2.0 RC2
+
+**Branch:** `feature/p4-3-enterprise-intelligence-layer`
+
+**Pull request:** PR #43 — Open, Draft, Unmerged
+
+**Lifecycle:** Feature complete; launch readiness in progress
+
 **Decision authority:** Launch Readiness Board
 
 This page is the sole leadership dashboard for pre-GA readiness. A green status requires
@@ -54,4 +58,3 @@ The board makes exactly one decision after reviewing the evidence above:
 - **NO-GO:** identify specific blockers, owners, and evidence required before reconvening.
 
 No merge, tag, production deployment, customer outreach, or GA claim is authorized by this page.
-

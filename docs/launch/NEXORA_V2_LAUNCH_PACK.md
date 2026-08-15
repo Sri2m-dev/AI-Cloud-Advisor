@@ -61,4 +61,3 @@ platform design during Launch Readiness.
 This pack supports internal readiness, discovery conversations, and explicitly approved pilot
 evaluation. It does not authorize public release, production deployment, customer outreach,
 commercial terms, or General Availability.
-
