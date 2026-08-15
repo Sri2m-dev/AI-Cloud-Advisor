@@ -52,3 +52,25 @@ def test_demo_script_and_faq_preserve_executive_truthfulness() -> None:
     assert "UNKNOWN" in script
     assert "identified, evidence-qualified, approved, executed" in faq
     assert "guarantee savings" in faq
+
+
+def test_launch_dashboard_is_evidence_driven_and_does_not_authorize_ga() -> None:
+    dashboard = (
+        ROOT / "docs/launch/NEXORA_V2_LAUNCH_READINESS_DASHBOARD.md"
+    ).read_text(encoding="utf-8")
+    launch_pack = (ROOT / "docs/launch/NEXORA_V2_LAUNCH_PACK.md").read_text(
+        encoding="utf-8"
+    )
+
+    for gate in (
+        "Executive browser review",
+        "Independent CIO acceptance",
+        "Root license",
+        "Backup and restore rehearsal",
+        "v2.0 release notes",
+    ):
+        assert gate in dashboard
+    assert "NOT AUTHORIZED" in dashboard
+    assert "No merge, tag, production deployment, customer outreach" in dashboard
+    assert "Required additions before GA" in launch_pack
+    assert "SYNTHETIC_DEMONSTRATION_DATA" in launch_pack
