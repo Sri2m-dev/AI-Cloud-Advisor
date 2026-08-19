@@ -3,12 +3,15 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from auth.connector_context import (
+    get_current_organization_id,
+    get_current_user_id,
+    require_connector_admin,
+)
 from auth.guards import require_login
-from auth.connector_context import get_current_organization_id, get_current_user_id, require_connector_admin
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import render_sidebar_navigation
 from services.aws_connector_service import AWSConnectorService
-
 
 st.set_page_config(page_title="AWS Connector Setup", layout="wide")
 
@@ -75,7 +78,12 @@ def main() -> None:
         effective_role_arn = _resolve_secret(role_arn, config.get("role_arn"))
         effective_external_id = _resolve_secret(external_id, config.get("external_id"))
         with st.spinner("Testing AWS connection..."):
-            result = AWSConnectorService.test_connection(effective_role_arn, effective_external_id, region)
+            result = AWSConnectorService.test_connection(
+                effective_role_arn,
+                effective_external_id,
+                region,
+                organization_id=organization_id,
+            )
         _show_result(result)
 
     if save_submitted:

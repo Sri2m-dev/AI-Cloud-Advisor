@@ -17,8 +17,20 @@ def test_demo_data_requires_explicit_mode(monkeypatch: pytest.MonkeyPatch) -> No
 def test_demo_data_rejects_production_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
 
-    with pytest.raises(DemoTenantError, match=r"demo-\*"):
+    with pytest.raises(DemoTenantError, match="isolated demo tenant"):
         demo_tenant_service.load_demo_tenant("customer-production")
+
+
+def test_demo_uuid_tenant_loads_in_authenticated_composition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
+
+    payload = demo_tenant_service.load_demo_tenant(
+        demo_tenant_service.DEMO_ORGANIZATION_ID
+    )
+
+    assert payload["organization_name"] == "Nexora Global Retail (Synthetic Demo)"
 
 
 def test_demo_snapshot_is_labeled_and_decision_ready(
@@ -92,3 +104,14 @@ def test_demo_personas_share_evidence_but_speak_in_decision_language(
     assert ceo.story.today != cio.story.today != cfo.story.today
     assert cfo.metrics[1].value == "$12.4M"
     assert cfo.metrics[2].value == "$3.1M"
+    assert ceo.journeys[0]["title"] == "Technology investment"
+    assert [item["layer"] for item in ceo.journeys[0]["twin_path"]] == [
+        "Business Service",
+        "Application",
+        "Technology",
+        "Cloud",
+        "Decision",
+    ]
+    assert "leadership" in ceo.journeys[0]["next_step"].lower() or "CIO" in ceo.journeys[0][
+        "next_step"
+    ]

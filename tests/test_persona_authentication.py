@@ -20,6 +20,7 @@ PERSONAS = {
     "cio@company.com": ("persona123", "cio"),
     "cto@company.com": ("persona123", "cio"),
     "finance@company.com": ("persona123", "finance"),
+    "sales.engineer@company.com": ("persona123", "sales_engineer"),
     "auditor@company.com": ("persona123", "auditor"),
     "operations@company.com": ("persona123", "operations"),
 }
@@ -101,9 +102,10 @@ def test_persona_landing_pages_are_role_specific():
     assert DEFAULT_ROLE_PAGE == {
         "super_admin": "pages/executive_dashboard.py",
         "client_admin": "pages/executive_command_center.py",
-        "executive": "pages/executive_dashboard.py",
+        "executive": "pages/welcome.py",
         "cio": "pages/cio_dashboard.py",
         "finance": "pages/finance_dashboard.py",
+        "sales_engineer": "pages/welcome.py",
         "technical": "pages/operations_workspace.py",
         "operations": "pages/operations_workspace.py",
         "auditor": "pages/audit_timeline.py",
@@ -112,13 +114,15 @@ def test_persona_landing_pages_are_role_specific():
 
 def test_sidebar_visibility_matches_persona_authority():
     assert get_role_pages("CEO") == [
-        "Executive Overview",
-        "Enterprise Dashboard",
-        "Financial Health",
-        "Business Services",
-        "Strategic Risks",
+        "Welcome",
+        "CEO Workspace",
         "Executive Decisions",
+        "Enterprise AI Copilot",
+        "Business Services",
+        "Financial Health",
+        "Strategic Risks",
         "Reports",
+        "Analyse Your Environment",
     ]
     assert "FinOps Dashboard" not in get_role_pages("CEO")
     assert "Technology Portfolio Overview" in get_role_pages("CTO")

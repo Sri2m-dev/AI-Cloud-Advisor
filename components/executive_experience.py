@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -79,8 +80,8 @@ WORKSPACES = {
     ),
     "ceo": WorkspaceDefinition(
         "ceo",
-        "CEO Workspace",
-        "Are enterprise outcomes at risk, and which decisions require leadership attention?",
+        "Today's Executive Brief",
+        "What changed, why does it matter, and what requires leadership action?",
         ("super_admin", "executive"),
         (
             SurfaceLink(
@@ -278,6 +279,13 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
             _chart_layout(figure, "Budget vs actual", "Quarterly spend ($)"),
             use_container_width=True,
         )
+        latest = budget.iloc[-1]
+        variance = latest["actual"] - latest["budget"]
+        st.markdown(
+            f"**What this means:** {latest['quarter']} is "
+            f"${abs(variance) / 1_000_000:.1f}M "
+            f"{'above' if variance > 0 else 'below'} plan."
+        )
 
     vendors = pd.DataFrame(analytics["vendor_concentration"])
     with right:
@@ -293,6 +301,11 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
         st.plotly_chart(
             _chart_layout(figure, "Vendor concentration", "Annual spend ($)"),
             use_container_width=True,
+        )
+        leading_vendor = vendors.sort_values("share", ascending=False).iloc[0]
+        st.markdown(
+            f"**What this means:** {leading_vendor['vendor']} represents "
+            f"{leading_vendor['share']:.0f}% of measured vendor spend."
         )
 
     services = pd.DataFrame(analytics["business_service_health"])
@@ -315,6 +328,11 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
             _chart_layout(figure, "Business service health", "Health score"),
             use_container_width=True,
         )
+        weakest_service = services.sort_values("health").iloc[0]
+        st.markdown(
+            f"**What this means:** {weakest_service['service']} has the lowest "
+            f"health score ({weakest_service['health']:.0f}) and requires review."
+        )
 
     portfolio = pd.DataFrame(analytics["technology_portfolio"])
     with right:
@@ -335,6 +353,13 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
             _chart_layout(figure, "Technology portfolio disposition"),
             use_container_width=True,
         )
+        change_total = portfolio.loc[
+            portfolio["category"].isin(["Modernize", "Retire"]), "count"
+        ].sum()
+        st.markdown(
+            f"**What this means:** {int(change_total):,} technologies are marked "
+            "for modernization or retirement."
+        )
 
     savings = pd.DataFrame(analytics["savings_waterfall"])
     with left:
@@ -348,6 +373,11 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
         st.plotly_chart(
             _chart_layout(figure, "Value realization funnel", "Value ($)"),
             use_container_width=True,
+        )
+        funnel = dict(zip(savings["stage"], savings["value"], strict=True))
+        st.markdown(
+            f"**What this means:** ${funnel.get('Evidence qualified', 0) / 1_000_000:.1f}M "
+            "is evidence-qualified; opportunity is not presented as realized value."
         )
 
     pipeline = pd.DataFrame(analytics["recommendation_pipeline"])
@@ -363,11 +393,77 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
             _chart_layout(figure, "Recommendation pipeline", "Recommendations"),
             use_container_width=True,
         )
+        waiting = pipeline.loc[
+            ~pipeline["status"].str.lower().isin(["implemented", "closed"]), "count"
+        ].sum()
+        st.markdown(
+            f"**What this means:** {int(waiting):,} recommendations remain before "
+            "verified completion."
+        )
 
     with st.expander("Accessible visual intelligence data"):
         for name in sorted(required):
             st.markdown(f"**{name.replace('_', ' ').title()}**")
-            st.dataframe(pd.DataFrame(analytics[name]), hide_index=True, use_container_width=True)
+            st.dataframe(
+                pd.DataFrame(analytics[name]), hide_index=True, use_container_width=True
+            )
+
+
+def _render_demo_executive_ai(snapshot: WorkspaceSnapshot) -> None:
+    """Render evidence-backed executive answers from the isolated demonstration snapshot."""
+    questions = (
+        "Where can we reduce costs this quarter?",
+        "Why is technology spend above plan?",
+        "Which decisions need leadership attention?",
+        "What should I take to the next board meeting?",
+    )
+    render_section_header(
+        "Ask Nexora",
+        "Ask an executive question and receive an answer grounded in the current evidence.",
+    )
+    question = st.selectbox("Executive question", questions, key="ceo_demo_question")
+    analytics = snapshot.analytics or {}
+
+    if question == questions[0]:
+        funnel = {item["stage"]: item["value"] for item in analytics["savings_waterfall"]}
+        answer = (
+            f"Nexora identifies ${funnel['Identified'] / 1_000_000:.1f}M of annual opportunity; "
+            f"${funnel['Evidence qualified'] / 1_000_000:.1f}M is evidence-qualified and "
+            f"${funnel['Verified realized'] / 1_000_000:.1f}M is already verified as realized. "
+            "The immediate leadership decision is the $4.2M collaboration and analytics SaaS "
+            "consolidation, sequenced against renewal and migration controls."
+        )
+    elif question == questions[1]:
+        latest = analytics["budget_vs_actual"][-1]
+        variance = latest["actual"] - latest["budget"]
+        answer = (
+            f"{latest['quarter']} technology spend is ${variance / 1_000_000:.1f}M above plan. "
+            "The evidence points to vendor concentration, overlapping SaaS contracts, and the "
+            "checkout modernization requirement. These drivers should be governed separately "
+            "from realized savings."
+        )
+    elif question == questions[2]:
+        answer = (
+            "Three decisions require attention: approve the phased Global Digital Checkout "
+            "modernization, govern the $4.2M SaaS consolidation, and mitigate payment-provider "
+            "concentration. The risk decision retains UNKNOWN financial impact until Finance "
+            "certifies the evidence."
+        )
+    else:
+        answer = (
+            "Take the checkout modernization decision, the qualified-to-realized value funnel, "
+            "and the payment-provider concentration exposure. The board message is: protect "
+            "digital revenue, release governed savings, and preserve accountable evidence for "
+            "each decision."
+        )
+
+    with st.container(border=True):
+        st.caption("EVIDENCE-BACKED EXECUTIVE ANSWER · SYNTHETIC DEMONSTRATION")
+        st.markdown(answer)
+        st.caption(
+            f"Confidence {snapshot.story.confidence} · Evidence {snapshot.story.evidence} · "
+            "Human approval remains required"
+        )
 
 
 def render_workspace(
@@ -387,35 +483,133 @@ def render_workspace(
             definition.title,
             definition.question,
             breadcrumbs=("Executive Intelligence",),
-            persona=role.replace("_", " ").title(),
-            scope=f"Tenant {tenant_id}",
-            period="Current governed checkpoint",
+            persona=(
+                None
+                if key == "ceo" and snapshot.synthetic
+                else role.replace("_", " ").title()
+            ),
+            scope=(
+                "Synthetic demonstration"
+                if key == "ceo" and snapshot.synthetic
+                else f"Tenant {tenant_id}"
+            ),
+            period=(
+                None
+                if key == "ceo" and snapshot.synthetic
+                else "Current governed checkpoint"
+            ),
         )
         if snapshot.synthetic:
             st.warning(
                 "SYNTHETIC DEMONSTRATION DATA — this isolated tenant does not contain "
                 "customer or production records."
             )
-        render_section_header(
-            "Shared executive context", "Filters preserve tenant, scope, persona, and checkpoint."
-        )
-        render_interaction(
-            InteractionView(
-                "Executive filters",
-                InteractionKind.FILTER,
-                "Presentation intent only; canonical surfaces apply authorized filtering.",
-                (
-                    InteractionOption("Current checkpoint", "current", selected=True),
-                    InteractionOption("Compare", "compare"),
-                ),
-                (("Tenant", tenant_id), ("Persona", role)),
-                primary_intent="preserve_executive_context",
+        if key == "cfo" and snapshot.synthetic:
+            st.markdown(
+                """
+                <section class="nexora-executive-hero">
+                  <p class="nexora-eyebrow">FINANCIAL POSITION</p>
+                  <h2>Separate qualified opportunity from value already realized.</h2>
+                </section>
+                """,
+                unsafe_allow_html=True,
             )
+            st.markdown(snapshot.story.today)
+            st.info(f"Recommended finance action — {snapshot.story.recommendation}")
+        if key == "ceo" and snapshot.synthetic and snapshot.journeys:
+            lead = snapshot.journeys[0]
+            savings = {
+                item["stage"]: item["value"]
+                for item in (snapshot.analytics or {}).get("savings_waterfall", [])
+            }
+            metric_values = {metric.title: metric.value for metric in snapshot.metrics}
+            st.markdown(
+                """
+                <section class="nexora-executive-hero">
+                  <p class="nexora-eyebrow">TODAY'S EXECUTIVE BRIEF</p>
+                  <h2>Your technology estate is governed. Three decisions require
+                  leadership attention.</h2>
+                </section>
+                """,
+                unsafe_allow_html=True,
+            )
+            estate = st.columns(4)
+            estate[0].metric(
+                "Technology investment",
+                metric_values.get("Technology investment", "UNKNOWN"),
+                "Current estate",
+            )
+            estate[1].metric(
+                "Qualified opportunity",
+                f"${savings.get('Evidence qualified', 0) / 1_000_000:.1f}M",
+                "Evidence qualified",
+            )
+            estate[2].metric(
+                "Verified savings",
+                f"${savings.get('Verified realized', 0) / 1_000_000:.1f}M",
+                "Realized and verified",
+            )
+            estate[3].metric(
+                "Decisions waiting", str(len(snapshot.decisions)), "Leadership action"
+            )
+            st.markdown("### Today's most important decision")
+            with st.container(border=True):
+                st.caption("GLOBAL DIGITAL CHECKOUT · REQUIRES EXECUTIVE REVIEW")
+                st.markdown("## Protect peak-season digital revenue")
+                st.markdown(lead["impact"])
+                outcome, investment = st.columns([1.7, 1])
+                outcome.metric("Business outcome", "Avoid peak-season disruption")
+                investment.metric("Proposed investment", "$8.2M")
+                st.markdown(f"**Recommended executive action:** {lead['recommendation']}")
+                st.info(f"Accountable next step — {lead['next_step']}")
+                with st.expander("Confidence, evidence, and delay consequence"):
+                    details = st.columns(2)
+                    details[0].metric("Scenario confidence", "88%")
+                    details[1].metric("Evidence coverage", "94%")
+                    st.write(f"**If leadership delays:** {lead['impact']}")
+            _render_demo_executive_ai(snapshot)
+            primary_actions = st.columns(2)
+            with primary_actions[0]:
+                st.page_link(
+                    "pages/analyze_environment.py",
+                    label="Analyze Environment",
+                    help="Upload governed cost data or connect an authorized cloud account.",
+                    use_container_width=True,
+                )
+            with primary_actions[1]:
+                st.page_link(
+                    "pages/decision_intelligence.py",
+                    label="Review Executive Decisions",
+                    use_container_width=True,
+                )
+        filter_view = InteractionView(
+            "Executive filters",
+            InteractionKind.FILTER,
+            "Presentation intent only; canonical surfaces apply authorized filtering.",
+            (
+                InteractionOption("Current checkpoint", "current", selected=True),
+                InteractionOption("Compare", "compare"),
+            ),
+            (("Tenant", tenant_id), ("Persona", role)),
+            primary_intent="preserve_executive_context",
         )
-        render_section_header(
-            "Certified posture", "P5 displays only upstream-certified values and policies."
-        )
-        cols = executive_columns(len(snapshot.metrics))
+        if key == "ceo" and snapshot.synthetic:
+            with st.expander("Advanced context and checkpoint controls"):
+                render_interaction(filter_view)
+        else:
+            render_section_header(
+                "Shared executive context",
+                "Filters preserve tenant, scope, persona, and checkpoint.",
+            )
+            render_interaction(filter_view)
+        if not (key == "ceo" and snapshot.synthetic):
+            render_section_header(
+                "Certified posture",
+                "P5 displays only upstream-certified values and policies.",
+            )
+            cols = executive_columns(len(snapshot.metrics))
+        else:
+            cols = ()
         kinds = {
             "executive": KpiKind.EXECUTIVE,
             "financial": KpiKind.FINANCIAL,
@@ -424,7 +618,9 @@ def render_workspace(
             "trend": KpiKind.TREND,
             "decision": KpiKind.DECISION,
         }
-        for column, metric in zip(cols, snapshot.metrics, strict=True):
+        # The CEO synthetic brief intentionally replaces the generic posture cards.
+        # In that presentation ``cols`` is empty while the snapshot remains intact.
+        for column, metric in zip(cols, snapshot.metrics):
             with column:
                 render_kpi_card(
                     KpiView(
@@ -445,6 +641,47 @@ def render_workspace(
                         ),
                     )
                 )
+        if key == "cfo" and snapshot.synthetic:
+            _render_demo_executive_ai(snapshot)
+        if key == "ceo" and snapshot.synthetic and snapshot.journeys:
+            render_section_header(
+                "Three decisions requiring action",
+                "Prioritized by business impact, evidence coverage, and accountable authority.",
+            )
+            decisions_by_id = {item["id"]: item for item in snapshot.decisions}
+            for journey in snapshot.journeys:
+                decision = decisions_by_id.get(journey["decision_id"], {})
+                impact = decision.get("financial_impact")
+                with st.container(border=True):
+                    st.caption(journey["decision_id"])
+                    st.markdown(f"### {journey['title']} · {decision.get('business_service', '')}")
+                    st.markdown(journey["impact"])
+                    columns = st.columns(3)
+                    columns[0].metric(
+                        "Financial impact",
+                        f"${impact / 1_000_000:.1f}M" if impact else "UNKNOWN",
+                    )
+                    columns[1].metric("Confidence", f"{decision.get('confidence', 0)}%")
+                    columns[2].metric(
+                        "Evidence coverage", f"{decision.get('evidence_coverage', 0)}%"
+                    )
+                    st.markdown(f"**Recommended decision:** {journey['recommendation']}")
+                    links = st.columns(3)
+                    with links[0]:
+                        st.page_link(
+                            "pages/decision_intelligence.py", label="Review decision"
+                        )
+                    with links[1]:
+                        st.page_link(
+                            "pages/twin_explorer.py",
+                            label="Trace in Digital Twin",
+                            help=(
+                                "Trace business, application, technology, cost, risk, "
+                                "and decision context."
+                            ),
+                        )
+                    with links[2]:
+                        st.page_link("pages/approval_center.py", label="Open approval path")
         render_section_header(
             "Executive decision story",
             "A governed sequence from change and risk to recommendation and accountable action.",
@@ -457,21 +694,27 @@ def render_workspace(
             ("Business outcome", snapshot.story.outcome, NarrativeKind.INSIGHT),
             ("Action", snapshot.story.action, NarrativeKind.DECISION),
         )
-        for title, text, kind in story_steps:
-            render_narrative(
-                NarrativeView(
-                    title,
-                    text,
-                    kind,
-                    "Current governed checkpoint",
-                    "Human decision authority",
-                    "Synthetic" if snapshot.synthetic else "Certified composition",
-                    snapshot.story.confidence,
-                    snapshot.story.evidence,
-                    materiality="Decision context",
-                    ai_assisted=False,
+        story_context = (
+            st.expander("Show full narrative and decision evidence")
+            if key in {"ceo", "cfo"} and snapshot.synthetic
+            else nullcontext()
+        )
+        with story_context:
+            for title, text, kind in story_steps:
+                render_narrative(
+                    NarrativeView(
+                        title,
+                        text,
+                        kind,
+                        "Current governed checkpoint",
+                        "Human decision authority",
+                        "Synthetic" if snapshot.synthetic else "Certified composition",
+                        snapshot.story.confidence,
+                        snapshot.story.evidence,
+                        materiality="Decision context",
+                        ai_assisted=False,
+                    )
                 )
-            )
         if snapshot.trend:
             render_section_header(
                 "Decision trend",
@@ -482,7 +725,7 @@ def render_workspace(
             with st.expander("Decision trend data"):
                 st.dataframe(trend_frame, use_container_width=True)
         _render_decision_analytics(snapshot)
-        if snapshot.journeys:
+        if snapshot.journeys and not (key == "ceo" and snapshot.synthetic):
             render_section_header(
                 "Three decisions, one enterprise story",
                 "Follow the evidence from signal to accountable executive action.",

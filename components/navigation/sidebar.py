@@ -41,16 +41,26 @@ SECTION_KEYWORDS = {
 }
 
 SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
+    "sales_engineer": [
+        {"label": "Start", "page_label": "Welcome", "section": "Home", "icon": "home"},
+        {
+            "label": "Prospect Data Intake",
+            "page_label": "Prospect Data Intake",
+            "section": "Home",
+            "icon": "upload",
+        },
+    ],
     "executive": [
-        {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
-        {"label": "Executive Overview", "page_label": "Executive Dashboard", "section": "Home", "icon": "home"},
-        {"label": "Executive Dashboard", "page_label": "Executive Dashboard", "section": "Executive", "icon": "executive"},
-        {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
-        {"label": "Cloud Account Registry", "page_label": "Cloud Account Registry", "section": "Finance", "icon": "cloud"},
-        {"label": "Account Resolution", "page_label": "Account Resolution", "section": "Finance", "icon": "search"},
-        {"label": "Approvals", "page_label": "Approvals", "section": "Governance", "icon": "approval"},
-        {"label": "Governance", "page_label": "Risk & Governance", "section": "Governance", "icon": "governance"},
-        {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
+        {"label": "Home", "page_label": "Welcome", "section": "Executive", "icon": "home"},
+        {"label": "Brief", "page_label": "CEO Workspace", "section": "Executive", "icon": "executive"},
+        {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Executive", "icon": "ai"},
+        {"label": "Executive Decisions", "page_label": "Executive Decisions", "section": "Executive", "icon": "approval"},
+        {"label": "Analyze Environment", "page_label": "Analyse Your Environment", "section": "Business", "icon": "search"},
+        {"label": "Services", "page_label": "Business Services", "section": "Business", "icon": "service"},
+        {"label": "Digital Twin", "page_label": "Twin Explorer", "section": "Business", "icon": "technology"},
+        {"label": "Investment & Value", "page_label": "Financial Health", "section": "Finance", "icon": "finance"},
+        {"label": "Board Pack", "page_label": "Reports", "section": "Finance", "icon": "reports"},
+        {"label": "Risk", "page_label": "Strategic Risks", "section": "Governance", "icon": "governance"},
     ],
     "cio": [
         {"label": "Business Architecture", "page_label": "Business Architecture", "section": "Business Architecture", "icon": "enterprise"},
@@ -83,6 +93,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Automation", "page_label": "Automation Center", "section": "Platform", "icon": "platform"},
     ],
     "finance": [
+        {"label": "Prospect Data Intake", "page_label": "Prospect Data Intake", "section": "Finance", "icon": "upload"},
         {"label": "Twin Explorer", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
         {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
         {"label": "Cloud Account Registry", "page_label": "Cloud Account Registry", "section": "Finance", "icon": "cloud"},
@@ -93,6 +104,33 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
     ],
 }
+
+# Executive personas use a deliberately concise operating-system navigation.
+# The underlying role page registry remains authoritative for access control.
+SIMPLIFIED_ROLE_NAVIGATION["cio"] = [
+    {"label": "Home", "page_label": "Welcome", "section": "Workspace", "icon": "home"},
+    {"label": "CIO Brief", "page_label": "CIO Workspace", "section": "Workspace", "icon": "executive"},
+    {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Workspace", "icon": "ai"},
+    {"label": "Analyze", "page_label": "Analyse Your Environment", "section": "Workspace", "icon": "search"},
+    {"label": "Business Services", "page_label": "Business Services", "section": "Enterprise", "icon": "service"},
+    {"label": "Digital Twin", "page_label": "Twin Explorer", "section": "Enterprise", "icon": "technology"},
+    {"label": "Technology", "page_label": "Technology Portfolio", "section": "Enterprise", "icon": "technology"},
+    {"label": "Cloud Accounts", "page_label": "Cloud Account Registry", "section": "Enterprise", "icon": "cloud"},
+    {"label": "Risk", "page_label": "Risk & Governance", "section": "Enterprise", "icon": "governance"},
+    {"label": "Reports", "page_label": "Reports", "section": "Enterprise", "icon": "reports"},
+]
+
+SIMPLIFIED_ROLE_NAVIGATION["finance"] = [
+    {"label": "Home", "page_label": "Welcome", "section": "Workspace", "icon": "home"},
+    {"label": "CFO Brief", "page_label": "CFO Workspace", "section": "Workspace", "icon": "executive"},
+    {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Workspace", "icon": "ai"},
+    {"label": "Analyze", "page_label": "Analyse Your Environment", "section": "Workspace", "icon": "search"},
+    {"label": "Spend & Value", "page_label": "Enterprise Spend", "section": "Finance", "icon": "finance"},
+    {"label": "Cloud Accounts", "page_label": "Cloud Account Registry", "section": "Finance", "icon": "cloud"},
+    {"label": "Savings", "page_label": "Savings Governance", "section": "Finance", "icon": "cost"},
+    {"label": "Decisions", "page_label": "Executive Decisions", "section": "Finance", "icon": "approval"},
+    {"label": "Reports", "page_label": "Reports", "section": "Finance", "icon": "reports"},
+]
 
 PERSONA_PAGE_PATH_FALLBACKS = {
     "Business Architecture": "pages/business_architecture.py",
@@ -391,14 +429,14 @@ def render_enterprise_sidebar(
 
     with st.sidebar:
         _render_sidebar_styles()
-        st.title("NEXORA")
-        st.caption("Next Generation Technology Intelligence")
+        st.markdown("### ◈ NEXORA")
+        st.caption("Enterprise Decision Intelligence")
         st.divider()
         st.write(f"**User:** {st.session_state.get('email') or st.session_state.get('user', '-')}")
         st.write(f"**Role:** {normalize_role(role)}")
         st.write(f"**Organization:** {st.session_state.get('organization_name', 'Demo Enterprise')}")
         st.divider()
-        st.subheader("Navigation")
+        st.caption("WORKSPACE NAVIGATION")
         st.markdown(
             f"<div style='height:{theme.spacing['1']}'></div>",
             unsafe_allow_html=True,

@@ -88,7 +88,14 @@
       "impact": "A peak-period disruption threatens digital revenue and customer trust across 42 countries.",
       "recommendation": "Approve an $8.2M phased modernization with explicit migration controls and outcome checkpoints.",
       "evidence": "94% synthetic evidence coverage; architecture dependencies, service health, cost baseline, and scenario assumptions are linked.",
-      "next_step": "CIO sponsors the option; CFO validates the baseline; Risk Committee confirms controls."
+      "next_step": "CIO sponsors the option; CFO validates the baseline; Risk Committee confirms controls.",
+      "twin_path": [
+        {"layer": "Business Service", "entity": "Global Digital Checkout"},
+        {"layer": "Application", "entity": "Checkout Orchestration Platform"},
+        {"layer": "Technology", "entity": "End-of-support runtime"},
+        {"layer": "Cloud", "entity": "Hyperscale Cloud A"},
+        {"layer": "Decision", "entity": "Phased modernization"}
+      ]
     },
     {
       "decision_id": "NXR-PORT-118",
@@ -97,7 +104,14 @@
       "impact": "Duplicate contracts dilute buying power, increase support burden, and obscure ownership.",
       "recommendation": "Consolidate the overlapping portfolio through controlled renewal and migration waves.",
       "evidence": "96% synthetic evidence coverage; contracts, usage, owners, services, and renewal timing are connected.",
-      "next_step": "CFO assigns benefit ownership; CIO confirms service migration; procurement sequences renewals."
+      "next_step": "CFO assigns benefit ownership; CIO confirms service migration; procurement sequences renewals.",
+      "twin_path": [
+        {"layer": "Business Service", "entity": "Enterprise Collaboration"},
+        {"layer": "Application", "entity": "Overlapping SaaS portfolio"},
+        {"layer": "Technology", "entity": "38 subscriptions"},
+        {"layer": "Cost", "entity": "$4.2M opportunity"},
+        {"layer": "Decision", "entity": "Controlled consolidation"}
+      ]
     },
     {
       "decision_id": "NXR-RISK-071",
@@ -106,7 +120,14 @@
       "impact": "Concentration can interrupt a revenue-critical service; financial impact remains UNKNOWN until certified.",
       "recommendation": "Establish a secondary route and test failover without fabricating an uncertified loss value.",
       "evidence": "89% synthetic evidence coverage; provider dependency, service criticality, controls, and residual unknowns are explicit.",
-      "next_step": "Risk Committee accepts or mitigates the exposure; Operations rehearses failover; Finance certifies impact when evidence exists."
+      "next_step": "Risk Committee accepts or mitigates the exposure; Operations rehearses failover; Finance certifies impact when evidence exists.",
+      "twin_path": [
+        {"layer": "Business Service", "entity": "Payments Authorization"},
+        {"layer": "Application", "entity": "Payment routing platform"},
+        {"layer": "Technology", "entity": "Single-provider route"},
+        {"layer": "Risk", "entity": "Concentration exposure"},
+        {"layer": "Decision", "entity": "Secondary route and failover"}
+      ]
     }
   ],
   "decisions": [

@@ -137,12 +137,11 @@ ROLE_PAGES = {
         "Reports",
     ],
     "executive": [
-        "Executive Overview",
-        "Enterprise Dashboard",
-        "Financial Health",
-        "Business Services",
-        "Strategic Risks",
+        "CEO Workspace",
         "Executive Decisions",
+        "Business Services",
+        "Financial Health",
+        "Strategic Risks",
         "Reports",
     ],
     "cio": [
@@ -210,6 +209,7 @@ ROLE_PAGES = {
         "Reports",
     ],
     "finance": [
+        "Prospect Data Intake",
         "FinOps Dashboard",
         "Enterprise Spend",
         "Cloud Cost Imports",
@@ -319,7 +319,7 @@ EXECUTIVE_EXPERIENCE_PAGES = {
         "Enterprise Architect Workspace",
         "Operations Command Center",
     ],
-    "executive": [],
+    "executive": ["CEO Workspace"],
     "cio": [
         "Executive Command Center",
         "CIO Workspace",
@@ -360,12 +360,30 @@ for _scenario_role in ("super_admin", "finance", "cio", "operations", "auditor")
     if _scenario_role in ROLE_PAGES and "Scenario Intelligence" not in ROLE_PAGES[_scenario_role]:
         ROLE_PAGES[_scenario_role].append("Scenario Intelligence")
 
+for _analysis_role in ("executive", "finance", "cio", "client_admin", "super_admin"):
+    if "Welcome" not in ROLE_PAGES[_analysis_role]:
+        ROLE_PAGES[_analysis_role].insert(0, "Welcome")
+    if "Analyse Your Environment" not in ROLE_PAGES[_analysis_role]:
+        ROLE_PAGES[_analysis_role].append("Analyse Your Environment")
+
+if "Enterprise AI Copilot" not in ROLE_PAGES["executive"]:
+    ROLE_PAGES["executive"].insert(3, "Enterprise AI Copilot")
+
+ROLE_PAGES["sales_engineer"] = [
+    "Welcome",
+    "Analyse Your Environment",
+    "Prospect Data Intake",
+]
+
 PAGE_PATHS = {
+    "Welcome": "pages/welcome.py",
     "Executive Overview": "pages/executive_command_center.py",
     "Enterprise Dashboard": "pages/executive_dashboard.py",
     "Financial Health": "pages/cfo_workspace.py",
     "Strategic Risks": "pages/risk_governance.py",
     "Executive Decisions": "pages/decision_intelligence.py",
+    "Prospect Data Intake": "pages/prospect_data_intake.py",
+    "Analyse Your Environment": "pages/analyze_environment.py",
     "Executive Command Center": "pages/executive_command_center.py",
     "CEO Workspace": "pages/ceo_workspace.py",
     "CIO Workspace": "pages/cio_workspace.py",
@@ -510,9 +528,10 @@ for _intelligence_role in (
 DEFAULT_ROLE_PAGE = {
     "super_admin": PAGE_PATHS["Executive Dashboard"],
     "client_admin": PAGE_PATHS["Executive Command Center"],
-    "executive": PAGE_PATHS["Executive Dashboard"],
+    "executive": PAGE_PATHS["Welcome"],
     "cio": PAGE_PATHS["Technology Portfolio Overview"],
     "finance": PAGE_PATHS["FinOps Dashboard"],
+    "sales_engineer": PAGE_PATHS["Welcome"],
     "technical": PAGE_PATHS["Operations Workspace"],
     "operations": PAGE_PATHS["Operations Workspace"],
     "auditor": PAGE_PATHS["Audit Timeline"],

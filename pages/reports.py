@@ -6,6 +6,11 @@ from pathlib import Path
 
 import streamlit as st
 
+try:
+    import fitz
+except ImportError:  # Optional renderer; report generation remains unchanged.
+    fitz = None
+
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 if ROOT_DIR not in sys.path:
@@ -318,6 +323,29 @@ def last_generated_for(report_name, rows):
     return "Not generated"
 
 
+def generated_report_thumbnail(report_name: str) -> bytes | None:
+    """Render the first page of an existing governed PDF output for preview."""
+    if fitz is None:
+        return None
+    for row in globals().get("report_history_all", []):
+        if row.get("report_name") != report_name:
+            continue
+        if str(row.get("status", "")).lower() != "generated":
+            continue
+        file_name = Path(str(row.get("file_name") or "")).name
+        if not file_name.lower().endswith(".pdf"):
+            continue
+        report_path = Path("exports") / "reports" / file_name
+        if not report_path.is_file():
+            continue
+        with fitz.open(report_path) as document:
+            if not document.page_count:
+                continue
+            pixmap = document.load_page(0).get_pixmap(matrix=fitz.Matrix(0.75, 0.75))
+            return pixmap.tobytes("png")
+    return None
+
+
 def render_report_catalog_card(
     report_name,
     audience,
@@ -333,6 +361,13 @@ def render_report_catalog_card(
     delivery_mode = scheduled_indicator(generation_name, schedule_rows)
     coverage = report_coverage_label(safe_report_name)
     with st.container():
+        actual_preview = generated_report_thumbnail(generation_name)
+        if actual_preview:
+            st.image(
+                actual_preview,
+                caption="Generated report · first-page preview",
+                use_container_width=True,
+            )
         st.markdown(
             f"""
             <div class="nexora-card" style="
@@ -340,6 +375,17 @@ def render_report_catalog_card(
                 padding: 1rem;
                 margin-bottom: 0.5rem;
             ">
+                <div aria-label="Report preview" style="
+                    width:92px;height:116px;float:right;margin:0 0 0.75rem 1rem;
+                    border:1px solid #d9e1ec;border-radius:6px;background:#fff;
+                    box-shadow:0 8px 20px rgba(15,23,42,.08);padding:10px;
+                ">
+                    <div style="height:8px;width:55%;background:#1d4ed8;margin-bottom:12px;"></div>
+                    <div style="height:4px;background:#d9e1ec;margin-bottom:6px;"></div>
+                    <div style="height:4px;background:#e8edf4;margin-bottom:6px;"></div>
+                    <div style="height:36px;background:#eff6ff;margin:10px 0;"></div>
+                    <div style="font-size:8px;color:#607087;text-align:center;">GENERATE TO PREVIEW</div>
+                </div>
                 <div style="font-size:1.05rem;font-weight:700;color:var(--nexora-text);margin-bottom:0.65rem;">
                     {safe_report_name}
                 </div>
@@ -508,6 +554,55 @@ certification = ReportsCertificationService.get_dashboard(
 )
 reporting_health = certification["health"]
 evidence = certification["evidence"]
+
+st.markdown(
+    """
+    <section class="nexora-executive-hero">
+      <p class="nexora-eyebrow">BOARD-READY OUTPUT</p>
+      <h2>Turn the current decision story into an executive Board Pack.</h2>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
+preview, action = st.columns([1.7, 1])
+with preview:
+    st.markdown("### Executive Board Pack preview")
+    preview_pages = st.columns(3)
+    preview_pages[0].markdown("**01 · Executive summary**\n\n**02 · Financial position**")
+    preview_pages[1].markdown("**03 · Technology estate**\n\n**04 · Business services**")
+    preview_pages[2].markdown("**05 · Risk and savings**\n\n**06 · Recommendations**")
+    st.caption(
+        "Generated from the existing tenant-scoped reporting engine and governed evidence."
+    )
+with action:
+    st.markdown("### Ready when you are")
+    if st.button(
+        "Generate Executive Board Pack",
+        key="hero_prepare_board_pack",
+        type="primary",
+        use_container_width=True,
+        disabled=not report_backend_status["available"],
+    ):
+        st.session_state["ga_board_pack_pptx"] = report_backend_status[
+            "build_board_pack_pptx"
+        ](
+            tenant_id=org_id,
+            requested_by=st.session_state.get("user")
+            or st.session_state.get("email")
+            or "unknown",
+        )
+    if st.session_state.get("ga_board_pack_pptx"):
+        st.download_button(
+            "Download Board Pack",
+            data=st.session_state["ga_board_pack_pptx"],
+            file_name="nexora-executive-board-pack.pptx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument.presentationml."
+                "presentation"
+            ),
+            use_container_width=True,
+        )
+    st.caption("Scheduling remains available below through the existing report workflow.")
 
 render_section(
     "Executive Summary",

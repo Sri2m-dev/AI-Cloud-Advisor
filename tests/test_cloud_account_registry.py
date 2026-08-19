@@ -202,11 +202,16 @@ def test_active_navigation_registers_route_and_authorized_personas():
     authorized = {role for role, pages in ROLE_PAGES.items() if "Cloud Account Registry" in pages}
     assert {"super_admin", "client_admin", "cio", "finance", "auditor"} <= authorized
     assert "executive" not in authorized
-    for role in ("executive", "cio", "finance"):
+    for role in ("cio", "finance"):
         items = build_persona_navigation_items(role=role, page_paths=PAGE_PATHS)
         assert any(
             child["page"] == "pages/cloud_account_registry.py" for child in items[0]["children"]
         )
+    executive_items = build_persona_navigation_items(role="executive", page_paths=PAGE_PATHS)
+    assert not any(
+        child["page"] == "pages/cloud_account_registry.py"
+        for child in executive_items[0]["children"]
+    )
     assert "Cloud Account Registry" not in ROLE_PAGES.get("technical", [])
     assert "Cloud Account Registry" not in ROLE_PAGES.get("viewer", [])
 

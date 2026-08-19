@@ -386,6 +386,59 @@ financial_summary = EnterpriseFinancialModel.get_enterprise_summary()
 
 def render_business_services_content() -> None:
     render_section(
+        "Can this service safely support the business?",
+        "Start with business impact, ownership, cost, health, and the action required.",
+        divider=False,
+    )
+    selected_service = _selected_service(business_services)
+    if selected_service:
+        health = selected_service.get("health_score")
+        cost = selected_service.get("monthly_cost")
+        risk = selected_service.get("risk_score")
+        applications = selected_service.get("applications") or []
+        technologies = selected_service.get("technologies") or []
+        recommendations = _count(selected_service.get("recommendations"))
+        needs_action = recommendations > 0 or (risk is not None and float(risk) >= 35)
+        brief = st.columns([1.35, 1, 1, 1, 1, 1.15])
+        brief[0].metric("Business service", selected_service.get("name") or "UNKNOWN")
+        brief[1].metric("Health", _percent(health) if health is not None else "UNKNOWN")
+        brief[2].metric("Monthly cost", _money(cost) if cost is not None else "UNKNOWN")
+        brief[3].metric("Owner", selected_service.get("owner") or "UNMAPPED")
+        brief[4].metric("Dependencies", len(applications) + len(technologies))
+        brief[5].metric("Required action", "Review" if needs_action else "Monitor")
+        st.markdown(
+            f"**Business impact:** {selected_service.get('tier') or 'Unclassified'} service · "
+            f"SLA {selected_service.get('sla') or 'NOT ASSESSED'} · "
+            f"{len(applications)} application(s) and {len(technologies)} technology "
+            "dependency/dependencies."
+        )
+        st.info(
+            "Recommended action — Review linked recommendations and impact evidence."
+            if needs_action
+            else "Recommended action — Continue monitoring; no evidenced intervention is due."
+        )
+
+        if not st.toggle(
+            "Show operational mappings and certification detail",
+            value=False,
+            help=(
+                "Reveal application, technology, dependency, financial reconciliation, "
+                "and evidence views."
+            ),
+        ):
+            st.caption(
+                "Technical mappings and evidence are intentionally hidden in the executive view."
+            )
+            return
+
+    with st.expander("Enterprise service portfolio and certification detail"):
+        st.write(
+            f"{service_summary['business_services']:,} services connect "
+            f"{service_summary['applications']:,} applications and "
+            f"{service_summary['technologies']:,} technologies."
+        )
+
+    render_section(
         "Business Service Summary",
         "Service-centered view of business capability, application, technology, cost, health, risk, governance, and automation signals.",
         divider=False,
@@ -483,8 +536,6 @@ def render_business_services_content() -> None:
         "Service Explorer",
         "Select a business service to inspect ownership, delivery mappings, cost posture, health, risk, recommendations, and evidence.",
     )
-    selected_service = _selected_service(business_services)
-
     if not selected_service:
         st.info("No business services are available yet.")
         return
@@ -557,23 +608,17 @@ def render_business_services_content() -> None:
             status="warning" if selected_service.get("potential_savings") else "healthy",
         )
 
-    render_section(
-        "Application Mapping",
-        "Applications currently attributed to the selected business service.",
-    )
-    _show_dataframe(
-        _application_mapping(selected_service),
-        "No application mappings are available for this service yet.",
-    )
-
-    render_section(
-        "Technology Mapping",
-        "Technology platforms and cloud resource exposure supporting the selected business service.",
-    )
-    _show_dataframe(
-        _technology_mapping(selected_service),
-        "No technology mappings are available for this service yet.",
-    )
+    with st.expander("Applications, technologies, and service mappings"):
+        st.markdown("#### Application mapping")
+        _show_dataframe(
+            _application_mapping(selected_service),
+            "No application mappings are available for this service yet.",
+        )
+        st.markdown("#### Technology mapping")
+        _show_dataframe(
+            _technology_mapping(selected_service),
+            "No technology mappings are available for this service yet.",
+        )
 
     render_section(
         "Cost & Forecast",
@@ -602,25 +647,26 @@ def render_business_services_content() -> None:
         "No recommendations or automation candidates are available yet.",
     )
 
-    render_section(
-        "Service Dependency Path",
-        "Business Unit -> Capability -> Service -> Application -> Technology path for impact analysis.",
-    )
     path_df = _path_rows(selected_service, relationship_paths)
-    _show_dataframe(
-        path_df,
-        "No service dependency path is available yet.",
-    )
+    with st.expander("Dependency and Digital Twin path"):
+        st.caption(
+            "Business Unit → Capability → Service → Application → Technology impact path."
+        )
+        _show_dataframe(
+            path_df,
+            "No service dependency path is available yet.",
+        )
 
     render_section(
         "Business Service Portfolio",
         "All mapped services with ownership, cost, forecast, health, risk, and governance signals.",
     )
     portfolio_df = _service_table_rows(business_services)
-    _show_dataframe(
-        portfolio_df,
-        "No business service portfolio is available yet.",
-    )
+    with st.expander("Open complete service portfolio"):
+        _show_dataframe(
+            portfolio_df,
+            "No business service portfolio is available yet.",
+        )
 
     if business_services:
         chart_df = pd.DataFrame(
@@ -651,6 +697,12 @@ def render_business_services_content() -> None:
         "Detailed Evidence",
         "Standard evidence for source data, data coverage, relationship completeness, AI interpretation, and raw service records.",
     )
+    if not st.checkbox("Show detailed certification evidence", value=False):
+        st.caption(
+            "Source data, coverage, relationships, reconciliation, AI interpretation, "
+            "and raw records are hidden by default for executive users."
+        )
+        return
     missing_owners = sum(
         1
         for row in [*business_units, *business_services, *processes]

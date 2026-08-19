@@ -15,6 +15,11 @@ if ROOT_DIR not in sys.path:
 from components.sidebar_navigation import render_sidebar_navigation
 from decision_intelligence import DecisionIntelligenceService
 from enterprise_intelligence import enterprise_intelligence_service
+from services.demo_tenant_service import (
+    demo_mode_enabled,
+    is_demo_tenant,
+    load_demo_tenant,
+)
 from services.enterprise_spend_composition import authenticated_tenant_context
 from shared.auth import require_role
 from shared.session import init_session
@@ -27,6 +32,80 @@ require_role(ROLES)
 role = str(st.session_state.get("role") or "")
 render_sidebar_navigation(role)
 authenticated = authenticated_tenant_context(st.session_state)
+organization_id = str(st.session_state.get("organization_id") or "")
+
+if demo_mode_enabled() and is_demo_tenant(organization_id):
+    payload = load_demo_tenant(organization_id)
+    decisions = payload.get("decisions") or []
+    journeys = {item["decision_id"]: item for item in payload.get("journeys") or []}
+
+    st.markdown(
+        """
+        <section class="nexora-executive-hero">
+          <p class="nexora-eyebrow">EXECUTIVE DECISION CENTER</p>
+          <h2>Three decisions can materially change enterprise outcomes.</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption("Prioritized by impact, authority, confidence, and governed evidence.")
+    st.warning(
+        "SYNTHETIC DEMONSTRATION DATA — isolated from customer and production records."
+    )
+    summary = st.columns(4)
+    summary[0].metric("Decisions requiring action", len(decisions))
+    summary[1].metric(
+        "Known financial impact",
+        f"${sum(item.get('financial_impact') or 0 for item in decisions) / 1_000_000:.1f}M",
+    )
+    summary[2].metric(
+        "Average confidence",
+        f"{sum(item['confidence'] for item in decisions) / len(decisions):.0f}%",
+    )
+    summary[3].metric(
+        "Average evidence coverage",
+        f"{sum(item['evidence_coverage'] for item in decisions) / len(decisions):.0f}%",
+    )
+
+    st.subheader("Decisions requiring leadership attention")
+    for decision in decisions:
+        journey = journeys[decision["id"]]
+        with st.container(border=True):
+            st.caption(f"{decision['id']} · {decision['status'].replace('_', ' ').title()}")
+            st.markdown(f"## {decision['title']}")
+            impact = decision.get("financial_impact")
+            columns = st.columns(4)
+            columns[0].metric("Business service", decision["business_service"])
+            columns[1].metric(
+                "Financial impact", f"${impact / 1_000_000:.1f}M" if impact else "UNKNOWN"
+            )
+            columns[2].metric("Confidence", f"{decision['confidence']}%")
+            columns[3].metric("Evidence coverage", f"{decision['evidence_coverage']}%")
+            st.markdown(f"**Why it matters:** {journey['impact']}")
+            st.markdown(f"**Recommended decision:** {journey['recommendation']}")
+            st.info(f"Accountable next step — {journey['next_step']}")
+            path = journey.get("twin_path") or []
+            if path:
+                st.caption("Decision context · " + " → ".join(item["entity"] for item in path))
+            actions = st.columns(3)
+            with actions[0]:
+                st.page_link("pages/business_services.py", label="View Impact")
+            with actions[1]:
+                st.page_link(
+                    "pages/twin_explorer.py",
+                    label="Trace Evidence",
+                    help=(
+                        "Trace business, application, technology, cost, risk, "
+                        "and decision context."
+                    ),
+                )
+            with actions[2]:
+                st.page_link("pages/approval_center.py", label="Review Approval")
+            with st.expander("Show evidence and assumptions"):
+                st.write(journey["evidence"])
+                st.write(journey["change"])
+    st.stop()
+
 intelligence = enterprise_intelligence_service(
     authenticated.fabric_context, role=authenticated.role
 )

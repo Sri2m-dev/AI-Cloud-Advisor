@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from collections import Counter
 from uuid import UUID
 
@@ -7,14 +8,26 @@ import pandas as pd
 import streamlit as st
 
 from auth.role_constants import normalize_role
-from components.cards import render_health_card, render_insight_card, render_kpi_card, render_metric_card, render_risk_card
+from components.cards import (
+    render_health_card,
+    render_insight_card,
+    render_kpi_card,
+    render_metric_card,
+    render_risk_card,
+)
 from components.navigation.sidebar import render_enterprise_sidebar
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
-from core.digital_twin.business_twin import BusinessTwin, BusinessTwinLevel, BusinessTwinNode, HIERARCHY_ORDER
+from core.digital_twin.business_twin import (
+    HIERARCHY_ORDER,
+    BusinessTwin,
+    BusinessTwinLevel,
+    BusinessTwinNode,
+)
 from core.entities.entity import EntityRelationship, EntityType
 from repositories.entity_repository import EntityRepository
 from services.business_digital_twin_service import BusinessDigitalTwinService
-
+from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
+from shared.styles import configure_page
 
 ALLOWED_ROLES = {"super_admin", "client_admin", "executive", "cio", "finance", "technical"}
 ACTIVE_PAGE = "pages/twin_explorer.py"
@@ -460,12 +473,8 @@ def _render_live_signal_tables(signals: dict) -> None:
 def _render_enterprise_twin_home(repository: EntityRepository, signals: dict) -> None:
     entities = signals["entities"]
     relationships = signals["relationships"]
-    active_relationships = signals["active_relationships"]
     business_entities = signals["business_entities"]
     applications = signals["applications"]
-    vendors = signals["vendors"]
-    risks = signals["risks"]
-    ai_agents = signals["ai_agents"]
     technology_count = signals["technology_count"]
     relationship_coverage = signals["relationship_coverage"]
 
@@ -706,10 +715,79 @@ def render_section() -> None:
         _render_context(twin, selected_id, repository)
 
 
+def _render_demo_decision_twin(organization_id: str) -> None:
+    payload = load_demo_tenant(organization_id)
+    decisions = payload.get("decisions") or []
+    journeys = {item["decision_id"]: item for item in payload.get("journeys") or []}
+    labels = {f"{item['id']} · {item['title']}": item for item in decisions}
+    requested_id = str(st.session_state.get("executive_decision_id") or "")
+    selected_index = next(
+        (index for index, item in enumerate(decisions) if item["id"] == requested_id),
+        0,
+    )
+
+    st.title("Decision Digital Twin")
+    st.caption(
+        "Trace an executive decision from business service through technology, cost, risk, "
+        "evidence, and accountable action."
+    )
+    st.warning("SYNTHETIC DEMONSTRATION DATA — isolated from production records.")
+    selected_label = st.selectbox("Executive decision", list(labels), index=selected_index)
+    decision = labels[selected_label]
+    st.session_state["executive_decision_id"] = decision["id"]
+    journey = journeys[decision["id"]]
+    impact = decision.get("financial_impact")
+
+    st.markdown(f"## {decision['title']}")
+    metrics = st.columns(4)
+    metrics[0].metric("Business service", decision["business_service"])
+    metrics[1].metric(
+        "Financial impact", f"${impact / 1_000_000:.1f}M" if impact else "UNKNOWN"
+    )
+    metrics[2].metric("Confidence", f"{decision['confidence']}%")
+    metrics[3].metric("Evidence coverage", f"{decision['evidence_coverage']}%")
+
+    st.subheader("Business-to-decision trace")
+    st.caption("Follow the governed relationship from business outcome to accountable action.")
+    path = journey.get("twin_path") or []
+    nodes = "".join(
+        "<div class='nexora-twin-node'>"
+        f"<span>{html.escape(str(item['layer']).upper())}</span>"
+        f"<strong>{html.escape(str(item['entity']))}</strong></div>"
+        + ("<div class='nexora-twin-arrow' aria-hidden='true'>→</div>" if index < len(path) - 1 else "")
+        for index, item in enumerate(path)
+    )
+    st.markdown(f"<div class='nexora-twin-path'>{nodes}</div>", unsafe_allow_html=True)
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Decision case")
+        st.markdown(f"**What changed:** {journey['change']}")
+        st.markdown(f"**Business impact:** {journey['impact']}")
+        st.markdown(f"**Recommendation:** {journey['recommendation']}")
+    with right:
+        st.subheader("Authority and evidence")
+        st.markdown(f"**Status:** {decision['status'].replace('_', ' ').title()}")
+        st.markdown(f"**Evidence:** {journey['evidence']}")
+        st.info(f"Next accountable step — {journey['next_step']}")
+
+    actions = st.columns(3)
+    with actions[0]:
+        st.page_link("pages/decision_intelligence.py", label="Back to executive decisions")
+    with actions[1]:
+        st.page_link("pages/business_services.py", label="Open business services")
+    with actions[2]:
+        st.page_link("pages/approval_center.py", label="Open approval path")
+
+
 def render_page() -> None:
-    st.set_page_config(page_title="Twin Explorer", layout="wide")
+    configure_page(page_title="Decision Digital Twin | Nexora", page_icon="N")
     _require_authorized_role()
     _render_sidebar()
+    organization_id = str(st.session_state.get("organization_id") or "")
+    if demo_mode_enabled() and is_demo_tenant(organization_id):
+        _render_demo_decision_twin(organization_id)
+        return
     render_section()
 
 
