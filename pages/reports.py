@@ -31,6 +31,8 @@ from services.reporting_service import (
 from services.reports_certification_service import ReportsCertificationService
 from services.supabase_client import supabase
 from shared.auth import require_role
+from shared.currency import format_currency_amount
+from shared.evidence_context import resolve_active_evidence_context
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -504,6 +506,38 @@ render_page(
     content=None,
     show_footer=False,
 )
+
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    analysis = evidence_context.prospect_analysis
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.markdown("### Prospect Board Pack")
+    if getattr(analysis, "currency_resolution_required", True):
+        st.warning("Currency could not be determined from the uploaded evidence.")
+    else:
+        metrics = st.columns(4)
+        metrics[0].metric(
+            "Observed spend",
+            format_currency_amount(analysis.total_spend, analysis.currency),
+        )
+        metrics[1].metric("Evidence rows", f"{analysis.row_count:,}")
+        metrics[2].metric("Evidence coverage", f"{analysis.evidence_coverage:.1f}%")
+        metrics[3].metric(
+            "Qualified opportunity",
+            format_currency_amount(
+                analysis.opportunity_evidence_qualified, analysis.currency
+            ),
+        )
+    st.info(
+        "Tenant and synthetic reporting engines are disabled while prospect mode is active. "
+        "The prospect pack contains only uploaded evidence and explicit UNKNOWN states."
+    )
+    st.page_link(
+        "pages/prospect_data_intake.py",
+        label="Open governed prospect pack",
+        use_container_width=True,
+    )
+    st.stop()
 
 summary = get_executive_summary()
 recommendations = get_recommendation_summary()

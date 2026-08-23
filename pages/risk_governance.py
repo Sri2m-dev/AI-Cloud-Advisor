@@ -32,6 +32,7 @@ from components.tables import data_table
 from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
 from services.risk_governance_certification_service import RiskGovernanceCertificationService
 from shared.auth import require_role
+from shared.evidence_context import resolve_active_evidence_context
 from shared.session import init_session
 from shared.streamlit_compat import dataframe, plotly_chart
 from shared.styles import configure_page
@@ -60,6 +61,17 @@ render_enterprise_sidebar(
     role_pages=ROLE_PAGES,
     active_page=PAGE_PATHS["Risk & Governance"],
 )
+
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    st.title("Risk & Governance")
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.info("Risk is not assessed from current uploaded evidence.")
+    st.write(
+        "No governed risk, control, concentration, service-health, or financial-impact "
+        "conclusion is supported by this prospect analysis."
+    )
+    st.stop()
 
 
 def render_demo_risk_governance(payload: dict) -> None:

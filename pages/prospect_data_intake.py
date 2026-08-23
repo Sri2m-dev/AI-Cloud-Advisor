@@ -12,11 +12,13 @@ from services.prospect_data_intake_service import (
     PROSPECT_WATERMARK,
     SUPPORTED_PROFILES,
     ProspectIntakeError,
+    confirm_analysis_currency,
     create_prospect_tenant,
     ingest_upload,
     prospect_encryption_key,
     record_activity,
 )
+from shared.currency import SUPPORTED_CURRENCIES, format_currency_amount
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -29,18 +31,23 @@ if role not in {"sales_engineer", "finance"}:
 render_sidebar_navigation(role)
 
 
-def _money(value: float, currency: str) -> str:
-    prefix = {"USD": "$", "INR": "\u20b9", "EUR": "\u20ac", "GBP": "\u00a3"}.get(
-        currency, ""
-    )
-    return f"{prefix}{value:,.0f}" if prefix else f"{value:,.0f} {currency}"
-
-
 def _board_pack_html(prospect_name: str, analysis) -> str:
     metadata = asdict(analysis)
+    monetary_fields = {
+        "total_spend",
+        "cloud_spend",
+        "saas_spend",
+        "other_spend",
+        "unclassified_spend",
+        "opportunity_identified",
+        "opportunity_evidence_qualified",
+        "opportunity_recommended",
+        "opportunity_approved",
+        "opportunity_realized",
+    }
     rows = "".join(
         f"<tr><th>{html.escape(key.replace('_', ' ').title())}</th>"
-        f"<td>{html.escape(str(value))}</td></tr>"
+        f"<td>{html.escape(format_currency_amount(value, analysis.currency) if key in monetary_fields else str(value))}</td></tr>"  # noqa: E501
         for key, value in metadata.items()
     )
     return (
@@ -166,21 +173,54 @@ if st.button("Create temporary analysis", type="primary", use_container_width=Tr
 
 analysis = st.session_state.get("prospect_analysis")
 if analysis:
+    if analysis.currency_resolution_required:
+        st.divider()
+        if analysis.currency_source == "MIXED_EVIDENCE":
+            st.error(
+                "Multiple currencies were detected: "
+                + ", ".join(analysis.detected_currencies)
+                + ". Monetary values have not been aggregated. FX conversion is not supported."
+            )
+        else:
+            st.warning("Currency could not be determined from the uploaded evidence.")
+            selected_currency = st.selectbox(
+                "Currency", SUPPORTED_CURRENCIES, key="intake_currency_selection"
+            )
+            confirmed = st.checkbox(
+                "I confirm that the selected currency applies to the uploaded evidence.",
+                key="intake_currency_confirmation",
+            )
+            if st.button("Confirm currency", type="primary", use_container_width=True):
+                try:
+                    analysis = confirm_analysis_currency(
+                        st.session_state["prospect_tenant"],
+                        analysis=analysis,
+                        selected_currency=selected_currency,
+                        confirmed=confirmed,
+                        actor=str(st.session_state.get("user_email") or "unknown"),
+                        role=role,
+                        key=prospect_encryption_key(),
+                    )
+                    st.session_state["prospect_analysis"] = analysis
+                    st.rerun()
+                except ProspectIntakeError as exc:
+                    st.error(str(exc))
+        st.stop()
     st.divider()
     st.caption(PROSPECT_WATERMARK.upper())
     st.header(f"{st.session_state['prospect_name']} — Prospect Analysis")
     primary = st.columns(4)
-    primary[0].metric("Technology spend", _money(analysis.total_spend, analysis.currency))
-    primary[1].metric("Cloud", _money(analysis.cloud_spend, analysis.currency))
-    primary[2].metric("SaaS", _money(analysis.saas_spend, analysis.currency))
-    primary[3].metric("Other technology", _money(analysis.other_spend, analysis.currency))
+    primary[0].metric("Technology spend", format_currency_amount(analysis.total_spend, analysis.currency))
+    primary[1].metric("Cloud", format_currency_amount(analysis.cloud_spend, analysis.currency))
+    primary[2].metric("SaaS", format_currency_amount(analysis.saas_spend, analysis.currency))
+    primary[3].metric("Other technology", format_currency_amount(analysis.other_spend, analysis.currency))
     quality = st.columns(4)
     quality[0].metric(
         "Evidence-qualified opportunity",
-        _money(analysis.opportunity_evidence_qualified, analysis.currency),
+        format_currency_amount(analysis.opportunity_evidence_qualified, analysis.currency),
     )
     quality[1].metric("Evidence coverage", f"{analysis.evidence_coverage:.1f}%")
-    quality[2].metric("Unclassified spend", _money(analysis.unclassified_spend, analysis.currency))
+    quality[2].metric("Unclassified spend", format_currency_amount(analysis.unclassified_spend, analysis.currency))
     quality[3].metric("Confidence", f"{analysis.confidence:.1f}%")
 
     st.subheader("Value maturity")
@@ -196,7 +236,7 @@ if analysis:
         ),
         strict=True,
     ):
-        column.metric(label, _money(value, analysis.currency))
+        column.metric(label, format_currency_amount(value, analysis.currency))
 
     st.subheader("Ask Nexora")
     question = st.selectbox(
@@ -210,8 +250,8 @@ if analysis:
     )
     if question == "Where can I reduce cost?":
         st.info(
-            f"{_money(analysis.opportunity_identified, analysis.currency)} is identified and "
-            f"{_money(analysis.opportunity_evidence_qualified, analysis.currency)} is evidence "
+            f"{format_currency_amount(analysis.opportunity_identified, analysis.currency)} is identified and "
+            f"{format_currency_amount(analysis.opportunity_evidence_qualified, analysis.currency)} is evidence "
             "qualified. No amount is called recommended, approved, or realized without the "
             "corresponding evidence and authority."
         )
@@ -223,7 +263,7 @@ if analysis:
         )
     else:
         st.info(
-            f"{_money(analysis.unclassified_spend, analysis.currency)} remains unclassified. "
+            f"{format_currency_amount(analysis.unclassified_spend, analysis.currency)} remains unclassified. "
             "Business-service, application, ownership, and risk attribution remain UNKNOWN "
             "unless those evidence fields were supplied."
         )

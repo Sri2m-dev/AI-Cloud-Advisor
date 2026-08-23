@@ -11,12 +11,14 @@ from services.prospect_data_intake_service import (
     PROSPECT_CLASSIFICATION,
     SUPPORTED_PROFILES,
     ProspectIntakeError,
+    confirm_analysis_currency,
     create_prospect_tenant,
     ingest_upload,
     load_analysis,
     purge_tenant,
     scan_upload,
 )
+from shared.currency import format_currency_amount
 
 
 @pytest.fixture
@@ -42,8 +44,26 @@ def test_tenant_requires_consent_and_authorized_role(tmp_path: Path, key: bytes)
         )
     with pytest.raises(ProspectIntakeError, match="Sales Engineer"):
         create_prospect_tenant(
-            "ABC", consent=True, actor="x", role="executive", root=tmp_path, key=key
+            "ABC", consent=True, actor="x", role="viewer", root=tmp_path, key=key
         )
+    executive_tenant = create_prospect_tenant(
+        "ABC Executive",
+        consent=True,
+        actor="executive@example.com",
+        role="executive",
+        root=tmp_path,
+        key=key,
+    )
+    sales_tenant = create_prospect_tenant(
+        "ABC Sales",
+        consent=True,
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert executive_tenant.tenant_id.startswith("prospect-")
+    assert sales_tenant.tenant_id.startswith("prospect-")
 
 
 def test_tenant_has_unique_ids_and_30_day_expiration(tmp_path: Path, key: bytes) -> None:
@@ -192,3 +212,138 @@ def test_invalid_encryption_key_cannot_read_analysis(tmp_path: Path, key: bytes)
     )
     with pytest.raises(ProspectIntakeError, match="cannot be read"):
         load_analysis(tenant.tenant_id, root=tmp_path, key=Fernet.generate_key())
+
+
+@pytest.mark.parametrize("currency", ("USD", "INR"))
+def test_evidence_currency_is_resolved(
+    currency: str, tmp_path: Path, key: bytes
+) -> None:
+    tenant = _tenant(tmp_path, key)
+    analysis = ingest_upload(
+        tenant,
+        profile="Generic technology-cost Excel/CSV",
+        filename="cost.csv",
+        content=f"provider,cost,currency\nAWS,100,{currency}\n".encode(),
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert analysis.currency == currency
+    assert analysis.currency_source == "EVIDENCE"
+    assert analysis.currency_resolution_required is False
+
+
+def test_missing_currency_requires_resolution_without_inference(
+    tmp_path: Path, key: bytes
+) -> None:
+    tenant = _tenant(tmp_path, key)
+    analysis = ingest_upload(
+        tenant,
+        profile="AWS billing/CUR-derived CSV",
+        filename="aws.csv",
+        content=b"provider,cost\nAWS,100\n",
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert analysis.currency is None
+    assert analysis.currency_source == "UNRESOLVED"
+    assert analysis.currency_resolution_required is True
+
+
+def test_user_can_confirm_missing_currency_for_current_analysis(
+    tmp_path: Path, key: bytes
+) -> None:
+    tenant = _tenant(tmp_path, key)
+    analysis = ingest_upload(
+        tenant,
+        profile="AWS billing/CUR-derived CSV",
+        filename="aws.csv",
+        content=b"provider,cost\nAWS,100\n",
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    resolved = confirm_analysis_currency(
+        tenant,
+        analysis=analysis,
+        selected_currency="USD",
+        confirmed=True,
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert resolved.currency == "USD"
+    assert resolved.currency_source == "USER_CONFIRMED"
+    assert resolved.currency_resolution_required is False
+    assert resolved.currency_confirmed_by == "sales@example.com"
+    assert resolved.currency_confirmed_at
+    assert load_analysis(tenant.tenant_id, root=tmp_path, key=key) == resolved
+
+
+def test_mixed_currency_evidence_is_not_aggregated(
+    tmp_path: Path, key: bytes
+) -> None:
+    tenant = _tenant(tmp_path, key)
+    analysis = ingest_upload(
+        tenant,
+        profile="Generic technology-cost Excel/CSV",
+        filename="mixed.csv",
+        content=b"provider,cost,currency\nAWS,100,USD\nAzure,200,INR\n",
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert analysis.currency is None
+    assert analysis.total_spend is None
+    assert analysis.currency_source == "MIXED_EVIDENCE"
+    assert analysis.currency_resolution_required is True
+    assert analysis.detected_currencies == ("INR", "USD")
+
+
+def test_cur_shape_preserves_rows_and_cost_before_and_after_confirmation(
+    tmp_path: Path, key: bytes
+) -> None:
+    tenant = _tenant(tmp_path, key)
+    costs = ["1"] * 183 + [str(861_828 - 183)]
+    content = ("provider,service,cost\n" + "".join(f"AWS,EC2,{cost}\n" for cost in costs)).encode()
+    analysis = ingest_upload(
+        tenant,
+        profile="AWS billing/CUR-derived CSV",
+        filename="CUR Jan 2026.csv",
+        content=content,
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert analysis.row_count == 184
+    assert analysis.total_spend == 861_828
+    assert analysis.currency_resolution_required is True
+    resolved = confirm_analysis_currency(
+        tenant,
+        analysis=analysis,
+        selected_currency="USD",
+        confirmed=True,
+        actor="sales@example.com",
+        role="sales_engineer",
+        root=tmp_path,
+        key=key,
+    )
+    assert resolved.row_count == 184
+    assert format_currency_amount(resolved.total_spend, resolved.currency) == "$861,828"
+    assert resolved.currency_source == "USER_CONFIRMED"
+
+
+@pytest.mark.parametrize(
+    ("currency", "expected"),
+    (("USD", "$861,828"), ("INR", "₹861,828"), ("EUR", "€861,828"),
+     ("GBP", "£861,828"), ("AUD", "AUD 861,828")),
+)
+def test_shared_currency_formatting(currency: str, expected: str) -> None:
+    assert format_currency_amount(861_828, currency) == expected

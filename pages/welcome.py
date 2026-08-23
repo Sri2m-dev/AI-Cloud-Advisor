@@ -7,6 +7,8 @@ import streamlit as st
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import render_sidebar_navigation
 from services.demo_tenant_service import demo_mode_enabled, load_demo_tenant
+from shared.currency import format_currency_amount
+from shared.evidence_context import clear_prospect_context
 from shared.auth import require_role
 from shared.session import init_session
 from shared.styles import configure_page
@@ -26,7 +28,186 @@ is_demo = demo_mode_enabled() and (
     organization_id.startswith("demo-") or organization_id.startswith("de000000-")
 )
 
-if is_demo:
+prospect_result = st.session_state.get("prospect_analysis")
+prospect_name = str(
+    st.session_state.get("prospect_name") or "Uploaded Environment"
+).strip()
+
+if prospect_result and not getattr(prospect_result, "currency_resolution_required", True):
+    currency = str(prospect_result.currency)
+    money = lambda value: format_currency_amount(value, currency)
+    total_spend = float(getattr(prospect_result, "total_spend", 0) or 0)
+    cloud_spend = float(getattr(prospect_result, "cloud_spend", 0) or 0)
+    saas_spend = float(getattr(prospect_result, "saas_spend", 0) or 0)
+    other_spend = float(getattr(prospect_result, "other_spend", 0) or 0)
+    unclassified_spend = float(
+        getattr(prospect_result, "unclassified_spend", 0) or 0
+    )
+    evidence_coverage = float(
+        getattr(prospect_result, "evidence_coverage", 0) or 0
+    )
+    confidence = float(getattr(prospect_result, "confidence", 0) or 0)
+    qualified_opportunity = float(
+        getattr(prospect_result, "opportunity_evidence_qualified", 0) or 0
+    )
+    identified_opportunity = float(
+        getattr(prospect_result, "opportunity_identified", 0) or 0
+    )
+    row_count = int(getattr(prospect_result, "row_count", 0) or 0)
+
+    st.markdown(
+        f"""
+        <section class="nexora-os-hero">
+          <div>
+            <p class="nexora-eyebrow">TEMPORARY PROSPECT ANALYSIS</p>
+            <h1>{html.escape(prospect_name)}</h1>
+            <p class="nexora-os-summary">
+              Nexora analysed <strong>{row_count:,} governed evidence rows</strong>
+              representing <strong>{money(total_spend)}</strong> of normalized spend.
+              Evidence coverage is <strong>{evidence_coverage:.1f}%</strong>.
+            </p>
+          </div>
+          <div class="nexora-os-score">
+            <span>Evidence coverage</span>
+            <strong>{evidence_coverage:.0f}%</strong>
+            <small>Temporary governed analysis</small>
+          </div>
+        </section>
+
+        <section class="nexora-posture-strip" aria-label="Uploaded evidence posture">
+          <article class="nexora-domain-card technology">
+            <span aria-hidden="true">&#9672;</span>
+            <small>Total normalized spend</small>
+            <strong>{money(total_spend)}</strong>
+            <em>Uploaded evidence</em>
+          </article>
+          <article class="nexora-domain-card finance">
+            <span aria-hidden="true">&#36;</span>
+            <small>Qualified opportunity</small>
+            <strong>{money(qualified_opportunity)}</strong>
+            <em>Evidence qualified</em>
+          </article>
+          <article class="nexora-domain-card risk">
+            <span aria-hidden="true">&#9888;</span>
+            <small>Unclassified spend</small>
+            <strong>{money(unclassified_spend)}</strong>
+            <em>Requires classification</em>
+          </article>
+          <article class="nexora-domain-card business">
+            <span aria-hidden="true">&#9638;</span>
+            <small>Evidence rows</small>
+            <strong>{row_count:,}</strong>
+            <em>Normalized records</em>
+          </article>
+          <article class="nexora-domain-card ai">
+            <span aria-hidden="true">&#10022;</span>
+            <small>Confidence</small>
+            <strong>{confidence:.0f}%</strong>
+            <em>Evidence-derived</em>
+          </article>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.warning(
+        "PROSPECT DEMONSTRATION DATA · Temporary Analysis · "
+        "Not Certified Production Data"
+    )
+
+    quick = st.columns(4)
+    with quick[0]:
+        st.page_link(
+            "pages/analyze_environment.py",
+            label="Review Analysis",
+            use_container_width=True,
+        )
+    with quick[1]:
+        st.page_link(
+            "pages/enterprise_ai_copilot.py",
+            label="Ask Nexora",
+            use_container_width=True,
+        )
+    with quick[2]:
+        st.page_link(
+            "pages/reports.py",
+            label="Prepare Board Pack",
+            use_container_width=True,
+        )
+    with quick[3]:
+        if st.button(
+            "Return to Demo Enterprise",
+            use_container_width=True,
+            key="return_to_demo_enterprise",
+        ):
+            clear_prospect_context(st.session_state)
+            st.rerun()
+
+    st.markdown("### Spend composition")
+    spend = st.columns(4)
+    spend[0].metric("Total spend", money(total_spend))
+    spend[1].metric("Cloud spend", money(cloud_spend))
+    spend[2].metric("SaaS spend", money(saas_spend))
+    spend[3].metric("Other spend", money(other_spend))
+
+    st.markdown("### Evidence and opportunity")
+    evidence = st.columns(4)
+    evidence[0].metric("Evidence coverage", f"{evidence_coverage:.1f}%")
+    evidence[1].metric("Confidence", f"{confidence:.1f}%")
+    evidence[2].metric(
+        "Identified opportunity",
+        money(identified_opportunity),
+    )
+    evidence[3].metric(
+        "Qualified opportunity",
+        money(qualified_opportunity),
+    )
+
+    with st.container(border=True):
+        st.markdown("### Executive interpretation")
+        st.write(
+            f"Nexora has validated and normalized {row_count:,} uploaded evidence rows "
+            f"for {prospect_name}. The current evidence represents "
+            f"{money(total_spend)} of normalized spend."
+        )
+
+        if qualified_opportunity > 0:
+            st.write(
+                f"{money(qualified_opportunity)} is currently "
+                "evidence-qualified as an opportunity."
+            )
+        elif identified_opportunity > 0:
+            st.write(
+                f"{money(identified_opportunity)} of opportunity was identified, "
+                "but it has not yet met the evidence qualification threshold."
+            )
+        else:
+            st.write(
+                "No savings opportunity is currently evidenced by the uploaded dataset. "
+                "Nexora will not invent an opportunity where the source evidence does not support one."
+            )
+
+        if unclassified_spend > 0:
+            st.write(
+                f"{money(unclassified_spend)} remains unclassified and should "
+                "be enriched before stronger business conclusions are made."
+            )
+
+elif prospect_result:
+    st.warning("Currency could not be determined from the uploaded evidence.")
+    if getattr(prospect_result, "currency_source", "") == "MIXED_EVIDENCE":
+        st.error(
+            "Multiple currencies were detected: "
+            + ", ".join(getattr(prospect_result, "detected_currencies", ()))
+            + ". Monetary totals are not available without separated evidence."
+        )
+    st.page_link(
+        "pages/analyze_environment.py",
+        label="Resolve currency in Analyze Environment",
+        use_container_width=True,
+    )
+
+elif is_demo:
     demo = load_demo_tenant(organization_id)
     metrics = demo.get("metrics", {})
     story = demo.get("story", {})

@@ -28,6 +28,7 @@ from repositories.entity_repository import EntityRepository
 from services.business_digital_twin_service import BusinessDigitalTwinService
 from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
 from shared.styles import configure_page
+from shared.evidence_context import resolve_active_evidence_context
 
 ALLOWED_ROLES = {"super_admin", "client_admin", "executive", "cio", "finance", "technical"}
 ACTIVE_PAGE = "pages/twin_explorer.py"
@@ -784,6 +785,19 @@ def render_page() -> None:
     configure_page(page_title="Decision Digital Twin | Nexora", page_icon="N")
     _require_authorized_role()
     _render_sidebar()
+    evidence_context = resolve_active_evidence_context(st.session_state)
+    if evidence_context.is_prospect:
+        st.title("Digital Twin")
+        st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+        st.info(
+            "The current upload does not contain sufficient governed relationship evidence "
+            "to build a Digital Twin."
+        )
+        st.write(
+            "Business services, applications, dependencies, risks, owners, and decision paths "
+            "remain UNKNOWN. No tenant or synthetic graph is displayed."
+        )
+        return
     organization_id = str(st.session_state.get("organization_id") or "")
     if demo_mode_enabled() and is_demo_tenant(organization_id):
         _render_demo_decision_twin(organization_id)

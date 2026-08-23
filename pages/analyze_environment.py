@@ -28,10 +28,12 @@ from services.prospect_data_intake_service import (  # noqa: E402
     PROSPECT_WATERMARK,
     SUPPORTED_PROFILES,
     ProspectIntakeError,
+    confirm_analysis_currency,
     create_prospect_tenant,
     ingest_upload,
     prospect_encryption_key,
 )
+from shared.currency import SUPPORTED_CURRENCIES, format_currency_amount  # noqa: E402
 from shared.auth import require_role  # noqa: E402
 from shared.session import init_session  # noqa: E402
 from shared.styles import configure_page  # noqa: E402
@@ -121,8 +123,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-connector_admin = role in {"sales_engineer", "client_admin", "super_admin"}
-upload_operator = role in {"sales_engineer", "finance"}
+connector_admin = role in {
+    "executive",
+    "sales_engineer",
+    "client_admin",
+    "super_admin",
+}
+upload_operator = role in {
+    "executive",
+    "sales_engineer",
+    "finance",
+    "client_admin",
+    "super_admin",
+}
 organization_id = str(st.session_state.get("organization_id") or "")
 demo_available = demo_mode_enabled() and is_demo_tenant(organization_id)
 selected_path = st.session_state.get("analysis_start_path")
@@ -519,6 +532,46 @@ if cloud_result:
 
 prospect_result = st.session_state.get("prospect_analysis")
 if prospect_result and selected_path == "upload":
+    if prospect_result.currency_resolution_required:
+        _step_header(
+            4,
+            "Currency resolution required",
+            "Currency could not be determined from the uploaded evidence."
+            if prospect_result.currency_source != "MIXED_EVIDENCE"
+            else "Multiple currencies were detected in the uploaded evidence.",
+        )
+        if prospect_result.currency_source == "MIXED_EVIDENCE":
+            st.error(
+                "Currencies detected: "
+                + ", ".join(prospect_result.detected_currencies)
+                + ". Monetary values have not been aggregated. Split the evidence by currency; "
+                "FX conversion is not supported."
+            )
+        else:
+            st.warning("Currency could not be determined from the uploaded evidence.")
+            selected_currency = st.selectbox(
+                "Currency", SUPPORTED_CURRENCIES, key="prospect_currency_selection"
+            )
+            currency_confirmed = st.checkbox(
+                "I confirm that the selected currency applies to the uploaded evidence.",
+                key="prospect_currency_confirmation",
+            )
+            if st.button("Confirm currency", type="primary", use_container_width=True):
+                try:
+                    resolved = confirm_analysis_currency(
+                        st.session_state["prospect_tenant"],
+                        analysis=prospect_result,
+                        selected_currency=selected_currency,
+                        confirmed=currency_confirmed,
+                        actor=str(st.session_state.get("user_email") or "unknown"),
+                        role=role,
+                        key=prospect_encryption_key(),
+                    )
+                    st.session_state["prospect_analysis"] = resolved
+                    st.rerun()
+                except ProspectIntakeError as exc:
+                    st.error(str(exc))
+        st.stop()
     _step_header(
         4,
         "Prospect brief ready",
@@ -538,13 +591,15 @@ if prospect_result and selected_path == "upload":
     result_metrics = st.columns(4)
     result_metrics[0].metric(
         "Normalized spend",
-        f"{prospect_result.currency} {prospect_result.total_spend:,.0f}",
+        format_currency_amount(prospect_result.total_spend, prospect_result.currency),
     )
     result_metrics[1].metric("Evidence rows", f"{prospect_result.row_count:,}")
     result_metrics[2].metric("Evidence coverage", f"{prospect_result.evidence_coverage:.1f}%")
     result_metrics[3].metric(
         "Qualified opportunity",
-        f"{prospect_result.currency} {prospect_result.opportunity_evidence_qualified:,.0f}",
+        format_currency_amount(
+            prospect_result.opportunity_evidence_qualified, prospect_result.currency
+        ),
     )
     st.page_link(
         "pages/prospect_data_intake.py",

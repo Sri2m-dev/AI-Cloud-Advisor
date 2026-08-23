@@ -22,6 +22,7 @@ from services.demo_tenant_service import (
 )
 from services.enterprise_spend_composition import authenticated_tenant_context
 from shared.auth import require_role
+from shared.evidence_context import resolve_active_evidence_context
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -31,6 +32,16 @@ init_session()
 require_role(ROLES)
 role = str(st.session_state.get("role") or "")
 render_sidebar_navigation(role)
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    st.title("Executive Decisions")
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.info("No governed decisions evidenced by this analysis.")
+    st.write(
+        "Decision identifiers, recommendations, approvals, and financial impacts remain UNKNOWN "
+        "until supported by uploaded prospect evidence."
+    )
+    st.stop()
 authenticated = authenticated_tenant_context(st.session_state)
 organization_id = str(st.session_state.get("organization_id") or "")
 

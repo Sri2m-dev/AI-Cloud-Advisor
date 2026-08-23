@@ -15,12 +15,22 @@ from uuid import uuid4
 import pandas as pd
 from cryptography.fernet import Fernet, InvalidToken
 
+from shared.currency import SUPPORTED_CURRENCIES, normalize_currency
+
 PROSPECT_CLASSIFICATION = "PROSPECT_DEMONSTRATION_DATA"
 PROSPECT_WATERMARK = "Prospect Demonstration · Temporary Analysis · Not Certified Production Data"
 DEFAULT_RETENTION_DAYS = 30
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
-ALLOWED_ROLES = frozenset({"sales_engineer", "finance"})
+ALLOWED_ROLES = frozenset(
+    {
+        "executive",
+        "sales_engineer",
+        "finance",
+        "client_admin",
+        "super_admin",
+    }
+)
 SUPPORTED_PROFILES = (
     "AWS billing/CUR-derived CSV",
     "Azure cost export",
@@ -52,12 +62,17 @@ class ProspectAnalysis:
     audit_id: str
     analysis_timestamp: str
     expires_at: str
-    total_spend: float
-    currency: str
-    cloud_spend: float
-    saas_spend: float
-    other_spend: float
-    unclassified_spend: float
+    total_spend: float | None
+    currency: str | None
+    currency_source: str
+    currency_resolution_required: bool
+    detected_currencies: tuple[str, ...]
+    currency_confirmed_by: str | None
+    currency_confirmed_at: str | None
+    cloud_spend: float | None
+    saas_spend: float | None
+    other_spend: float | None
+    unclassified_spend: float | None
     evidence_coverage: float
     confidence: float
     opportunity_identified: float
@@ -108,8 +123,13 @@ def prospect_encryption_key() -> str:
 
 
 def _require_role(role: str) -> None:
-    if str(role or "").strip().lower() not in ALLOWED_ROLES:
-        raise ProspectIntakeError("prospect intake requires Sales Engineer or Finance Operator")
+    normalized_role = str(role or "").strip().lower()
+
+    if normalized_role not in ALLOWED_ROLES:
+        raise ProspectIntakeError(
+            "prospect intake requires Executive, Sales Engineer, Finance Operator, "
+            "Client Administrator, or Super Administrator authorization"
+        )
 
 
 def _tenant_dir(tenant_id: str, root: Path = STORE_ROOT) -> Path:
@@ -312,7 +332,7 @@ def normalize_upload(profile: str, filename: str, content: bytes) -> pd.DataFram
     canonical["potential_savings"] = pd.to_numeric(
         canonical["potential_savings"], errors="coerce"
     )
-    canonical["currency"] = canonical["currency"].fillna("UNKNOWN").astype(str)
+    canonical["currency"] = canonical["currency"].apply(normalize_currency)
     canonical["provider"] = canonical["provider"].fillna("UNKNOWN").astype(str)
     canonical["service"] = canonical["service"].fillna("UNKNOWN").astype(str)
     canonical["source_profile"] = profile
@@ -321,6 +341,12 @@ def normalize_upload(profile: str, filename: str, content: bytes) -> pd.DataFram
 
 def _analyze(tenant: ProspectTenant, frame: pd.DataFrame) -> ProspectAnalysis:
     total = float(frame["cost"].sum())
+    detected_currencies = tuple(sorted(set(frame["currency"].dropna())))
+    mixed_currency = len(detected_currencies) > 1
+    currency = detected_currencies[0] if len(detected_currencies) == 1 else None
+    currency_source = "MIXED_EVIDENCE" if mixed_currency else (
+        "EVIDENCE" if currency else "UNRESOLVED"
+    )
     provider_text = frame["provider"].str.lower()
     profile_text = frame["source_profile"].str.lower()
     cloud_mask = provider_text.str.contains("aws|azure|gcp|google|cloud", regex=True) | (
@@ -345,16 +371,21 @@ def _analyze(tenant: ProspectTenant, frame: pd.DataFrame) -> ProspectAnalysis:
         audit_id=tenant.audit_id,
         analysis_timestamp=_utc_now().isoformat(),
         expires_at=tenant.expires_at,
-        total_spend=total,
-        currency=next((value for value in frame["currency"] if value != "UNKNOWN"), "UNKNOWN"),
-        cloud_spend=float(frame.loc[cloud_mask, "cost"].sum()),
-        saas_spend=float(frame.loc[saas_mask, "cost"].sum()),
-        other_spend=float(frame.loc[~(cloud_mask | saas_mask), "cost"].sum()),
-        unclassified_spend=unclassified,
+        total_spend=None if mixed_currency else total,
+        currency=currency,
+        currency_source=currency_source,
+        currency_resolution_required=currency is None,
+        detected_currencies=detected_currencies,
+        currency_confirmed_by=None,
+        currency_confirmed_at=None,
+        cloud_spend=None if mixed_currency else float(frame.loc[cloud_mask, "cost"].sum()),
+        saas_spend=None if mixed_currency else float(frame.loc[saas_mask, "cost"].sum()),
+        other_spend=None if mixed_currency else float(frame.loc[~(cloud_mask | saas_mask), "cost"].sum()),
+        unclassified_spend=None if mixed_currency else unclassified,
         evidence_coverage=evidence_coverage,
         confidence=confidence,
-        opportunity_identified=identified,
-        opportunity_evidence_qualified=qualified,
+        opportunity_identified=0.0 if mixed_currency else identified,
+        opportunity_evidence_qualified=0.0 if mixed_currency else qualified,
         opportunity_recommended=0.0,
         opportunity_approved=0.0,
         opportunity_realized=0.0,
@@ -415,7 +446,76 @@ def load_analysis(
     payload = json.loads(
         _read_encrypted(_tenant_dir(tenant_id, root) / "analysis.enc", cipher).decode("utf-8")
     )
+    legacy_currency = normalize_currency(payload.get("currency"))
+    payload["currency"] = legacy_currency
+    payload.setdefault("currency_source", "EVIDENCE" if legacy_currency else "UNRESOLVED")
+    payload.setdefault("currency_resolution_required", legacy_currency is None)
+    payload.setdefault("currency_confirmed_by", None)
+    payload.setdefault("currency_confirmed_at", None)
+    payload.setdefault(
+        "detected_currencies", (legacy_currency,) if legacy_currency else ()
+    )
+    payload["detected_currencies"] = tuple(payload.get("detected_currencies", ()))
     return ProspectAnalysis(**payload)
+
+
+def confirm_analysis_currency(
+    tenant: ProspectTenant,
+    *,
+    analysis: ProspectAnalysis,
+    selected_currency: str,
+    confirmed: bool,
+    actor: str,
+    role: str,
+    root: Path = STORE_ROOT,
+    key: str | bytes | None = None,
+) -> ProspectAnalysis:
+    """Persist an explicit, auditable currency decision for this prospect analysis."""
+    _require_role(role)
+    currency = normalize_currency(selected_currency)
+    if not confirmed:
+        raise ProspectIntakeError("explicit currency confirmation is required")
+    if currency not in SUPPORTED_CURRENCIES:
+        raise ProspectIntakeError("unsupported currency selection")
+    if analysis.tenant_id != tenant.tenant_id or analysis.audit_id != tenant.audit_id:
+        raise ProspectIntakeError("currency confirmation does not match the current analysis")
+    if not analysis.currency_resolution_required:
+        raise ProspectIntakeError("currency is already resolved from the uploaded evidence")
+    if analysis.currency_source == "MIXED_EVIDENCE":
+        raise ProspectIntakeError(
+            "mixed-currency evidence cannot be resolved without separating the monetary values"
+        )
+
+    cipher = _tenant_cipher(tenant.tenant_id, root=root, key=key)
+    stored = load_analysis(tenant.tenant_id, root=root, key=key)
+    if stored.analysis_timestamp != analysis.analysis_timestamp:
+        raise ProspectIntakeError("currency confirmation is not associated with the current analysis")
+    confirmed_at = _utc_now().isoformat()
+    resolved = ProspectAnalysis(
+        **{
+            **asdict(analysis),
+            "currency": currency,
+            "currency_source": "USER_CONFIRMED",
+            "currency_resolution_required": False,
+            "currency_confirmed_by": actor,
+            "currency_confirmed_at": confirmed_at,
+        }
+    )
+    tenant_path = _tenant_dir(tenant.tenant_id, root)
+    _write_encrypted(
+        tenant_path / "analysis.enc",
+        json.dumps(asdict(resolved), sort_keys=True).encode("utf-8"),
+        cipher,
+    )
+    _audit(
+        tenant,
+        "PROSPECT_CURRENCY_CONFIRMED",
+        actor,
+        {"analysis_timestamp": analysis.analysis_timestamp, "currency": currency},
+        root=root,
+        cipher=cipher,
+    )
+    return resolved
 
 
 def record_activity(

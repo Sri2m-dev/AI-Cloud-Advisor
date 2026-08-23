@@ -22,6 +22,7 @@ from services.business_service_service import BusinessServiceService
 from services.business_unit_service import BusinessUnitService
 from services.enterprise_financial_model import EnterpriseFinancialModel
 from shared.auth import require_role
+from shared.evidence_context import resolve_active_evidence_context
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -365,6 +366,17 @@ render_enterprise_sidebar(
     role_pages=ROLE_PAGES,
     active_page=PAGE_PATHS.get("Business Services", "pages/business_services.py"),
 )
+
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    st.title("Business Services")
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.info("Business services are not evidenced by the current upload.")
+    st.write(
+        "Service health, owners, applications, dependencies, and business impact remain "
+        "UNKNOWN until those mappings are supplied as prospect evidence."
+    )
+    st.stop()
 
 service_dashboard = BusinessServiceService.get_service_dashboard()
 service_summary = service_dashboard["summary"]

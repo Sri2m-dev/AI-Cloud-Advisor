@@ -16,6 +16,8 @@ from enterprise_copilot import CopilotRequest, enterprise_ai_copilot
 from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
 from services.enterprise_spend_composition import authenticated_tenant_context
 from shared.auth import require_role
+from shared.currency import format_currency_amount
+from shared.evidence_context import resolve_active_evidence_context
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -25,6 +27,78 @@ init_session()
 require_role(ROLES)
 role = str(st.session_state.get("role") or "")
 render_sidebar_navigation(role)
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    analysis = evidence_context.prospect_analysis
+    prospect_history_key = f"prospect_copilot:{getattr(analysis, 'audit_id', 'analysis')}"
+    prospect_history = st.session_state.setdefault(prospect_history_key, [])
+    st.title("Ask Nexora")
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.markdown("### Current prospect evidence")
+    if getattr(analysis, "currency_resolution_required", True):
+        st.warning("Currency could not be determined from the uploaded evidence.")
+    else:
+        metrics = st.columns(4)
+        metrics[0].metric(
+            "Observed spend",
+            format_currency_amount(analysis.total_spend, analysis.currency),
+        )
+        metrics[1].metric("Evidence rows", f"{analysis.row_count:,}")
+        metrics[2].metric("Evidence coverage", f"{analysis.evidence_coverage:.1f}%")
+        metrics[3].metric(
+            "Qualified opportunity",
+            format_currency_amount(
+                analysis.opportunity_evidence_qualified, analysis.currency
+            ),
+        )
+    for item in prospect_history[-10:]:
+        with st.chat_message(item["role"]):
+            st.write(item["content"])
+    question = st.chat_input("Ask about the current uploaded prospect evidence")
+    if question:
+        normalized = " ".join(question.lower().split())
+        supported = any(
+            term in normalized
+            for term in ("spend", "cost", "row", "coverage", "currency", "opportunity")
+        )
+        unsupported = any(
+            term in normalized
+            for term in (
+                "risk",
+                "service",
+                "application",
+                "decision",
+                "owner",
+                "dependency",
+                "health",
+                "realized",
+                "forecast",
+            )
+        )
+        if supported and not unsupported and not getattr(
+            analysis, "currency_resolution_required", True
+        ):
+            answer = (
+                f"The current prospect analysis contains {analysis.row_count:,} evidence rows, "
+                f"{analysis.evidence_coverage:.1f}% evidence coverage, and "
+                f"{format_currency_amount(analysis.total_spend, analysis.currency)} of observed "
+                f"spend. Evidence-qualified opportunity is "
+                f"{format_currency_amount(analysis.opportunity_evidence_qualified, analysis.currency)}."
+            )
+        else:
+            answer = (
+                "UNKNOWN — the current uploaded prospect evidence does not support this "
+                "conclusion. Nexora will not use tenant or synthetic demonstration evidence."
+            )
+        with st.chat_message("user"):
+            st.write(question)
+        with st.chat_message("assistant"):
+            st.write(answer)
+        prospect_history.extend(
+            ({"role": "user", "content": question}, {"role": "assistant", "content": answer})
+        )
+        del prospect_history[:-10]
+    st.stop()
 authenticated = authenticated_tenant_context(st.session_state)
 copilot = enterprise_ai_copilot(authenticated.fabric_context, role=authenticated.role)
 session_id = (
