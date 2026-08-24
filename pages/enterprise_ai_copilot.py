@@ -18,6 +18,7 @@ from services.enterprise_spend_composition import authenticated_tenant_context
 from shared.auth import require_role
 from shared.currency import format_currency_amount
 from shared.evidence_context import resolve_active_evidence_context
+from shared.prospect_answers import prospect_evidence_answer
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -56,40 +57,7 @@ if evidence_context.is_prospect:
             st.write(item["content"])
     question = st.chat_input("Ask about the current uploaded prospect evidence")
     if question:
-        normalized = " ".join(question.lower().split())
-        supported = any(
-            term in normalized
-            for term in ("spend", "cost", "row", "coverage", "currency", "opportunity")
-        )
-        unsupported = any(
-            term in normalized
-            for term in (
-                "risk",
-                "service",
-                "application",
-                "decision",
-                "owner",
-                "dependency",
-                "health",
-                "realized",
-                "forecast",
-            )
-        )
-        if supported and not unsupported and not getattr(
-            analysis, "currency_resolution_required", True
-        ):
-            answer = (
-                f"The current prospect analysis contains {analysis.row_count:,} evidence rows, "
-                f"{analysis.evidence_coverage:.1f}% evidence coverage, and "
-                f"{format_currency_amount(analysis.total_spend, analysis.currency)} of observed "
-                f"spend. Evidence-qualified opportunity is "
-                f"{format_currency_amount(analysis.opportunity_evidence_qualified, analysis.currency)}."
-            )
-        else:
-            answer = (
-                "UNKNOWN — the current uploaded prospect evidence does not support this "
-                "conclusion. Nexora will not use tenant or synthetic demonstration evidence."
-            )
+        answer = prospect_evidence_answer(question, analysis)
         with st.chat_message("user"):
             st.write(question)
         with st.chat_message("assistant"):

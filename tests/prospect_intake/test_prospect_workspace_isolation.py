@@ -8,6 +8,7 @@ from shared.evidence_context import (
     clear_prospect_context,
     resolve_active_evidence_context,
 )
+from shared.prospect_answers import prospect_evidence_answer
 
 
 ROOT = Path(__file__).parents[2]
@@ -101,3 +102,36 @@ def test_prospect_branches_do_not_contain_synthetic_identifiers_or_values() -> N
     end = shared.index("def run_executive_workspace", start)
     prospect_branch = shared[start:end]
     assert all(marker not in prospect_branch for marker in SYNTHETIC_MARKERS)
+
+
+def _analysis() -> SimpleNamespace:
+    return SimpleNamespace(
+        total_spend=861_828,
+        currency="USD",
+        currency_resolution_required=False,
+        row_count=184,
+        evidence_coverage=100.0,
+        opportunity_evidence_qualified=0,
+    )
+
+
+def test_prospect_answer_distinguishes_total_from_ec2_specific_cost() -> None:
+    assert prospect_evidence_answer("what is the total cost", _analysis()) == (
+        "Total observed spend in the current prospect analysis is $861,828."
+    )
+    answer = prospect_evidence_answer("what is the total cost of EC2", _analysis())
+    assert answer.startswith("EC2-specific spend is not evidenced")
+    assert "$861,828" in answer
+    assert "184 records" in answer
+
+
+def test_prospect_answer_preserves_unknown_for_unsupported_domains() -> None:
+    for question in (
+        "What is the risk?",
+        "Which business service needs attention?",
+        "What is the EC2 forecast?",
+    ):
+        answer = prospect_evidence_answer(question, _analysis())
+        assert answer.startswith("UNKNOWN")
+        assert "$214M" not in answer
+        assert "NXR-" not in answer
