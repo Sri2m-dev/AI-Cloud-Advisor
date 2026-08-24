@@ -74,25 +74,18 @@ class ExecutiveDashboardCertificationService:
         spend_service: EnterpriseSpendService,
     ) -> dict[str, Any]:
         posture = spend_service.get_financial_posture(context)
-        legacy_metrics = {
-            "summary": {},
-            "spend_breakdown": {},
-            "recommendations": [],
-            "cloud_cost": float(posture.cloud_spend),
-            "saas_cost": 0.0,
-            "msp_cost": 0.0,
-            "license_cost": 0.0,
-            "total_spend": float(posture.cloud_spend),
-            "potential_savings": 0.0,
-            "savings_realized": 0.0,
-            "governance_score": 0,
-            "critical_risks": 0,
-            "pending_approvals": 0,
-            "budget_health": 0,
-            "optimization_health": 0,
-            "risk_posture": 0,
-            "opportunities_found": 0,
-        }
+        legacy_metrics = ExecutiveDashboardCertificationService._legacy_metrics(context)
+        if posture.cloud_spend:
+            legacy_metrics["cloud_cost"] = float(posture.cloud_spend)
+        if posture.total_ingested_spend:
+            legacy_metrics["total_spend"] = float(posture.total_ingested_spend)
+        legacy_metrics["data_available"] = bool(
+            posture.source_rows
+            or posture.persisted_facts
+            or legacy_metrics["summary"]
+            or legacy_metrics["spend_breakdown"]
+            or legacy_metrics["recommendations"]
+        )
         enterprise_summary = {
             "enterprise_total": posture.total_ingested_spend,
             "currency": posture.currency,
@@ -166,9 +159,7 @@ class ExecutiveDashboardCertificationService:
                         "Metric": "Data Reconciliation Status",
                         "Value": status,
                         "Interpretation": (
-                            ExecutiveDashboardCertificationService._status_interpretation(
-                                status
-                            )
+                            ExecutiveDashboardCertificationService._status_interpretation(status)
                         ),
                     },
                     {

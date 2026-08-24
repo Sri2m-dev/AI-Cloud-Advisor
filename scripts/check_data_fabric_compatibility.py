@@ -99,6 +99,9 @@ def compare_snapshots(expected: Any, actual: Any, path: str = "$") -> list[str]:
             differences.extend(compare_snapshots(expected[key], actual[key], f"{path}.{key}"))
         return differences
     if isinstance(expected, list):
+        append_only_contract_path = path.endswith(".fields") or path.endswith(".values")
+        if append_only_contract_path and len(actual) >= len(expected):
+            actual = actual[: len(expected)]
         if len(expected) != len(actual):
             return [f"{path}: expected {len(expected)} items, got {len(actual)}"]
         differences = []

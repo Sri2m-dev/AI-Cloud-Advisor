@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pandas as pd
 import streamlit as st
 
 from auth.connector_context import get_current_organization_id
@@ -10,9 +9,9 @@ from auth.guards import require_login
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import render_sidebar_navigation
 from services.ai_copilot_service import AICopilotService
+from shared.styles import configure_page
 
-
-st.set_page_config(page_title="AI Copilot", layout="wide")
+configure_page(page_title="Ask Nexora", page_icon="N")
 
 
 ALLOWED_ROLES = {"super_admin", "client_admin", "cio", "executive"}
@@ -51,34 +50,27 @@ def main() -> None:
     organization_id = get_current_organization_id()
     session_id = f"{organization_id}:{user.get('email') or st.session_state.get('email') or 'default'}"
 
-    st.title("Enterprise AI Copilot")
-    st.caption("Ask questions across the Enterprise Digital Twin, FinOps, governance, connectors, recommendations, and decisions.")
-
-    dashboard = AICopilotService.get_dashboard(session_id)
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Questions Asked", f"{dashboard['questions_asked']:,}")
-    k2.metric("Avg Response", f"{dashboard['average_response_time_ms']:,.0f} ms")
-    k3.metric("Insights Generated", f"{dashboard['insights_generated']:,}")
-    k4.metric("Recommendations Ref", f"{dashboard['recommendations_referenced']:,}")
-    k5.metric("Decisions Ref", f"{dashboard['decisions_referenced']:,}")
-
-    st.divider()
-    st.subheader("Suggested Prompts")
+    st.markdown(
+        """
+        <section class="nexora-welcome-hero">
+          <p class="nexora-eyebrow">ASK NEXORA</p>
+          <h1>Turn evidence into an executive answer.</h1>
+          <p>Ask about spend, risk, business impact, recommendations, or decisions.
+          Nexora answers from governed tenant evidence and identifies missing sources
+          instead of inventing a conclusion.</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption("START WITH AN EXECUTIVE QUESTION")
     prompt_cols = st.columns(4)
     selected_prompt = None
     for index, prompt in enumerate(AICopilotService.SUGGESTED_PROMPTS):
         if prompt_cols[index % 4].button(prompt, key=f"prompt_{index}", use_container_width=True):
             selected_prompt = prompt
 
-    if st.button("Clear Conversation"):
-        AICopilotService.clear_history(session_id)
-        st.rerun()
-
-    st.divider()
-    chat_col, context_col = st.columns([0.62, 0.38])
-
-    with chat_col:
-        st.subheader("Chat")
+    st.subheader("Conversation")
+    with st.container(border=True):
         for row in AICopilotService.get_history(session_id):
             with st.chat_message("user"):
                 st.write(row["question"])
@@ -96,25 +88,23 @@ def main() -> None:
                 st.write(response["answer"])
                 if response.get("citations"):
                     st.caption("Citations: " + ", ".join(str(item) for item in response["citations"]))
-                st.caption(f"Intent: {response['intent']} | Response time: {response['response_time_ms']:,.0f} ms")
             st.rerun()
 
-    with context_col:
-        st.subheader("Context Panel")
-        history = AICopilotService.get_history(session_id)
-        latest = history[-1] if history else None
-        if latest:
+    history = AICopilotService.get_history(session_id)
+    latest = history[-1] if history else None
+    if latest:
+        st.subheader("Recommended follow-up")
+        for followup in latest.get("followup_questions", []):
+            st.write(f"→ {followup}")
+        with st.expander("Advanced evidence and source traceability"):
             _show_context_panel(latest.get("context") or {})
-
-            st.subheader("Source Traceability")
-            sources = [{"Source": source, "Used": True} for source in latest.get("source_traceability", [])]
-            st.dataframe(pd.DataFrame(sources), use_container_width=True, hide_index=True)
-
-            st.subheader("Follow-up Questions")
-            for followup in latest.get("followup_questions", []):
-                st.write(followup)
-        else:
-            st.info("Ask a question to see the Digital Twin context and source traceability.")
+            st.markdown("**Sources used**")
+            for source in latest.get("source_traceability", []):
+                st.write(f"• {source}")
+            st.caption("Governed tenant scope")
+    if st.button("Clear conversation"):
+        AICopilotService.clear_history(session_id)
+        st.rerun()
 
 
 if __name__ == "__main__":

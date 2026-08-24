@@ -13,6 +13,8 @@ import streamlit as st
 
 from shared.session import init_session
 from shared.styles import configure_page
+from shared.currency import format_currency_amount
+from shared.evidence_context import resolve_active_evidence_context
 from components.sidebar_navigation import render_sidebar_navigation
 
 configure_page(
@@ -31,6 +33,33 @@ require_role([
 
 role = st.session_state.get("role", "Unknown")
 render_sidebar_navigation(role)
+
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    analysis = evidence_context.prospect_analysis
+    st.title("Prospect Executive Brief")
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    if getattr(analysis, "currency_resolution_required", True):
+        st.warning("Currency could not be determined from the uploaded evidence.")
+    else:
+        metrics = st.columns(4)
+        metrics[0].metric(
+            "Observed spend",
+            format_currency_amount(analysis.total_spend, analysis.currency),
+        )
+        metrics[1].metric("Evidence rows", f"{analysis.row_count:,}")
+        metrics[2].metric("Evidence coverage", f"{analysis.evidence_coverage:.1f}%")
+        metrics[3].metric(
+            "Qualified opportunity",
+            format_currency_amount(
+                analysis.opportunity_evidence_qualified, analysis.currency
+            ),
+        )
+    st.info(
+        "Risk, business-service health, forecasts, realized savings, approvals, and decisions "
+        "are UNKNOWN because the current prospect upload does not evidence them."
+    )
+    st.stop()
 
 from components.layout import render_page_header, render_section
 from components.tables import data_table

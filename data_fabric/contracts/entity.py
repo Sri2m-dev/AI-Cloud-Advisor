@@ -41,8 +41,27 @@ class EnterpriseEntity:
     entity_version: EntityVersion | None = None
     quality: EntityQuality | None = None
     ownership: EntityOwnership | None = None
+    canonical_name: str | None = None
+    display_name: str | None = None
+    lifecycle_status: str = "active"
+    classification_status: str = "unclassified"
+    ownership_reference: str | None = None
+    business_context_reference: str | None = None
+    financial_context_reference: str | None = None
+    health_reference: str | None = None
+    risk_reference: str | None = None
+    lineage_reference: str | None = None
+    provenance_reference: str | None = None
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
 
     def __post_init__(self) -> None:
         self.entity_type = normalize_enum(EntityType, self.entity_type, "entity_type")
         self.confidence_score = validate_score(self.confidence_score, "confidence_score")
         self.quality_score = validate_score(self.quality_score, "quality_score")
+        self.canonical_name = str(self.canonical_name or self.name).strip()
+        self.display_name = str(self.display_name or self.name).strip()
+        self.lifecycle_status = str(self.lifecycle_status or "active").strip().lower()
+        self.classification_status = (
+            str(self.classification_status or "unclassified").strip().upper()
+        )

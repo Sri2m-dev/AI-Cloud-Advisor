@@ -1,19 +1,25 @@
-# Nexora Enterprise Intelligence Platform
+# Nexora
 
-Nexora is an Enterprise Technology Intelligence Platform spanning executive and CIO workspaces, business architecture, financial intelligence, governance, Universal Connectors, and a canonical Enterprise Data Fabric.
+**Enterprise Decision Intelligence Platform**
+
+Nexora connects executive and CIO workspaces, business architecture, financial
+intelligence, governance, Universal Connectors, and a canonical Enterprise Data Fabric into
+an evidence-backed environment for enterprise technology decisions.
 
 ## Current release-candidate baseline
 
 ```text
-Program: P3.10 repository and release certification
-Branch: feature/p3-supabase-live-validation
-Certified through: Phase 2 CI Certification
-Target release tag after review and merge: v1.2.0-data-fabric
+Program: Nexora v2.0 GA Completion
+Branch: feature/p4-3-enterprise-intelligence-layer
+Certified through: Executive Experience v2.1; GA hardening in progress
+Target release: Nexora v2.0
 Application entry point: app_main.py
 Python: 3.11
 ```
 
-P3 Data Fabric Foundation is implemented and live validated within its declared contract. Relationship-version history remains intentionally deferred under migration 0018. Merge and tagging remain unauthorized until the review gate is explicitly approved.
+The P1-P5.2 platform baseline is accepted and frozen. GA work is limited to product
+completion, certified data, decision visualization, reporting, customer readiness,
+deployment, and release certification. See `docs/ga/NEXORA_V2_GA_GUIDE.md`.
 
 ## Architecture
 
@@ -58,12 +64,10 @@ python -m pytest --collect-only -q
 python -m pytest -q
 ```
 
-Current certified results:
+Most recent local certified results before the GA candidate is finalized:
 
-- Full collection: 325 collected, 0 errors
-- Full suite: 320 passed, 5 expected opt-in skips, 0 failed
-- P3 non-secret gate: 94 passed, 0 failed
-- Gated integrations without secrets: 5 expected skips
+- Full suite: 1,031 passed, 2 expected opt-in skips, 0 failed.
+- Active-source compilation: 1,279 Python files passed.
 
 Exact commands and scope are recorded in `docs/RELEASE_REPRODUCTION.md`, `docs/REPOSITORY_HEALTH_PHASE1.md`, `docs/CI_CERTIFICATION.md`, and `docs/P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md`.
 

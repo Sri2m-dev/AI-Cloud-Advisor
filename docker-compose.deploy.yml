@@ -1,16 +1,20 @@
-version: '3.9'
-
 services:
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
     expose:
       - "8501"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
     depends_on:
       - api
 
@@ -19,7 +23,8 @@ services:
       context: .
       dockerfile: Dockerfile.api
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
       REDIS_URL: redis://redis:6379/0
@@ -28,6 +33,11 @@ services:
       BACKGROUND_JOBS_ENABLED: "false"
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
     depends_on:
       - redis
 
@@ -36,7 +46,8 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
       REDIS_URL: redis://redis:6379/0
@@ -51,7 +62,8 @@ services:
       context: .
       dockerfile: Dockerfile.beat
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
       REDIS_URL: redis://redis:6379/0

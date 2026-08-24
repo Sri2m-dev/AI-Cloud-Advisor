@@ -33,6 +33,7 @@ class AzureConnectorService:
         client_id: str | None = None,
         client_secret: str | None = None,
         subscription_id: str | None = None,
+        organization_id: str | None = None,
     ) -> dict[str, Any]:
         try:
             connector = AzureProductionConnector(tenant_id, client_id, client_secret, subscription_id)
@@ -44,6 +45,7 @@ class AzureConnectorService:
             status=result.get("status", "FAILED"),
             objects_synced=0,
             error_message=result.get("error"),
+            organization_id=organization_id,
         )
         return result
 

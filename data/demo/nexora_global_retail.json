@@ -1,0 +1,213 @@
+{
+  "classification": "SYNTHETIC_DEMONSTRATION_DATA",
+  "organization_id": "demo-nexora-global-retail",
+  "organization_name": "Nexora Global Retail (Synthetic Demo)",
+  "as_of": "2026-08-14T00:00:00Z",
+  "source": "Nexora deterministic GA demonstration dataset v2.0",
+  "metrics": {
+    "employees": 58000,
+    "countries": 42,
+    "cloud_accounts": 620,
+    "applications": 1850,
+    "business_services": 340,
+    "technologies": 4260,
+    "saas_products": 487,
+    "vendors": 120,
+    "annual_technology_spend": 214000000,
+    "annual_cloud_spend": 87000000,
+    "identified_savings": 12400000,
+    "verified_realized_savings": 3100000,
+    "allocation_coverage": 92.4,
+    "critical_risks": 7,
+    "pending_decisions": 4,
+    "technology_health": 78
+  },
+  "story": {
+    "yesterday": "Cloud and SaaS costs were reviewed independently, obscuring the total cost and dependency impact of the digital-commerce estate.",
+    "today": "Certified evidence connects $214M of technology investment to 340 business services across 42 countries.",
+    "risk": "Checkout services depend on two end-of-support technologies and one concentrated payment vendor; delay increases peak-season continuity risk.",
+    "recommendation": "Approve the phased checkout modernization and consolidate 38 overlapping SaaS subscriptions, subject to the documented service migration controls.",
+    "business_outcome": "The governed plan protects checkout continuity and identifies $12.4M of annual opportunity without presenting it as realized value.",
+    "action": "CIO and CFO review investment option NXR-INV-204; the Risk Committee confirms migration controls before approval."
+  },
+  "workspaces": {
+    "ceo": {
+      "metrics": [
+        {"title": "Technology investment", "field": "annual_technology_spend", "format": "money", "meaning": "Annual technology investment connected to enterprise outcomes.", "kind": "financial"},
+        {"title": "Business services", "field": "business_services", "format": "integer", "meaning": "Business services represented in the governed enterprise model.", "kind": "executive"},
+        {"title": "Leadership decisions", "field": "pending_decisions", "format": "integer", "meaning": "Material decisions awaiting accountable executive review.", "kind": "decision"}
+      ],
+      "analytics": ["business_service_health", "budget_vs_actual", "recommendation_pipeline", "savings_waterfall", "technology_portfolio", "vendor_concentration"],
+      "story": {
+        "yesterday": "Technology cost, resilience, and portfolio decisions arrived as separate functional reports.",
+        "today": "One governed view connects $214M of investment to 340 business services and the decisions that can change enterprise outcomes.",
+        "risk": "Peak-season checkout continuity is exposed by aging technology and payment-provider concentration.",
+        "recommendation": "Sponsor the checkout modernization decision, with CFO validation of value and Risk Committee confirmation of migration controls.",
+        "business_outcome": "Leadership can protect digital revenue while pursuing $12.4M of qualified annual opportunity without confusing it with realized value.",
+        "action": "Convene the CIO, CFO, and Risk Committee around NXR-INV-204 before the next investment checkpoint."
+      }
+    },
+    "cio": {
+      "metrics": [
+        {"title": "Technology health", "field": "technology_health", "format": "percent", "meaning": "Governed health posture across the synthetic technology estate.", "kind": "health"},
+        {"title": "Technologies governed", "field": "technologies", "format": "integer", "meaning": "Technologies classified for strategic disposition.", "kind": "executive"},
+        {"title": "Critical risks", "field": "critical_risks", "format": "integer", "meaning": "Material technology risks requiring governed mitigation.", "kind": "risk"}
+      ],
+      "analytics": ["business_service_health", "technology_portfolio", "vendor_concentration", "recommendation_pipeline", "budget_vs_actual", "savings_waterfall"],
+      "story": {
+        "yesterday": "Application, infrastructure, risk, and cost teams assessed the checkout estate independently.",
+        "today": "The digital-checkout dependency path exposes two end-of-support technologies and concentrated payment-provider risk.",
+        "risk": "Deferring modernization leaves a revenue-critical service vulnerable during peak trading periods.",
+        "recommendation": "Modernize checkout in controlled phases and establish a secondary payment route before the seasonal freeze.",
+        "business_outcome": "The plan improves resilience, reduces obsolete technology, and preserves evidence for every architecture decision.",
+        "action": "Own NXR-INV-204, validate the dependency sequence, and submit migration controls for executive approval."
+      }
+    },
+    "cfo": {
+      "metrics": [
+        {"title": "Technology investment", "field": "annual_technology_spend", "format": "money", "meaning": "Annual technology investment represented by the synthetic enterprise.", "kind": "financial"},
+        {"title": "Qualified opportunity", "field": "identified_savings", "format": "money", "meaning": "Evidence-qualified opportunity, not booked or realized savings.", "kind": "decision"},
+        {"title": "Verified realized", "field": "verified_realized_savings", "format": "money", "meaning": "Value verified as realized through governed outcome evidence.", "kind": "financial"}
+      ],
+      "analytics": ["budget_vs_actual", "savings_waterfall", "vendor_concentration", "recommendation_pipeline", "business_service_health", "technology_portfolio"],
+      "story": {
+        "yesterday": "Cloud, SaaS, and modernization requests used inconsistent baselines and mixed opportunity with realized value.",
+        "today": "The governed view separates $12.4M identified opportunity from $3.1M of verified realized savings.",
+        "risk": "Q2 technology spend is above plan while vendor concentration and duplicate SaaS contracts reduce financial flexibility.",
+        "recommendation": "Fund controlled checkout modernization and approve SaaS consolidation only against verified baselines and accountable owners.",
+        "business_outcome": "Capital is directed toward resilience while value realization remains traceable from identification to verification.",
+        "action": "Review NXR-INV-204 and NXR-PORT-118; require benefit owners, timing, and evidence before approval."
+      }
+    }
+  },
+  "journeys": [
+    {
+      "decision_id": "NXR-INV-204",
+      "title": "Technology investment",
+      "change": "Checkout growth has outpaced the resilience of two end-of-support platform components.",
+      "impact": "A peak-period disruption threatens digital revenue and customer trust across 42 countries.",
+      "recommendation": "Approve an $8.2M phased modernization with explicit migration controls and outcome checkpoints.",
+      "evidence": "94% synthetic evidence coverage; architecture dependencies, service health, cost baseline, and scenario assumptions are linked.",
+      "next_step": "CIO sponsors the option; CFO validates the baseline; Risk Committee confirms controls.",
+      "twin_path": [
+        {"layer": "Business Service", "entity": "Global Digital Checkout"},
+        {"layer": "Application", "entity": "Checkout Orchestration Platform"},
+        {"layer": "Technology", "entity": "End-of-support runtime"},
+        {"layer": "Cloud", "entity": "Hyperscale Cloud A"},
+        {"layer": "Decision", "entity": "Phased modernization"}
+      ]
+    },
+    {
+      "decision_id": "NXR-PORT-118",
+      "title": "Portfolio rationalization",
+      "change": "Collaboration and analytics capabilities overlap across 38 SaaS subscriptions.",
+      "impact": "Duplicate contracts dilute buying power, increase support burden, and obscure ownership.",
+      "recommendation": "Consolidate the overlapping portfolio through controlled renewal and migration waves.",
+      "evidence": "96% synthetic evidence coverage; contracts, usage, owners, services, and renewal timing are connected.",
+      "next_step": "CFO assigns benefit ownership; CIO confirms service migration; procurement sequences renewals.",
+      "twin_path": [
+        {"layer": "Business Service", "entity": "Enterprise Collaboration"},
+        {"layer": "Application", "entity": "Overlapping SaaS portfolio"},
+        {"layer": "Technology", "entity": "38 subscriptions"},
+        {"layer": "Cost", "entity": "$4.2M opportunity"},
+        {"layer": "Decision", "entity": "Controlled consolidation"}
+      ]
+    },
+    {
+      "decision_id": "NXR-RISK-071",
+      "title": "Executive technology risk",
+      "change": "Payments Authorization depends materially on one provider and has no certified financial-loss estimate.",
+      "impact": "Concentration can interrupt a revenue-critical service; financial impact remains UNKNOWN until certified.",
+      "recommendation": "Establish a secondary route and test failover without fabricating an uncertified loss value.",
+      "evidence": "89% synthetic evidence coverage; provider dependency, service criticality, controls, and residual unknowns are explicit.",
+      "next_step": "Risk Committee accepts or mitigates the exposure; Operations rehearses failover; Finance certifies impact when evidence exists.",
+      "twin_path": [
+        {"layer": "Business Service", "entity": "Payments Authorization"},
+        {"layer": "Application", "entity": "Payment routing platform"},
+        {"layer": "Technology", "entity": "Single-provider route"},
+        {"layer": "Risk", "entity": "Concentration exposure"},
+        {"layer": "Decision", "entity": "Secondary route and failover"}
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "NXR-INV-204",
+      "type": "technology_investment",
+      "title": "Modernize global checkout platform",
+      "status": "PENDING_EXECUTIVE_REVIEW",
+      "financial_impact": 8200000,
+      "business_service": "Global Digital Checkout",
+      "confidence": 88,
+      "evidence_coverage": 94
+    },
+    {
+      "id": "NXR-PORT-118",
+      "type": "portfolio_rationalization",
+      "title": "Consolidate overlapping collaboration and analytics SaaS",
+      "status": "PENDING_FINANCE_REVIEW",
+      "financial_impact": 4200000,
+      "business_service": "Enterprise Collaboration",
+      "confidence": 91,
+      "evidence_coverage": 96
+    },
+    {
+      "id": "NXR-RISK-071",
+      "type": "executive_technology_risk",
+      "title": "Reduce payment-provider concentration exposure",
+      "status": "MITIGATION_REQUIRED",
+      "financial_impact": null,
+      "business_service": "Payments Authorization",
+      "confidence": 84,
+      "evidence_coverage": 89
+    }
+  ],
+  "trend": [
+    {"period": "Q3 FY25", "technology_spend": 49200000, "risk_exposure": 11},
+    {"period": "Q4 FY25", "technology_spend": 51800000, "risk_exposure": 10},
+    {"period": "Q1 FY26", "technology_spend": 53600000, "risk_exposure": 9},
+    {"period": "Q2 FY26", "technology_spend": 59400000, "risk_exposure": 7}
+  ],
+  "analytics": {
+    "budget_vs_actual": [
+      {"quarter": "Q3 FY25", "budget": 50000000, "actual": 49200000},
+      {"quarter": "Q4 FY25", "budget": 50500000, "actual": 51800000},
+      {"quarter": "Q1 FY26", "budget": 52000000, "actual": 53600000},
+      {"quarter": "Q2 FY26", "budget": 54500000, "actual": 59400000}
+    ],
+    "vendor_concentration": [
+      {"vendor": "Hyperscale Cloud A", "annual_spend": 42800000, "share": 20.0},
+      {"vendor": "Enterprise Software B", "annual_spend": 26700000, "share": 12.5},
+      {"vendor": "Cloud Platform C", "annual_spend": 22100000, "share": 10.3},
+      {"vendor": "Payment Network D", "annual_spend": 15400000, "share": 7.2},
+      {"vendor": "Other certified vendors", "annual_spend": 107000000, "share": 50.0}
+    ],
+    "business_service_health": [
+      {"service": "Digital Checkout", "health": 61, "risk": "Critical"},
+      {"service": "Payments Authorization", "health": 66, "risk": "High"},
+      {"service": "Store Fulfilment", "health": 74, "risk": "Moderate"},
+      {"service": "Customer Identity", "health": 82, "risk": "Controlled"},
+      {"service": "Merchandising", "health": 88, "risk": "Controlled"}
+    ],
+    "technology_portfolio": [
+      {"category": "Strategic", "count": 1380},
+      {"category": "Tolerate", "count": 1640},
+      {"category": "Modernize", "count": 910},
+      {"category": "Retire", "count": 330}
+    ],
+    "savings_waterfall": [
+      {"stage": "Identified", "value": 12400000},
+      {"stage": "Evidence qualified", "value": 9600000},
+      {"stage": "Approved", "value": 6800000},
+      {"stage": "Executed", "value": 4300000},
+      {"stage": "Verified realized", "value": 3100000}
+    ],
+    "recommendation_pipeline": [
+      {"status": "Evidence review", "count": 14},
+      {"status": "Executive review", "count": 8},
+      {"status": "Approved", "count": 5},
+      {"status": "In execution", "count": 3},
+      {"status": "Outcome verified", "count": 2}
+    ]
+  }
+}

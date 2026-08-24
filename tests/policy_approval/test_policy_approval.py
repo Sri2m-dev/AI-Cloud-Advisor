@@ -213,6 +213,98 @@ def test_allow_is_deterministic_and_only_eligible_for_approval():
     assert len(first.input_hash) == 64
 
 
+def test_policy_preview_is_deterministic_non_authoritative_and_not_persisted():
+    ctx, _, _, service, _, recommendation, _ = harness()
+    candidate = replace(recommendation, state=RecommendationState.UNDER_REVIEW)
+    values = dict(
+        recommendation=candidate,
+        recommendation_version=1,
+        evidence_package_id="pkg-1",
+        evidence_package_hash=candidate.evidence_package_hash,
+        policy_id="policy-1",
+        policy_version=1,
+        proposed_scope=SCOPE,
+        proposed_actor=actor("ai-proposer", ActorType.AI),
+        inputs={"risk_accepted": True, "change_window": "approved"},
+        evaluated_at=NOW,
+    )
+    first = service.preview(ctx, **values)
+    second = service.preview(ctx, **values)
+    assert first == second
+    assert first.result is PolicyEvaluationResult.ALLOW
+    assert first.authoritative is False
+    assert first.matched_rules == ("risk-accepted",)
+    with pytest.raises(PolicyApprovalError, match="not found"):
+        service.get_evaluation(ctx, first.preview_id)
+
+
+@pytest.mark.parametrize(
+    ("inputs", "states", "expected"),
+    [
+        ({"risk_accepted": False, "change_window": "approved"}, None, PolicyEvaluationResult.DENY),
+        ({"risk_accepted": True}, None, PolicyEvaluationResult.INDETERMINATE),
+        (
+            {"risk_accepted": True, "change_window": "approved"},
+            {"ev-1": EvidenceState.STALE},
+            PolicyEvaluationResult.INDETERMINATE,
+        ),
+    ],
+)
+def test_policy_preview_deny_and_fail_closed_states(inputs, states, expected):
+    ctx, _, _, service, _, recommendation, _ = harness()
+    candidate = replace(recommendation, state=RecommendationState.PROPOSED)
+    result = service.preview(
+        ctx,
+        recommendation=candidate,
+        recommendation_version=1,
+        evidence_package_id="pkg-1",
+        evidence_package_hash=candidate.evidence_package_hash,
+        policy_id="policy-1",
+        policy_version=1,
+        proposed_scope=SCOPE,
+        proposed_actor=actor("requester"),
+        inputs=inputs,
+        evidence_states=states,
+        evaluated_at=NOW,
+    )
+    assert result.result is expected
+
+
+def test_preview_version_tenant_and_authority_separation():
+    ctx, _, _, service, _, recommendation, _ = harness()
+    candidate = replace(recommendation, state=RecommendationState.PROPOSED)
+    base = dict(
+        recommendation=candidate,
+        evidence_package_id="pkg-1",
+        evidence_package_hash=candidate.evidence_package_hash,
+        policy_id="policy-1",
+        policy_version=1,
+        proposed_scope=SCOPE,
+        proposed_actor=actor("requester"),
+        inputs={"risk_accepted": True, "change_window": "approved"},
+        evaluated_at=NOW,
+    )
+    with pytest.raises(PolicyApprovalError, match="exact recommendation version"):
+        service.preview(ctx, recommendation_version=2, **base)
+    with pytest.raises(Exception):
+        service.preview(context("other"), recommendation_version=1, **base)
+    preview = service.preview(ctx, recommendation_version=1, **base)
+    with pytest.raises(PolicyApprovalError, match="not found"):
+        service.issue_approval(
+            ctx,
+            approval_id="bad",
+            evaluation_id=preview.preview_id,
+            decision=harness()[-1],
+            recommendation=recommendation,
+            requester=actor("requester"),
+            approver=actor("policy-approver"),
+            scope=SCOPE,
+            issued_at=NOW,
+            effective_at=NOW,
+            expires_at=NOW + timedelta(hours=1),
+        )
+
+
 def test_deny_blocks_approval():
     ctx, _, _, service, _, recommendation, decision = harness()
     result = evaluate(

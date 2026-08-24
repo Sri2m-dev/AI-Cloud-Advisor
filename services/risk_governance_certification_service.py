@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -64,9 +64,10 @@ class RiskGovernanceCertificationService:
     @staticmethod
     @st.cache_data(ttl=120, show_spinner=False)
     def get_dashboard() -> dict[str, Any]:
-        anomaly_resp = get_cost_anomalies()
-        optimization_resp = get_optimization_opportunities()
-        recommendation_resp = get_recommendations()
+        empty_response = {"success": False, "data": pd.DataFrame()}
+        anomaly_resp = _safe_call(get_cost_anomalies, empty_response)
+        optimization_resp = _safe_call(get_optimization_opportunities, empty_response)
+        recommendation_resp = _safe_call(get_recommendations, empty_response)
 
         anomaly_df = anomaly_resp.get("data", pd.DataFrame())
         optimization_df = optimization_resp.get("data", pd.DataFrame())
@@ -82,8 +83,8 @@ class RiskGovernanceCertificationService:
             sla_metrics,
             [],
         )
-        financial_model = EnterpriseFinancialModel.get_enterprise_summary()
-        reconciliation = EnterpriseFinancialModel.get_reconciliation_status()
+        financial_model = _safe_call(EnterpriseFinancialModel.get_enterprise_summary, {})
+        reconciliation = _safe_call(EnterpriseFinancialModel.get_reconciliation_status, {})
         business_context = RiskGovernanceCertificationService._business_context(metrics)
 
         dataframes = {
@@ -94,6 +95,16 @@ class RiskGovernanceCertificationService:
         }
 
         return {
+            "data_available": any(
+                (
+                    not anomaly_df.empty,
+                    not optimization_df.empty,
+                    not recommendation_df.empty,
+                    bool(financial_model),
+                    bool(reconciliation),
+                    bool(approval_metrics.get("total")),
+                )
+            ),
             "metrics": metrics,
             "dataframes": dataframes,
             "approval_metrics": approval_metrics,
@@ -129,11 +140,11 @@ class RiskGovernanceCertificationService:
             ),
         }
 
-
     @staticmethod
     def get_live_approval_queue() -> list[dict[str, Any]]:
         """Return operational approval queue detail without cache."""
         return ApprovalService.get_pending_approvals() or []
+
     @staticmethod
     def _metrics(
         anomaly_df: pd.DataFrame,
@@ -145,14 +156,20 @@ class RiskGovernanceCertificationService:
     ) -> dict[str, Any]:
         active_risks = len(anomaly_df) if not anomaly_df.empty else 0
         risk_status_column = RiskGovernanceCertificationService.risk_status_column(anomaly_df)
-        critical_risks = RiskGovernanceCertificationService.critical_risk_count(anomaly_df, risk_status_column)
+        critical_risks = RiskGovernanceCertificationService.critical_risk_count(
+            anomaly_df, risk_status_column
+        )
         optimization_items = len(optimization_df) if not optimization_df.empty else 0
         potential_savings = 0.0
         if not recommendation_df.empty and "estimated_savings" in recommendation_df.columns:
-            potential_savings = pd.to_numeric(
-                recommendation_df["estimated_savings"],
-                errors="coerce",
-            ).fillna(0).sum()
+            potential_savings = (
+                pd.to_numeric(
+                    recommendation_df["estimated_savings"],
+                    errors="coerce",
+                )
+                .fillna(0)
+                .sum()
+            )
 
         pending_count = _safe_int(approval_metrics.get("pending"), len(pending_approvals))
         sla_compliance = _safe_float(sla_metrics.get("sla_compliance"))
@@ -230,10 +247,19 @@ class RiskGovernanceCertificationService:
         process_summary = _safe_call(BusinessProcessService.get_process_summary, {})
 
         return {
-            "business_units": _safe_int(unit_summary.get("business_units") or unit_summary.get("total_business_units")),
-            "capabilities": _safe_int(capability_summary.get("capabilities") or capability_summary.get("total_capabilities")),
-            "business_services": _safe_int(service_summary.get("business_services") or service_summary.get("total_services")),
-            "business_processes": _safe_int(process_summary.get("business_processes") or process_summary.get("total_processes")),
+            "business_units": _safe_int(
+                unit_summary.get("business_units") or unit_summary.get("total_business_units")
+            ),
+            "capabilities": _safe_int(
+                capability_summary.get("capabilities")
+                or capability_summary.get("total_capabilities")
+            ),
+            "business_services": _safe_int(
+                service_summary.get("business_services") or service_summary.get("total_services")
+            ),
+            "business_processes": _safe_int(
+                process_summary.get("business_processes") or process_summary.get("total_processes")
+            ),
             "applications": _safe_int(service_summary.get("applications")),
             "technologies": _safe_int(service_summary.get("technologies")),
             "enterprise_risks": _safe_int(metrics.get("active_risks")),
@@ -272,34 +298,96 @@ class RiskGovernanceCertificationService:
     ) -> dict[str, Any]:
         return {
             "source_data": [
-                {"Section": "Risk Signals", "Source": "CostIntelligenceService.get_cost_anomalies", "Mode": "Service"},
-                {"Section": "Optimization Opportunities", "Source": "CostIntelligenceService.get_optimization_opportunities", "Mode": "Service"},
-                {"Section": "Recommendations", "Source": "CostIntelligenceService.get_recommendations", "Mode": "Service"},
+                {
+                    "Section": "Risk Signals",
+                    "Source": "CostIntelligenceService.get_cost_anomalies",
+                    "Mode": "Service",
+                },
+                {
+                    "Section": "Optimization Opportunities",
+                    "Source": "CostIntelligenceService.get_optimization_opportunities",
+                    "Mode": "Service",
+                },
+                {
+                    "Section": "Recommendations",
+                    "Source": "CostIntelligenceService.get_recommendations",
+                    "Mode": "Service",
+                },
                 {"Section": "Approval Queue", "Source": "ApprovalService", "Mode": "Service"},
-                {"Section": "Business Architecture", "Source": "BusinessUnit/Capability/Service/Process services", "Mode": "Service"},
-                {"Section": "Financial Model", "Source": "EnterpriseFinancialModel", "Mode": "Canonical"},
+                {
+                    "Section": "Business Architecture",
+                    "Source": "BusinessUnit/Capability/Service/Process services",
+                    "Mode": "Service",
+                },
+                {
+                    "Section": "Financial Model",
+                    "Source": "EnterpriseFinancialModel",
+                    "Mode": "Canonical",
+                },
             ],
             "data_coverage": [
-                {"Coverage Area": "Risk Signals", "Value": f"{len(dataframes.get('anomaly', pd.DataFrame())):,}", "Status": "Tracked"},
-                {"Coverage Area": "Optimization Opportunities", "Value": f"{len(dataframes.get('optimization', pd.DataFrame())):,}", "Status": "Tracked"},
-                {"Coverage Area": "Recommendations", "Value": f"{len(dataframes.get('recommendation', pd.DataFrame())):,}", "Status": "Tracked"},
-                {"Coverage Area": "Pending Approvals", "Value": f"{_safe_int(metrics.get('pending_count')):,}", "Status": "Tracked"},
-                {"Coverage Area": "SLA Compliance", "Value": f"{_safe_float(metrics.get('sla_compliance')):.0f}%", "Status": "Tracked"},
-                {"Coverage Area": "Financial Reconciliation", "Value": f"{_safe_float(reconciliation.get('allocation_coverage')):.1f}%", "Status": reconciliation.get("status") or "Unknown"},
+                {
+                    "Coverage Area": "Risk Signals",
+                    "Value": f"{len(dataframes.get('anomaly', pd.DataFrame())):,}",
+                    "Status": "Tracked",
+                },
+                {
+                    "Coverage Area": "Optimization Opportunities",
+                    "Value": f"{len(dataframes.get('optimization', pd.DataFrame())):,}",
+                    "Status": "Tracked",
+                },
+                {
+                    "Coverage Area": "Recommendations",
+                    "Value": f"{len(dataframes.get('recommendation', pd.DataFrame())):,}",
+                    "Status": "Tracked",
+                },
+                {
+                    "Coverage Area": "Pending Approvals",
+                    "Value": f"{_safe_int(metrics.get('pending_count')):,}",
+                    "Status": "Tracked",
+                },
+                {
+                    "Coverage Area": "SLA Compliance",
+                    "Value": f"{_safe_float(metrics.get('sla_compliance')):.0f}%",
+                    "Status": "Tracked",
+                },
+                {
+                    "Coverage Area": "Financial Reconciliation",
+                    "Value": f"{_safe_float(reconciliation.get('allocation_coverage')):.1f}%",
+                    "Status": reconciliation.get("status") or "Unknown",
+                },
             ],
             "relationship_summary": [
-                {"Layer": "Business Units", "Count": _safe_int(business_context.get("business_units"))},
+                {
+                    "Layer": "Business Units",
+                    "Count": _safe_int(business_context.get("business_units")),
+                },
                 {"Layer": "Capabilities", "Count": _safe_int(business_context.get("capabilities"))},
-                {"Layer": "Business Services", "Count": _safe_int(business_context.get("business_services"))},
+                {
+                    "Layer": "Business Services",
+                    "Count": _safe_int(business_context.get("business_services")),
+                },
                 {"Layer": "Applications", "Count": _safe_int(business_context.get("applications"))},
                 {"Layer": "Technologies", "Count": _safe_int(business_context.get("technologies"))},
                 {"Layer": "Enterprise Risks", "Count": _safe_int(metrics.get("active_risks"))},
             ],
             "financial_reconciliation": [
-                {"Metric": "Data Reconciliation Status", "Value": reconciliation.get("status") or "Unknown"},
-                {"Metric": "Allocation Coverage", "Value": f"{_safe_float(reconciliation.get('allocation_coverage')):.1f}%"},
-                {"Metric": "Allocated Spend", "Value": _money(financial_model.get("allocated_spend"))},
-                {"Metric": "Unallocated Spend", "Value": _money(financial_model.get("unallocated_spend"))},
+                {
+                    "Metric": "Data Reconciliation Status",
+                    "Value": reconciliation.get("status") or "Unknown",
+                },
+                {
+                    "Metric": "Allocation Coverage",
+                    "Value": f"{_safe_float(reconciliation.get('allocation_coverage')):.1f}%",
+                },
+                {
+                    "Metric": "Allocated Spend",
+                    "Value": _money(financial_model.get("allocated_spend")),
+                },
+                {
+                    "Metric": "Unallocated Spend",
+                    "Value": _money(financial_model.get("unallocated_spend")),
+                },
                 {"Metric": "Savings Exposure", "Value": _money(metrics.get("potential_savings"))},
                 {"Metric": "Variance Status", "Value": reconciliation.get("status") or "Unknown"},
             ],
@@ -310,25 +398,54 @@ class RiskGovernanceCertificationService:
             ),
             "raw_evidence": {
                 "Governance Metrics": [
-                    {"Metric": "Governance Confidence", "Value": f"{_safe_float(metrics.get('governance_score')):.0f}%"},
-                    {"Metric": "Active Risk Signals", "Value": _safe_int(metrics.get("active_risks"))},
-                    {"Metric": "High-Priority Risks", "Value": _safe_int(metrics.get("critical_risks"))},
-                    {"Metric": "Optimization Opportunities", "Value": _safe_int(metrics.get("optimization_items"))},
-                    {"Metric": "Savings Exposure", "Value": _money(metrics.get("potential_savings"))},
+                    {
+                        "Metric": "Governance Confidence",
+                        "Value": f"{_safe_float(metrics.get('governance_score')):.0f}%",
+                    },
+                    {
+                        "Metric": "Active Risk Signals",
+                        "Value": _safe_int(metrics.get("active_risks")),
+                    },
+                    {
+                        "Metric": "High-Priority Risks",
+                        "Value": _safe_int(metrics.get("critical_risks")),
+                    },
+                    {
+                        "Metric": "Optimization Opportunities",
+                        "Value": _safe_int(metrics.get("optimization_items")),
+                    },
+                    {
+                        "Metric": "Savings Exposure",
+                        "Value": _money(metrics.get("potential_savings")),
+                    },
                 ],
                 "Approval Metrics": [
                     {"Metric": "Pending", "Value": _safe_int(approval_metrics.get("pending"))},
                     {"Metric": "Approved", "Value": _safe_int(approval_metrics.get("approved"))},
                     {"Metric": "Rejected", "Value": _safe_int(approval_metrics.get("rejected"))},
                     {"Metric": "Escalated", "Value": _safe_int(approval_metrics.get("escalated"))},
-                    {"Metric": "SLA Compliance", "Value": f"{_safe_float(sla_metrics.get('sla_compliance')):.0f}%"},
+                    {
+                        "Metric": "SLA Compliance",
+                        "Value": f"{_safe_float(sla_metrics.get('sla_compliance')):.0f}%",
+                    },
                 ],
                 "Financial Model": [
-                    {"Metric": "Enterprise Total", "Value": _money(financial_model.get("enterprise_total"))},
-                    {"Metric": "Allocated Spend", "Value": _money(financial_model.get("allocated_spend"))},
-                    {"Metric": "Unallocated Spend", "Value": _money(financial_model.get("unallocated_spend"))},
-                    {"Metric": "Generated At", "Value": str(financial_model.get("generated_at") or "Unknown")},
+                    {
+                        "Metric": "Enterprise Total",
+                        "Value": _money(financial_model.get("enterprise_total")),
+                    },
+                    {
+                        "Metric": "Allocated Spend",
+                        "Value": _money(financial_model.get("allocated_spend")),
+                    },
+                    {
+                        "Metric": "Unallocated Spend",
+                        "Value": _money(financial_model.get("unallocated_spend")),
+                    },
+                    {
+                        "Metric": "Generated At",
+                        "Value": str(financial_model.get("generated_at") or "Unknown"),
+                    },
                 ],
             },
         }
-
