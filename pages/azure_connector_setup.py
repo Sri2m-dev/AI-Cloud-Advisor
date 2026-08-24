@@ -3,12 +3,15 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from auth.connector_context import (
+    get_current_organization_id,
+    get_current_user_id,
+    require_connector_admin,
+)
 from auth.guards import require_login
-from auth.connector_context import get_current_organization_id, get_current_user_id, require_connector_admin
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import render_sidebar_navigation
 from services.azure_connector_service import AzureConnectorService
-
 
 st.set_page_config(page_title="Azure Connector Setup", layout="wide")
 
@@ -59,6 +62,7 @@ def main() -> None:
                 effective_client_id,
                 effective_client_secret,
                 subscription_id or None,
+                organization_id=organization_id,
             )
         if result.get("status") == "CONNECTED":
             st.success("Azure connection verified.")

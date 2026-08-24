@@ -11,6 +11,11 @@ from datetime import datetime, timezone
 
 from auth.role_constants import normalize_role
 from database.db import get_db
+from services.demo_tenant_service import (
+    DEMO_ORGANIZATION_ID,
+    DEMO_ORGANIZATION_NAME,
+    demo_mode_enabled,
+)
 from services.runtime_configuration import is_valid_supabase_configuration
 
 DEFAULT_ADMIN_EMAIL = "admin@company.com"
@@ -26,6 +31,7 @@ LOCAL_PERSONAS = (
     ("cio@company.com", "cio", DEFAULT_PERSONA_PASSWORD),
     ("cto@company.com", "cio", DEFAULT_PERSONA_PASSWORD),
     ("finance@company.com", "finance", DEFAULT_PERSONA_PASSWORD),
+    ("sales.engineer@company.com", "sales_engineer", DEFAULT_PERSONA_PASSWORD),
     ("auditor@company.com", "auditor", DEFAULT_PERSONA_PASSWORD),
     ("operations@company.com", "operations", DEFAULT_PERSONA_PASSWORD),
 )
@@ -146,6 +152,12 @@ def ensure_nonproduction_personas(*, environment: str | None = None) -> int:
     try:
         _ensure_schema(conn)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        persona_organization_id = (
+            DEMO_ORGANIZATION_ID if demo_mode_enabled() else DEFAULT_ORGANIZATION_ID
+        )
+        persona_organization_name = (
+            DEMO_ORGANIZATION_NAME if demo_mode_enabled() else DEFAULT_ORGANIZATION_NAME
+        )
         for email, role, password in LOCAL_PERSONAS:
             canonical_role = normalize_role(role)
             row = conn.execute(
@@ -157,16 +169,16 @@ def ensure_nonproduction_personas(*, environment: str | None = None) -> int:
                 row
                 and _password_matches(password, row["password_hash"])
                 and normalize_role(row["role"]) == canonical_role
-                and row["organization_id"] == DEFAULT_ORGANIZATION_ID
-                and row["organization_name"] == DEFAULT_ORGANIZATION_NAME
+                and row["organization_id"] == persona_organization_id
+                and row["organization_name"] == persona_organization_name
             )
             if valid:
                 continue
             payload = (
                 _password_hash(password),
                 canonical_role,
-                DEFAULT_ORGANIZATION_ID,
-                DEFAULT_ORGANIZATION_NAME,
+                persona_organization_id,
+                persona_organization_name,
                 now,
                 email,
             )

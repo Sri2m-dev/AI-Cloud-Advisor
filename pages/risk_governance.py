@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import sys
@@ -11,9 +11,6 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from shared.auth import require_role
-from shared.session import init_session
-from shared.styles import configure_page
 from components.cards import (
     render_approval_card,
     render_insight_card,
@@ -32,10 +29,13 @@ from components.shared import (
 )
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from components.tables import data_table
-
+from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
 from services.risk_governance_certification_service import RiskGovernanceCertificationService
+from shared.auth import require_role
+from shared.evidence_context import resolve_active_evidence_context
+from shared.session import init_session
 from shared.streamlit_compat import dataframe, plotly_chart
-
+from shared.styles import configure_page
 
 configure_page(
     page_title="Risk & Governance | Nexora",
@@ -44,13 +44,15 @@ configure_page(
 
 init_session()
 
-require_role([
-    "executive",
-    "cio",
-    "technical",
-    "finance",
-    "super_admin",
-])
+require_role(
+    [
+        "executive",
+        "cio",
+        "technical",
+        "finance",
+        "super_admin",
+    ]
+)
 
 role = st.session_state.get("role", "Unknown")
 render_enterprise_sidebar(
@@ -59,6 +61,71 @@ render_enterprise_sidebar(
     role_pages=ROLE_PAGES,
     active_page=PAGE_PATHS["Risk & Governance"],
 )
+
+evidence_context = resolve_active_evidence_context(st.session_state)
+if evidence_context.is_prospect:
+    st.title("Risk & Governance")
+    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.info("Risk is not assessed from current uploaded evidence.")
+    st.write(
+        "No governed risk, control, concentration, service-health, or financial-impact "
+        "conclusion is supported by this prospect analysis."
+    )
+    st.stop()
+
+
+def render_demo_risk_governance(payload: dict) -> None:
+    """Render the isolated demo posture from the same decisions used by the CEO view."""
+    metrics = payload["metrics"]
+    decisions = payload["decisions"]
+    journeys = {item["decision_id"]: item for item in payload["journeys"]}
+    risk_decisions = [item for item in decisions if item["type"] == "executive_technology_risk"]
+    known_impact = sum(item.get("financial_impact") or 0 for item in decisions)
+
+    st.title("Risk & Governance")
+    st.caption("Executive risk, decision accountability, and evidence posture.")
+    st.warning(
+        "SYNTHETIC DEMONSTRATION DATA — isolated from customer and production records."
+    )
+    st.subheader("Leadership risk posture")
+    cols = st.columns(4)
+    cols[0].metric("Material technology risks", len(risk_decisions))
+    cols[1].metric("Decisions requiring action", len(decisions))
+    cols[2].metric("Known decision impact", f"${known_impact / 1_000_000:.1f}M")
+    cols[3].metric("Technology health", f"{metrics['technology_health']}%")
+
+    st.subheader("Decision requiring mitigation")
+    for decision in risk_decisions:
+        journey = journeys[decision["id"]]
+        with st.container(border=True):
+            st.caption(f"{decision['id']} · {decision['status'].replace('_', ' ').title()}")
+            st.markdown(f"### {decision['title']}")
+            st.write(f"**Business service:** {decision['business_service']}")
+            st.write(f"**Why it matters:** {journey['impact']}")
+            st.write("**Financial impact:** UNKNOWN — not yet certified")
+            st.write(f"**Recommended decision:** {journey['recommendation']}")
+            st.info(f"Accountable next step — {journey['next_step']}")
+            confidence, evidence = st.columns(2)
+            confidence.metric("Confidence", f"{decision['confidence']}%")
+            evidence.metric("Evidence coverage", f"{decision['evidence_coverage']}%")
+            with st.expander("Show evidence and dependency context"):
+                st.write(journey["evidence"])
+                st.write(" → ".join(item["entity"] for item in journey["twin_path"]))
+
+    st.subheader("Financial reconciliation")
+    st.info(
+        "Allocation and unallocated spend are NOT ASSESSED for this risk decision. "
+        "No zero-value or healthy financial conclusion is asserted without certified evidence."
+    )
+    st.caption(f"Source: {payload['source']} · As of {payload['as_of']}")
+
+
+organization_id = str(
+    st.session_state.get("organization_id") or st.session_state.get("org_id") or ""
+)
+if demo_mode_enabled() and is_demo_tenant(organization_id):
+    render_demo_risk_governance(load_demo_tenant(organization_id))
+    st.stop()
 
 dashboard = RiskGovernanceCertificationService.get_dashboard()
 metrics = dashboard["metrics"]
@@ -89,7 +156,8 @@ def render_certification_summary() -> None:
         {
             "title": "Executive Summary",
             "description": "Estate-level risk and governance summary for CIO certification, financial reconciliation, and business architecture context.",
-            "narrative": dashboard.get("executive_summary") or "Risk & Governance certification summary is unavailable.",
+            "narrative": dashboard.get("executive_summary")
+            or "Risk & Governance certification summary is unavailable.",
             "metrics": [
                 {
                     "label": "Governance Confidence",
@@ -166,6 +234,19 @@ def _show_dataframe(df: pd.DataFrame, empty_message: str) -> None:
 
 
 def render_governance_content():
+    if not dashboard["data_available"]:
+        st.warning("Risk data source has not been configured for this tenant.")
+        render_insight_card(
+            "Risk Intelligence",
+            "Unavailable",
+            description=(
+                "Risk posture cannot currently be assessed. Configure a certified "
+                "governance data source before using this page for decisions."
+            ),
+            icon="governance",
+            status="warning",
+        )
+        return
     render_certification_summary()
 
     # --------------------------------------------------
@@ -188,11 +269,22 @@ def render_governance_content():
             status="healthy" if governance_score >= 75 else "warning",
         )
     with k2:
-        render_metric_card("Active Risk Signals", active_risks, icon="risk", status="warning" if active_risks else "healthy")
+        render_metric_card(
+            "Active Risk Signals",
+            active_risks,
+            icon="risk",
+            status="warning" if active_risks else "healthy",
+        )
     with k3:
-        render_risk_card("High-Priority Risks", int(critical_risks), status="critical" if critical_risks else "healthy")
+        render_risk_card(
+            "High-Priority Risks",
+            int(critical_risks),
+            status="critical" if critical_risks else "healthy",
+        )
     with k4:
-        render_approval_card("Decision Queue", pending_count, status="watch" if pending_count else "healthy")
+        render_approval_card(
+            "Decision Queue", pending_count, status="watch" if pending_count else "healthy"
+        )
     with k5:
         render_metric_card("Optimization Signals", optimization_items, icon="ai", status="info")
     with k6:
@@ -281,10 +373,11 @@ def render_governance_content():
         divider=True,
     )
 
-    if not optimization_df.empty and {"service_name", "total_cost"}.issubset(optimization_df.columns):
+    if not optimization_df.empty and {"service_name", "total_cost"}.issubset(
+        optimization_df.columns
+    ):
         top_optimization_df = (
-            optimization_df
-            .copy()
+            optimization_df.copy()
             .assign(
                 total_cost=pd.to_numeric(
                     optimization_df["total_cost"],
@@ -431,7 +524,8 @@ def render_governance_content():
             pending_df = pd.DataFrame(pending_approvals)
             if not pending_df.empty:
                 visible_columns = [
-                    column for column in [
+                    column
+                    for column in [
                         "id",
                         "request_type",
                         "title",
@@ -458,7 +552,8 @@ def render_governance_content():
 
         if not recommendation_df.empty:
             visible_columns = [
-                column for column in [
+                column
+                for column in [
                     "service",
                     "description",
                     "estimated_savings",
@@ -490,4 +585,3 @@ render_page(
     breadcrumbs=["Home", "Governance", "Risk & Governance"],
     content=render_governance_content,
 )
-

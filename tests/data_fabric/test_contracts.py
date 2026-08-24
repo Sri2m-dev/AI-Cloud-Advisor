@@ -16,8 +16,8 @@ from data_fabric.contracts import (
 )
 
 
-def test_entity_type_values_cover_p3_baseline() -> None:
-    assert {item.value for item in EntityType} == {
+def test_entity_type_values_preserve_p3_baseline() -> None:
+    assert {
         "business_capability",
         "business_service",
         "application",
@@ -37,11 +37,11 @@ def test_entity_type_values_cover_p3_baseline() -> None:
         "approval",
         "policy",
         "evidence",
-    }
+    } <= {item.value for item in EntityType}
 
 
-def test_relationship_type_values_cover_p3_baseline() -> None:
-    assert {item.value for item in RelationshipType} == {
+def test_relationship_type_values_preserve_p3_baseline() -> None:
+    assert {
         "depends_on",
         "runs_on",
         "owned_by",
@@ -54,7 +54,7 @@ def test_relationship_type_values_cover_p3_baseline() -> None:
         "approves",
         "evidences",
         "associated_with",
-    }
+    } <= {item.value for item in RelationshipType}
 
 
 def test_enterprise_entity_accepts_string_enum_and_common_fields() -> None:

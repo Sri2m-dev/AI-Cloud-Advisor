@@ -175,3 +175,21 @@ class SupabaseClassificationRepository:
             .execute()
         )
         return tuple(response.data or ())
+
+    def current_for_entity(self, context, entity_type, entity_id):
+        response = (
+            self.client.table("classification_result")
+            .select("*")
+            .eq("organization_id", context.organization_id)
+            .eq("tenant_id", context.tenant_id)
+            .eq("entity_type", entity_type)
+            .eq("entity_id", entity_id)
+            .is_("valid_to", "null")
+            .order("field_name")
+            .order("version", desc=True)
+            .execute()
+        )
+        current = {}
+        for row in response.data or ():
+            current.setdefault(str(row.get("field_name") or ""), row)
+        return tuple(current.values())

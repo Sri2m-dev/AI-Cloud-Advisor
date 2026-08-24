@@ -22,6 +22,8 @@ __pycache__/
 logs/
 sync_logs/
 exports/
+var/prospect_data/
+.streamlit/prospect-data.key
 
 # JavaScript
 node_modules/
