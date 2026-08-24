@@ -2,6 +2,7 @@ from auth.role_constants import normalize_role
 
 ROLE_PAGES = {
     "super_admin": [
+        "Component Showcase",
         "Executive Dashboard",
         "Technology Portfolio Overview",
         "FinOps Dashboard",
@@ -59,6 +60,8 @@ ROLE_PAGES = {
         "Data Quality Dashboard",
         "Enterprise Data Fabric",
         "Entity Registry",
+        "Enterprise Registry",
+        "Relationship Explorer",
         "Scheduler Operations",
         "Enterprise Observability",
         "Incident Timeline",
@@ -85,7 +88,6 @@ ROLE_PAGES = {
         "Risk & Governance",
         "Reports",
     ],
-
     "client_admin": [
         "AI Copilot",
         "AI Workflow Center",
@@ -134,58 +136,14 @@ ROLE_PAGES = {
         "Cloud Connections",
         "Reports",
     ],
-
     "executive": [
-        "Executive Dashboard",
-        "Enterprise Spend",
-        "Cloud Cost Imports",
-        "Technology Knowledge Graph",
-        "Technology Copilot",
-        "AI Copilot",
-        "AI Workflow Center",
-        "AI Execution Center",
-        "Automation Center",
-        "Enterprise Knowledge Graph",
-        "Dependency Analysis",
-        "Impact Analysis",
-        "Simulation Center",
-        "AI Reasoning Center",
-        "Forecasting",
-        "Risk Prediction",
-        "Capacity Planning",
-        "Financial Forecasting",
-        "Predictive AI",
-        "Prediction Performance",
-        "Predictive Center",
-        "Goal Center",
-        "Agent Registry",
-        "Multi-Agent Collaboration",
-        "Workflow Designer",
-        "Governance & Authorization",
-        "Execution Center",
-        "Learning Analytics",
-        "Execution Plans",
-        "Agent Console",
-        "Learning Center",
-        "Twin Explorer",
-        "Enterprise Digital Twin",
-        "Enterprise Twin Dashboard",
-        "Connector Health Dashboard",
-        "Platform Health Dashboard",
-        "Security Dashboard",
-        "Performance Dashboard",
-        "Compliance Dashboard",
-        "Disaster Recovery Dashboard",
-        "Enterprise Readiness",
-        "Data Quality Dashboard",
-        "Scheduler Operations",
-        "Enterprise Observability",
-        "Incident Timeline",
-        "Savings Governance",
-        "Approvals",
+        "CEO Workspace",
+        "Executive Decisions",
+        "Business Services",
+        "Financial Health",
+        "Strategic Risks",
         "Reports",
     ],
-
     "cio": [
         "Technology Portfolio Overview",
         "Cloud Cost Imports",
@@ -250,8 +208,8 @@ ROLE_PAGES = {
         "Approvals",
         "Reports",
     ],
-
     "finance": [
+        "Prospect Data Intake",
         "FinOps Dashboard",
         "Enterprise Spend",
         "Cloud Cost Imports",
@@ -284,7 +242,6 @@ ROLE_PAGES = {
         "Approvals",
         "Reports",
     ],
-
     "technical": [
         "Operations Workspace",
         "AI Execution Center",
@@ -346,12 +303,52 @@ ROLE_PAGES = {
     ],
 }
 
-for _registry_role in ("super_admin", "client_admin", "executive", "finance", "cio", "auditor"):
+EXECUTIVE_EXPERIENCE_PAGES = {
+    "super_admin": [
+        "Executive Command Center",
+        "CEO Workspace",
+        "CIO Workspace",
+        "CFO Workspace",
+        "Enterprise Architect Workspace",
+        "Operations Command Center",
+        "FinOps Workspace",
+        "Board Intelligence",
+    ],
+    "client_admin": [
+        "Executive Command Center",
+        "Enterprise Architect Workspace",
+        "Operations Command Center",
+    ],
+    "executive": ["CEO Workspace"],
+    "cio": [
+        "Executive Command Center",
+        "CIO Workspace",
+        "Enterprise Architect Workspace",
+        "FinOps Workspace",
+    ],
+    "finance": ["Executive Command Center", "CFO Workspace", "FinOps Workspace"],
+    "technical": ["Operations Command Center"],
+    "operations": ["Executive Command Center", "Operations Command Center"],
+    "auditor": ["Executive Command Center", "Board Intelligence"],
+}
+
+for _experience_role, _experience_pages in EXECUTIVE_EXPERIENCE_PAGES.items():
+    if _experience_role in ROLE_PAGES:
+        for _experience_page in _experience_pages:
+            if _experience_page not in ROLE_PAGES[_experience_role]:
+                ROLE_PAGES[_experience_role].insert(0, _experience_page)
+
+for _registry_role in ("super_admin", "client_admin", "finance", "cio", "auditor"):
     if _registry_role in ROLE_PAGES and "Cloud Account Registry" not in ROLE_PAGES[_registry_role]:
         ROLE_PAGES[_registry_role].append("Cloud Account Registry")
 
 for _classification_role in (
-    "super_admin", "client_admin", "executive", "finance", "cio", "operations", "auditor"
+    "super_admin",
+    "client_admin",
+    "finance",
+    "cio",
+    "operations",
+    "auditor",
 ):
     if (
         _classification_role in ROLE_PAGES
@@ -359,7 +356,43 @@ for _classification_role in (
     ):
         ROLE_PAGES[_classification_role].append("Account Resolution")
 
+for _scenario_role in ("super_admin", "finance", "cio", "operations", "auditor"):
+    if _scenario_role in ROLE_PAGES and "Scenario Intelligence" not in ROLE_PAGES[_scenario_role]:
+        ROLE_PAGES[_scenario_role].append("Scenario Intelligence")
+
+for _analysis_role in ("executive", "finance", "cio", "client_admin", "super_admin"):
+    if "Welcome" not in ROLE_PAGES[_analysis_role]:
+        ROLE_PAGES[_analysis_role].insert(0, "Welcome")
+    if "Analyse Your Environment" not in ROLE_PAGES[_analysis_role]:
+        ROLE_PAGES[_analysis_role].append("Analyse Your Environment")
+
+if "Enterprise AI Copilot" not in ROLE_PAGES["executive"]:
+    ROLE_PAGES["executive"].insert(3, "Enterprise AI Copilot")
+
+ROLE_PAGES["sales_engineer"] = [
+    "Welcome",
+    "Analyse Your Environment",
+    "Prospect Data Intake",
+]
+
 PAGE_PATHS = {
+    "Welcome": "pages/welcome.py",
+    "Executive Overview": "pages/executive_command_center.py",
+    "Enterprise Dashboard": "pages/executive_dashboard.py",
+    "Financial Health": "pages/cfo_workspace.py",
+    "Strategic Risks": "pages/risk_governance.py",
+    "Executive Decisions": "pages/decision_intelligence.py",
+    "Prospect Data Intake": "pages/prospect_data_intake.py",
+    "Analyse Your Environment": "pages/analyze_environment.py",
+    "Executive Command Center": "pages/executive_command_center.py",
+    "CEO Workspace": "pages/ceo_workspace.py",
+    "CIO Workspace": "pages/cio_workspace.py",
+    "CFO Workspace": "pages/cfo_workspace.py",
+    "Enterprise Architect Workspace": "pages/enterprise_architect_workspace.py",
+    "Operations Command Center": "pages/operations_command_center.py",
+    "FinOps Workspace": "pages/finops_workspace.py",
+    "Board Intelligence": "pages/board_intelligence.py",
+    "Component Showcase": "pages/component_showcase.py",
     "Executive Dashboard": "pages/executive_dashboard.py",
     "Technology Portfolio Overview": "pages/cio_dashboard.py",
     "FinOps Dashboard": "pages/finance_dashboard.py",
@@ -384,6 +417,7 @@ PAGE_PATHS = {
     "Dependency Analysis": "pages/dependency_analysis.py",
     "Impact Analysis": "pages/impact_analysis.py",
     "Simulation Center": "pages/simulation_center.py",
+    "Scenario Intelligence": "pages/scenario_intelligence.py",
     "AI Reasoning Center": "pages/ai_reasoning.py",
     "Forecasting": "pages/predictive_forecasting.py",
     "Risk Prediction": "pages/risk_prediction.py",
@@ -418,6 +452,12 @@ PAGE_PATHS = {
     "Data Quality Dashboard": "pages/data_quality_dashboard.py",
     "Enterprise Data Fabric": "pages/enterprise_data_fabric.py",
     "Entity Registry": "pages/entity_registry.py",
+    "Enterprise Registry": "pages/enterprise_registry.py",
+    "Enterprise Intelligence": "pages/enterprise_intelligence.py",
+    "Enterprise Search": "pages/enterprise_search.py",
+    "Enterprise AI Copilot": "pages/enterprise_ai_copilot.py",
+    "Decision Intelligence": "pages/decision_intelligence.py",
+    "Relationship Explorer": "pages/relationship_explorer.py",
     "Scheduler Operations": "pages/scheduler_operations.py",
     "Enterprise Observability": "pages/enterprise_observability.py",
     "Incident Timeline": "pages/incident_timeline.py",
@@ -445,11 +485,53 @@ PAGE_PATHS = {
     "Reports": "pages/reports.py",
 }
 
+for _enterprise_registry_role in (
+    "client_admin",
+    "cio",
+    "finance",
+    "auditor",
+    "operations",
+):
+    if (
+        _enterprise_registry_role in ROLE_PAGES
+        and "Enterprise Registry" not in ROLE_PAGES[_enterprise_registry_role]
+    ):
+        ROLE_PAGES[_enterprise_registry_role].append("Enterprise Registry")
+
+for _relationship_role in (
+    "client_admin",
+    "cio",
+    "finance",
+    "auditor",
+    "operations",
+):
+    if "Relationship Explorer" not in ROLE_PAGES[_relationship_role]:
+        ROLE_PAGES[_relationship_role].append("Relationship Explorer")
+
+for _intelligence_role in (
+    "super_admin",
+    "client_admin",
+    "cio",
+    "finance",
+    "auditor",
+    "operations",
+):
+    if "Enterprise Intelligence" not in ROLE_PAGES[_intelligence_role]:
+        ROLE_PAGES[_intelligence_role].append("Enterprise Intelligence")
+    if "Enterprise Search" not in ROLE_PAGES[_intelligence_role]:
+        ROLE_PAGES[_intelligence_role].append("Enterprise Search")
+    if "Enterprise AI Copilot" not in ROLE_PAGES[_intelligence_role]:
+        ROLE_PAGES[_intelligence_role].append("Enterprise AI Copilot")
+    if "Decision Intelligence" not in ROLE_PAGES[_intelligence_role]:
+        ROLE_PAGES[_intelligence_role].append("Decision Intelligence")
+
 DEFAULT_ROLE_PAGE = {
     "super_admin": PAGE_PATHS["Executive Dashboard"],
-    "executive": PAGE_PATHS["Executive Dashboard"],
+    "client_admin": PAGE_PATHS["Executive Command Center"],
+    "executive": PAGE_PATHS["Welcome"],
     "cio": PAGE_PATHS["Technology Portfolio Overview"],
     "finance": PAGE_PATHS["FinOps Dashboard"],
+    "sales_engineer": PAGE_PATHS["Welcome"],
     "technical": PAGE_PATHS["Operations Workspace"],
     "operations": PAGE_PATHS["Operations Workspace"],
     "auditor": PAGE_PATHS["Audit Timeline"],

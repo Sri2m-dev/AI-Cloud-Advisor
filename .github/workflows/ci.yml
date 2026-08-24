@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/p3-supabase-live-validation
+      - feature/p4-3-enterprise-intelligence-layer
   pull_request:
 
 jobs:

@@ -108,15 +108,14 @@ class EnterpriseSpendCertificationService:
                 .astype(str)
                 .str.upper()
             )
-            savings = pd.to_numeric(recommendations_df["estimated_savings"], errors="coerce").fillna(0)
+            savings = pd.to_numeric(
+                recommendations_df["estimated_savings"], errors="coerce"
+            ).fillna(0)
             implemented = statuses.isin(["APPROVED", "IMPLEMENTED", "COMPLETED", "RESOLVED"])
             savings_realized = float(savings[implemented].sum())
             savings_opportunity = float(savings[~implemented].sum())
 
-        if not savings_opportunity:
-            savings_opportunity = 18_500.0
-
-        forecast_growth = 12.0
+        forecast_growth = 0.0
         if not forecast_df.empty:
             growth_column = next(
                 (
@@ -129,14 +128,16 @@ class EnterpriseSpendCertificationService:
             if growth_column:
                 forecast_growth = float(
                     pd.to_numeric(forecast_df[growth_column], errors="coerce").dropna().mean()
-                    or forecast_growth
+                    or 0.0
                 )
 
-        fallback_risks = {
-            "cloud_optimization_opportunity": 12_000.0,
-            "saas_waste": 1_800.0,
-            "license_waste": 4_700.0,
-            "contract_renewals_at_risk": 63_000.0,
+        source_availability = {
+            "spend": bool(posture.source_rows or posture.persisted_facts or breakdown),
+            "budget": not budget_df.empty,
+            "forecast": not forecast_df.empty,
+            "recommendations": not recommendations_df.empty,
+            "cost_trend": not cost_df.empty,
+            "risk": False,
         }
 
         spend_mix_df = pd.DataFrame(
@@ -147,23 +148,11 @@ class EnterpriseSpendCertificationService:
                 {"category": "Licenses", "cost": license_cost},
             ]
         )
-        risk_summary_df = pd.DataFrame(
-            [
-                {
-                    "Risk Area": "Cloud Optimization Opportunity",
-                    "Amount": f"${fallback_risks['cloud_optimization_opportunity']:,.0f}",
-                },
-                {"Risk Area": "SaaS Waste", "Amount": f"${fallback_risks['saas_waste']:,.0f}"},
-                {"Risk Area": "License Waste", "Amount": f"${fallback_risks['license_waste']:,.0f}"},
-                {
-                    "Risk Area": "Contract Renewals at Risk",
-                    "Amount": f"${fallback_risks['contract_renewals_at_risk']:,.0f}",
-                },
-            ]
-        )
+        risk_summary_df = pd.DataFrame(columns=["Risk Area", "Amount"])
 
         financial_model = {
-            "enterprise_total": posture.total_ingested_spend + Decimal(str(saas_cost + msp_cost + license_cost)),
+            "enterprise_total": posture.total_ingested_spend
+            + Decimal(str(saas_cost + msp_cost + license_cost)),
             "allocated_spend": posture.allocated_spend,
             "unallocated_spend": posture.unallocated_resolved_spend,
             "quarantined_spend": posture.quarantined_spend,
@@ -194,7 +183,11 @@ class EnterpriseSpendCertificationService:
             "savings_realized": savings_realized,
             "savings_opportunity": savings_opportunity,
             "forecast_growth": forecast_growth,
-            **fallback_risks,
+            "cloud_optimization_opportunity": 0.0,
+            "saas_waste": 0.0,
+            "license_waste": 0.0,
+            "contract_renewals_at_risk": 0.0,
+            "source_availability": source_availability,
         }
 
         return {
@@ -226,7 +219,7 @@ class EnterpriseSpendCertificationService:
             "evidence": EnterpriseSpendCertificationService._evidence(
                 financial_model,
                 reconciliation,
-                fallback_risks,
+                source_availability,
             ),
         }
 
@@ -236,29 +229,70 @@ class EnterpriseSpendCertificationService:
         financial_model: dict[str, Any],
         reconciliation: dict[str, Any],
     ) -> str:
-        sentences = [
-            f"Enterprise technology spend is {EnterpriseSpendCertificationService.format_compact_currency(metrics['total_spend'])} across cloud, SaaS, managed services, and licenses.",
-            f"The Enterprise Financial Model shows {EnterpriseSpendCertificationService.format_compact_currency(financial_model.get('allocated_spend'))} allocated and {EnterpriseSpendCertificationService.format_compact_currency(financial_model.get('unallocated_spend'))} unallocated.",
-            f"Data reconciliation status is {reconciliation.get('status') or 'Unknown'} with {_safe_float(reconciliation.get('allocation_coverage')):.1f}% allocation coverage.",
-            f"Remaining optimization opportunity is {EnterpriseSpendCertificationService.format_compact_currency(metrics['savings_opportunity'])}.",
-        ]
+        availability = metrics["source_availability"]
+        sentences = []
+        if availability["spend"]:
+            sentences.append(
+                "Enterprise technology spend is "
+                f"{EnterpriseSpendCertificationService.format_compact_currency(metrics['total_spend'])} "
+                "across cloud, SaaS, managed services, and licenses."
+            )
+            sentences.extend(
+                [
+                    "The Enterprise Financial Model shows "
+                    f"{EnterpriseSpendCertificationService.format_compact_currency(financial_model.get('allocated_spend'))} "
+                    "allocated and "
+                    f"{EnterpriseSpendCertificationService.format_compact_currency(financial_model.get('unallocated_spend'))} "
+                    "unallocated.",
+                    f"Data reconciliation status is {reconciliation.get('status') or 'Unknown'} "
+                    f"with {_safe_float(reconciliation.get('allocation_coverage')):.1f}% "
+                    "allocation coverage.",
+                ]
+            )
+        else:
+            sentences.append(
+                "Enterprise spend, allocation, and reconciliation are UNKNOWN because "
+                "the certified spend source is unavailable."
+            )
+        if availability["recommendations"]:
+            sentences.append(
+                "Remaining optimization opportunity is "
+                f"{EnterpriseSpendCertificationService.format_compact_currency(metrics['savings_opportunity'])}."
+            )
+        else:
+            sentences.append(
+                "Optimization opportunity is UNKNOWN because no certified recommendation "
+                "source is available."
+            )
         return " ".join(sentences)
 
     @staticmethod
     def _evidence(
         financial_model: dict[str, Any],
         reconciliation: dict[str, Any],
-        fallback_risks: dict[str, float],
+        source_availability: dict[str, bool],
     ) -> dict[str, Any]:
         return {
             "source_data": [
-                {"Section": "Spend Breakdown", "Source": "mart_enterprise_spend_v2", "Mode": "Live"},
+                {
+                    "Section": "Spend Breakdown",
+                    "Source": "mart_enterprise_spend_v2",
+                    "Mode": "Live",
+                },
                 {"Section": "Forecast", "Source": "mart_enterprise_forecast", "Mode": "Live"},
                 {"Section": "Cost Trend", "Source": "unified_cloud_costs", "Mode": "Live"},
                 {"Section": "Budget", "Source": "mart_budget_vs_actual", "Mode": "Live"},
                 {"Section": "Savings", "Source": "recommendations", "Mode": "Live"},
-                {"Section": "Financial Model", "Source": "EnterpriseFinancialModel", "Mode": "Canonical"},
-                {"Section": "Risk Exposure", "Source": "Fallback constants", "Mode": "Derived/Fallback"},
+                {
+                    "Section": "Financial Model",
+                    "Source": "EnterpriseFinancialModel",
+                    "Mode": "Canonical",
+                },
+                {
+                    "Section": "Risk Exposure",
+                    "Source": "Certified risk services",
+                    "Mode": "Unavailable",
+                },
             ],
             "data_coverage": [
                 {
@@ -278,14 +312,21 @@ class EnterpriseSpendCertificationService:
                 },
             ],
             "financial_reconciliation": [
-                {"Metric": "Data Reconciliation Status", "Value": reconciliation.get("status") or "Unknown"},
+                {
+                    "Metric": "Data Reconciliation Status",
+                    "Value": reconciliation.get("status") or "Unknown",
+                },
                 {
                     "Metric": "Allocated Spend",
-                    "Value": EnterpriseSpendCertificationService.format_compact_currency(financial_model.get("allocated_spend")),
+                    "Value": EnterpriseSpendCertificationService.format_compact_currency(
+                        financial_model.get("allocated_spend")
+                    ),
                 },
                 {
                     "Metric": "Unallocated Spend",
-                    "Value": EnterpriseSpendCertificationService.format_compact_currency(financial_model.get("unallocated_spend")),
+                    "Value": EnterpriseSpendCertificationService.format_compact_currency(
+                        financial_model.get("unallocated_spend")
+                    ),
                 },
                 {
                     "Metric": "Allocation Coverage",
@@ -293,23 +334,40 @@ class EnterpriseSpendCertificationService:
                 },
             ],
             "ai_interpretation": (
-                "Enterprise Spend is operational and tied to the canonical financial model. "
-                "Risk exposure values are currently labeled as derived fallback signals until live renewal, waste, and optimization feeds are fully mapped."
+                "Enterprise Spend uses only certified tenant-scoped sources. Missing spend, "
+                "budget, forecast, recommendation, or risk sources remain UNKNOWN."
             ),
             "raw_evidence": {
                 "Financial Model": [
-                    {"Metric": "Enterprise Total", "Value": EnterpriseSpendCertificationService.format_compact_currency(financial_model.get("enterprise_total"))},
-                    {"Metric": "Allocated Spend", "Value": EnterpriseSpendCertificationService.format_compact_currency(financial_model.get("allocated_spend"))},
-                    {"Metric": "Unallocated Spend", "Value": EnterpriseSpendCertificationService.format_compact_currency(financial_model.get("unallocated_spend"))},
-                    {"Metric": "Generated At", "Value": str(financial_model.get("generated_at") or "Unknown")},
-                ],
-                "Fallback Risk Signals": [
                     {
-                        "Signal": key.replace("_", " ").title(),
-                        "Value": EnterpriseSpendCertificationService.format_compact_currency(value),
-                        "Mode": "Derived/Fallback",
+                        "Metric": "Enterprise Total",
+                        "Value": EnterpriseSpendCertificationService.format_compact_currency(
+                            financial_model.get("enterprise_total")
+                        ),
+                    },
+                    {
+                        "Metric": "Allocated Spend",
+                        "Value": EnterpriseSpendCertificationService.format_compact_currency(
+                            financial_model.get("allocated_spend")
+                        ),
+                    },
+                    {
+                        "Metric": "Unallocated Spend",
+                        "Value": EnterpriseSpendCertificationService.format_compact_currency(
+                            financial_model.get("unallocated_spend")
+                        ),
+                    },
+                    {
+                        "Metric": "Generated At",
+                        "Value": str(financial_model.get("generated_at") or "Unknown"),
+                    },
+                ],
+                "Source Availability": [
+                    {
+                        "Source": key.replace("_", " ").title(),
+                        "Available": "Yes" if value else "No",
                     }
-                    for key, value in fallback_risks.items()
+                    for key, value in source_availability.items()
                 ],
             },
         }

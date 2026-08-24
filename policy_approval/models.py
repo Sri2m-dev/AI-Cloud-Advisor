@@ -142,6 +142,42 @@ class PolicyEvaluation:
 
 
 @dataclass(frozen=True, slots=True)
+class PolicyPreviewResult:
+    preview_id: str
+    organization_id: str
+    tenant_id: str
+    recommendation_id: str
+    recommendation_version: int
+    evidence_package_id: str
+    evidence_package_hash: str
+    policy_id: str
+    policy_version: int
+    proposed_scope: AuthorityScope
+    proposed_actor: Actor
+    result: PolicyEvaluationResult
+    matched_rules: tuple[str, ...]
+    unmet_rules: tuple[str, ...]
+    reasons: tuple[str, ...]
+    evidence_states: Mapping[str, EvidenceState]
+    authority_requirements: tuple[str, ...]
+    segregation_requirements: tuple[str, ...]
+    expiry_requirements: tuple[str, ...]
+    exception_possible: bool
+    evaluated_at: datetime
+    integrity_hash: str
+    authoritative: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "result", PolicyEvaluationResult(self.result))
+        object.__setattr__(self, "evidence_states", MappingProxyType(dict(self.evidence_states)))
+        _aware(self.evaluated_at, "preview timestamp")
+        if self.authoritative:
+            raise ValueError("policy preview can never be authoritative")
+        if not self.preview_id or not self.integrity_hash:
+            raise ValueError("preview identity and integrity hash are required")
+
+
+@dataclass(frozen=True, slots=True)
 class Approval:
     approval_id: str
     organization_id: str

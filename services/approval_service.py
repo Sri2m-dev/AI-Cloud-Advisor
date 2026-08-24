@@ -105,26 +105,42 @@ def reject_request(
 
 
 class ApprovalService:
+    @staticmethod
+    def _safe_read(method, fallback):
+        try:
+            return method()
+        except RuntimeError as exc:
+            if "SUPABASE_" not in str(exc):
+                raise
+            return fallback
 
     @staticmethod
     def get_dashboard_metrics() -> dict[str, Any]:
-        return ApprovalRepository.approval_metrics()
+        return ApprovalService._safe_read(
+            ApprovalRepository.approval_metrics,
+            {"pending": 0, "approved": 0, "rejected": 0, "escalated": 0, "total": 0},
+        )
 
     @staticmethod
     def get_workflow_stage_metrics():
-        return ApprovalRepository.workflow_stage_metrics()
+        return ApprovalService._safe_read(
+            ApprovalRepository.workflow_stage_metrics,
+            {"pmo": 0, "finance": 0, "cio": 0, "ceo": 0, "completed": 0},
+        )
 
     @staticmethod
     def get_overdue_approvals():
-        return ApprovalRepository.get_overdue_approvals()
+        return ApprovalService._safe_read(ApprovalRepository.get_overdue_approvals, [])
 
     @staticmethod
     def get_pending_approvals(role: str | None = None):
-        return ApprovalRepository.get_pending_approvals(role)
+        return ApprovalService._safe_read(
+            lambda: ApprovalRepository.get_pending_approvals(role), []
+        )
 
     @staticmethod
     def get_all_approvals():
-        return ApprovalRepository.get_all_approvals()
+        return ApprovalService._safe_read(ApprovalRepository.get_all_approvals, [])
 
     @staticmethod
     def get_approval_details(approval_id: int):
@@ -172,11 +188,21 @@ class ApprovalService:
 
     @staticmethod
     def get_sla_metrics():
-        return ApprovalRepository.get_sla_metrics()
+        return ApprovalService._safe_read(
+            ApprovalRepository.get_sla_metrics,
+            {
+                "total_requests": 0,
+                "completed_within_sla": 0,
+                "breached_sla": 0,
+                "pending_overdue": 0,
+                "unknown_sla": 0,
+                "sla_compliance_percent": 0,
+                "sla_compliance": 0,
+            },
+        )
 
     @staticmethod
     def workflow_summary():
-
         metrics = ApprovalRepository.approval_metrics()
         sla = ApprovalService.get_sla_metrics()
 

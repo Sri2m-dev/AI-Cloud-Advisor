@@ -11,6 +11,7 @@ ROLES = [
     "technical",
     "auditor",
     "viewer",
+    "sales_engineer",
 ]
 
 ROLE_ALIASES = {
@@ -44,6 +45,9 @@ ROLE_ALIASES = {
     "engineering": "technical",
     "engineer": "technical",
     "governance": "security",
+    "sales engineer": "sales_engineer",
+    "sales_engineer": "sales_engineer",
+    "solution engineer": "sales_engineer",
 }
 
 ALLOWED_ROLES = {

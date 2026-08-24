@@ -1,12 +1,9 @@
 from data.supabase_client import supabase
-from scripts.generate_recommendations import generate_recommendations
-from backend.services.tenant_scope import scoped_query
 
 
 def get_recommendations(tenant_id: str, status: str | None = None):
     query = (
-        supabase
-        .table("recommendations")
+        supabase.table("recommendations")
         .select("*")
         .eq("org_id", tenant_id)
         .order("created_at", desc=True)
@@ -18,6 +15,7 @@ def get_recommendations(tenant_id: str, status: str | None = None):
 
 
 def run_recommendation_engine(tenant_id: str) -> dict:
+    from scripts.generate_recommendations import generate_recommendations
+
     generate_recommendations(org_id=tenant_id)
     return {"status": "queued", "engine": "rules+ai", "tenant_id": tenant_id}
-

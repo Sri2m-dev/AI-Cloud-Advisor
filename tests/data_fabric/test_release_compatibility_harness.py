@@ -44,6 +44,19 @@ def test_harness_reports_a_precise_contract_drift_path() -> None:
     ]
 
 
+def test_harness_allows_only_append_only_contract_extensions() -> None:
+    harness = _load_harness()
+    expected = harness.build_snapshot()
+    extended = copy.deepcopy(expected)
+    extended["contracts"]["EntityType"]["values"].append("future_type")
+
+    assert harness.compare_snapshots(expected, extended) == []
+
+    removed = copy.deepcopy(expected)
+    removed["contracts"]["EntityType"]["values"].pop()
+    assert harness.compare_snapshots(expected, removed)
+
+
 def test_command_line_check_passes_against_committed_fixture() -> None:
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--fixture", str(FIXTURE)],

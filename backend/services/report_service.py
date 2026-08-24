@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import logging
+import uuid
 from datetime import datetime
 from io import BytesIO
 from typing import Any
-import uuid
-import logging
 
 import pandas as pd
 
@@ -15,10 +15,10 @@ except ImportError:
     letter = None
     canvas = None
 
+from backend.services.alert_service import send_email_alert
 from backend.services.cost_service import fetch_cost_data
 from backend.services.governance_service import get_governance_summary
 from backend.services.recommendation_service import get_recommendations
-from backend.services.alert_service import send_email_alert
 from backend.services.tenant_scope import scoped_query
 from data.supabase_client import supabase
 
@@ -59,25 +59,21 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
-def _fetch_rows(table_name: str, limit: int = 1000) -> list[dict[str, Any]]:
+def _fetch_rows(
+    table_name: str,
+    tenant_id: str,
+    limit: int = 1000,
+) -> list[dict[str, Any]]:
     try:
-        rows = (
-            supabase
-            .table(table_name)
-            .select("*")
-            .limit(limit)
-            .execute()
-            .data
-            or []
-        )
+        rows = scoped_query(supabase, table_name, tenant_id).limit(limit).execute().data or []
         return rows
     except Exception:
         logger.exception("report_table_fetch_failed table=%s", table_name)
         return []
 
 
-def _fetch_one(table_name: str) -> dict[str, Any]:
-    rows = _fetch_rows(table_name, limit=1)
+def _fetch_one(table_name: str, tenant_id: str) -> dict[str, Any]:
+    rows = _fetch_rows(table_name, tenant_id, limit=1)
     return rows[0] if rows else {}
 
 
@@ -95,8 +91,8 @@ def _sum_rows(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> float:
     return total
 
 
-def _get_spend_breakdown() -> dict[str, float]:
-    row = _fetch_one("mart_enterprise_spend_v2")
+def _get_spend_breakdown(tenant_id: str) -> dict[str, float]:
+    row = _fetch_one("mart_enterprise_spend_v2", tenant_id)
     return {
         "cloud_spend": _first_number(row, "cloud_spend", "cloud_cost"),
         "saas_spend": _first_number(row, "saas_spend", "saas_cost"),
@@ -106,8 +102,8 @@ def _get_spend_breakdown() -> dict[str, float]:
     }
 
 
-def _get_budget_actual() -> dict[str, float]:
-    rows = _fetch_rows("mart_budget_vs_actual")
+def _get_budget_actual(tenant_id: str) -> dict[str, float]:
+    rows = _fetch_rows("mart_budget_vs_actual", tenant_id)
     budget = _sum_rows(rows, ("budget", "budget_amount", "planned_cost"))
     actual = _sum_rows(rows, ("actual", "actual_cost", "total_cost", "cost"))
     return {
@@ -117,9 +113,9 @@ def _get_budget_actual() -> dict[str, float]:
     }
 
 
-def _get_forecast_total() -> float:
+def _get_forecast_total(tenant_id: str) -> float:
     return _sum_rows(
-        _fetch_rows("mart_enterprise_forecast"),
+        _fetch_rows("mart_enterprise_forecast", tenant_id),
         ("projected_monthly_spend", "forecast_spend", "forecast_cost", "amount"),
     )
 
@@ -147,10 +143,10 @@ def _get_recommendation_summary(tenant_id: str) -> dict[str, Any]:
     }
 
 
-def _get_saas_summary() -> dict[str, float]:
-    saas_costs = _fetch_rows("saas_cost", limit=1000)
-    license_costs = _fetch_rows("license_cost", limit=1000)
-    renewals = _fetch_rows("saas_renewals", limit=1000)
+def _get_saas_summary(tenant_id: str) -> dict[str, float]:
+    saas_costs = _fetch_rows("saas_cost", tenant_id, limit=1000)
+    license_costs = _fetch_rows("license_cost", tenant_id, limit=1000)
+    renewals = _fetch_rows("saas_renewals", tenant_id, limit=1000)
     saas_waste = _sum_rows(saas_costs, ("estimated_waste", "waste", "unused_cost"))
     license_waste = _sum_rows(license_costs, ("estimated_waste", "waste", "unused_cost"))
     now = datetime.utcnow()
@@ -185,8 +181,8 @@ def _get_saas_summary() -> dict[str, float]:
     }
 
 
-def _get_approval_metrics() -> dict[str, int]:
-    rows = _fetch_rows("approval_requests", limit=1000)
+def _get_approval_metrics(tenant_id: str) -> dict[str, int]:
+    rows = _fetch_rows("approval_requests", tenant_id, limit=1000)
     counts: dict[str, int] = {}
     for row in rows:
         status = str(row.get("status") or "UNKNOWN").upper()
@@ -195,12 +191,9 @@ def _get_approval_metrics() -> dict[str, int]:
     return counts
 
 
-def _get_audit_summary() -> dict[str, int]:
-    rows = _fetch_rows("audit_events", limit=1000)
-    event_types = {
-        str(row.get("event_type") or "UNKNOWN")
-        for row in rows
-    }
+def _get_audit_summary(tenant_id: str) -> dict[str, int]:
+    rows = _fetch_rows("audit_events", tenant_id, limit=1000)
+    event_types = {str(row.get("event_type") or "UNKNOWN") for row in rows}
     return {
         "events": len(rows),
         "event_types": len(event_types),
@@ -212,9 +205,7 @@ def _parse_datetime(value):
         return None
 
     try:
-        return datetime.fromisoformat(
-            str(value).replace("Z", "+00:00")
-        ).replace(tzinfo=None)
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
     except Exception:
         return None
 
@@ -232,7 +223,19 @@ def _classify_report_type(report_name: str) -> str:
         return "governance_review"
     if any(term in name for term in ["optimization", "saving", "cost intelligence"]):
         return "optimization_review"
-    if any(term in name for term in ["financial", "budget", "forecast", "spend", "cloud strategy", "technology spend", "inventory", "resource"]):
+    if any(
+        term in name
+        for term in [
+            "financial",
+            "budget",
+            "forecast",
+            "spend",
+            "cloud strategy",
+            "technology spend",
+            "inventory",
+            "resource",
+        ]
+    ):
         return "cost_spend"
     if any(term in name for term in ["board", "executive", "summary"]):
         return "executive_summary"
@@ -295,8 +298,8 @@ def _draw_executive_summary_section(
 
 def _draw_cost_spend_section(pdf: canvas.Canvas, y: int, tenant_id: str, requested_by: str) -> int:
     payload = fetch_cost_data(tenant_id=tenant_id, requested_by=requested_by)
-    spend_breakdown = _get_spend_breakdown()
-    forecast_rows = _fetch_rows("mart_enterprise_forecast")
+    spend_breakdown = _get_spend_breakdown(tenant_id)
+    forecast_rows = _fetch_rows("mart_enterprise_forecast", tenant_id)
     monthly_cloud_spend = _get_monthly_cloud_spend(tenant_id=tenant_id)
 
     forecast_total = 0.0
@@ -324,7 +327,8 @@ def _draw_cost_spend_section(pdf: canvas.Canvas, y: int, tenant_id: str, request
     y = _draw_heading(pdf, "Monthly Cloud Spend", y)
     if monthly_cloud_spend:
         lines = [
-            f"{row.get('month', 'unknown')} - {row.get('cloud', 'Unknown')}: {_safe_float(row.get('cost')):,.2f}"
+            f"{row.get('month', 'unknown')} - {row.get('cloud', 'Unknown')}: "
+            f"{_safe_float(row.get('cost')):,.2f}"
             for row in monthly_cloud_spend[:15]
         ]
     else:
@@ -366,21 +370,26 @@ def _draw_governance_section(pdf: canvas.Canvas, y: int, tenant_id: str) -> int:
     ]
 
     for sev in governance.get("severity_distribution", [])[:5]:
-        lines.append(f"- Governance severity {sev.get('severity_bucket', 'Unknown')}: {sev.get('count', 0)}")
+        lines.append(
+            f"- Governance severity {sev.get('severity_bucket', 'Unknown')}: {sev.get('count', 0)}"
+        )
     for sev in anomaly_summary.get("severity", [])[:5]:
         name = sev.get("severity") or sev.get("index") or "Unknown"
         lines.append(f"- Anomaly severity {name}: {sev.get('count', 0)}")
 
     if len(lines) == 2:
-        lines.append("Limited governance/risk detail is available; this section is intentionally scoped to current data.")
+        lines.append(
+            "Limited governance/risk detail is available; this section is "
+            "intentionally scoped to current data."
+        )
 
     return _draw_text_lines(pdf, lines, y)
 
 
-def _draw_saas_license_section(pdf: canvas.Canvas, y: int) -> int:
-    saas_users = _fetch_rows("saas_users", limit=1000)
-    saas_costs = _fetch_rows("saas_cost", limit=1000)
-    spend_breakdown = _get_spend_breakdown()
+def _draw_saas_license_section(pdf: canvas.Canvas, y: int, tenant_id: str) -> int:
+    saas_users = _fetch_rows("saas_users", tenant_id, limit=1000)
+    saas_costs = _fetch_rows("saas_cost", tenant_id, limit=1000)
+    spend_breakdown = _get_spend_breakdown(tenant_id)
     total_saas_cost = sum(_safe_float(row.get("cost")) for row in saas_costs)
 
     y = _draw_heading(pdf, "SaaS / License Report", y)
@@ -391,22 +400,17 @@ def _draw_saas_license_section(pdf: canvas.Canvas, y: int) -> int:
     ]
 
     if not saas_users and not saas_costs:
-        lines.append("Limited SaaS/license detail is available; this section is a labeled placeholder, not an executive summary.")
+        lines.append(
+            "Limited SaaS/license detail is available; this section is a labeled "
+            "placeholder, not an executive summary."
+        )
 
     return _draw_text_lines(pdf, lines, y)
 
 
 def _get_monthly_cloud_spend(tenant_id: str) -> list[dict[str, Any]]:
-    # unified_cloud_costs is read globally for report context; do not use tenant_scope here.
     try:
-        rows = (
-            supabase
-            .table("unified_cloud_costs")
-            .select("cloud,cost,usage_date")
-            .execute()
-            .data
-            or []
-        )
+        rows = scoped_query(supabase, "unified_cloud_costs", tenant_id).execute().data or []
     except Exception:
         logger.exception("monthly_cloud_spend_fetch_failed")
         return []
@@ -435,16 +439,8 @@ def _get_monthly_cloud_spend(tenant_id: str) -> list[dict[str, Any]]:
 
 
 def _get_anomaly_summary(tenant_id: str) -> dict[str, Any]:
-    # anomalies is read globally for report context; do not use tenant_scope here.
     try:
-        rows = (
-            supabase
-            .table("anomalies")
-            .select("*")
-            .execute()
-            .data
-            or []
-        )
+        rows = scoped_query(supabase, "anomalies", tenant_id).execute().data or []
     except Exception:
         logger.exception("anomaly_summary_fetch_failed")
         return {"count": 0, "severity": [], "top": []}
@@ -455,7 +451,11 @@ def _get_anomaly_summary(tenant_id: str) -> dict[str, Any]:
     df = pd.DataFrame(rows)
     sev_col = "severity" if "severity" in df.columns else None
     score_col = "score" if "score" in df.columns else None
-    svc_col = "service_name" if "service_name" in df.columns else ("service" if "service" in df.columns else None)
+    svc_col = (
+        "service_name"
+        if "service_name" in df.columns
+        else ("service" if "service" in df.columns else None)
+    )
 
     severity = []
     if sev_col:
@@ -478,7 +478,12 @@ def _get_anomaly_summary(tenant_id: str) -> dict[str, Any]:
     return {"count": len(rows), "severity": severity, "top": top}
 
 
-def _build_email_body(tenant_id: str, cost_payload: dict[str, Any], governance: dict[str, Any], anomaly_summary: dict[str, Any]) -> str:
+def _build_email_body(
+    tenant_id: str,
+    cost_payload: dict[str, Any],
+    governance: dict[str, Any],
+    anomaly_summary: dict[str, Any],
+) -> str:
     return (
         "Executive cloud report attached.\n\n"
         f"Tenant: {tenant_id}\n"
@@ -486,7 +491,8 @@ def _build_email_body(tenant_id: str, cost_payload: dict[str, Any], governance: 
         f"Total spend: {cost_payload.get('total_cost', 0):,.2f}\n"
         f"Governance findings: {governance.get('anomaly_count', 0)}\n"
         f"Anomalies detected: {anomaly_summary.get('count', 0)}\n\n"
-        "Includes: monthly cloud spend, optimization findings, governance scorecard, anomaly summary."
+        "Includes: monthly cloud spend, optimization findings, governance scorecard, "
+        "and anomaly summary."
     )
 
 
@@ -519,6 +525,7 @@ def record_report_history(
     history_id = str(uuid.uuid4())
     payload = {
         "id": history_id,
+        "org_id": tenant_id,
         "report_name": report_name,
         "requested_by": requested_by,
         "delivery_channel": delivery_channel,
@@ -551,7 +558,13 @@ def get_report_distribution_list(tenant_id: str) -> dict[str, Any]:
             return rows[0]
     except Exception:
         logger.exception("report_distribution_load_failed tenant_id=%s", tenant_id)
-    return {"organization_id": tenant_id, "org_id": tenant_id, "tenant_id": tenant_id, "recipients": [], "active": False}
+    return {
+        "organization_id": tenant_id,
+        "org_id": tenant_id,
+        "tenant_id": tenant_id,
+        "recipients": [],
+        "active": False,
+    }
 
 
 def save_report_distribution_list(
@@ -573,7 +586,9 @@ def save_report_distribution_list(
         "updated_at": datetime.utcnow().isoformat(),
     }
     try:
-        supabase.table(REPORT_RECIPIENTS_TABLE).upsert(payload, on_conflict="org_id,report_name").execute()
+        supabase.table(REPORT_RECIPIENTS_TABLE).upsert(
+            payload, on_conflict="org_id,report_name"
+        ).execute()
     except Exception:
         logger.exception("report_distribution_upsert_failed tenant_id=%s", tenant_id)
         return {"saved": False, **payload}
@@ -583,8 +598,7 @@ def save_report_distribution_list(
 def list_report_schedules(tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
     try:
         rows = (
-            supabase
-            .table(REPORT_SCHEDULE_TABLE)
+            supabase.table(REPORT_SCHEDULE_TABLE)
             .select("*")
             .eq("organization_id", tenant_id)
             .order("next_run", desc=False)
@@ -619,9 +633,7 @@ def save_report_schedule(
 ) -> dict[str, Any]:
     now = datetime.utcnow()
     next_run_value = (
-        next_run.isoformat()
-        if hasattr(next_run, "isoformat")
-        else str(next_run or now.isoformat())
+        next_run.isoformat() if hasattr(next_run, "isoformat") else str(next_run or now.isoformat())
     )
 
     payload = {
@@ -696,7 +708,9 @@ def build_executive_pdf(tenant_id: str, requested_by: str = "api") -> bytes:
         for month in sorted(month_group.keys(), reverse=True)[:3]:
             month_lines.append(f"{month}")
             for item in month_group[month][:5]:
-                month_lines.append(f"  - {item.get('cloud', 'Unknown')}: {float(item.get('cost', 0) or 0):,.2f}")
+                month_lines.append(
+                    f"  - {item.get('cloud', 'Unknown')}: {float(item.get('cost', 0) or 0):,.2f}"
+                )
         y = _draw_text_lines(pdf, month_lines, y)
     else:
         y = _draw_text_lines(pdf, ["No monthly spend data available."], y)
@@ -748,20 +762,23 @@ def build_executive_pdf(tenant_id: str, requested_by: str = "api") -> bytes:
 
 
 def _draw_board_pack(pdf: canvas.Canvas, y: int, tenant_id: str, requested_by: str) -> int:
-    summary = _fetch_one("mart_executive_summary")
-    spend = _get_spend_breakdown()
-    budget = _get_budget_actual()
-    forecast = _get_forecast_total()
+    summary = _fetch_one("mart_executive_summary", tenant_id)
+    spend = _get_spend_breakdown(tenant_id)
+    budget = _get_budget_actual(tenant_id)
+    forecast = _get_forecast_total(tenant_id)
     recommendations = _get_recommendation_summary(tenant_id)
     governance = get_governance_summary(tenant_id=tenant_id)
-    saas = _get_saas_summary()
+    saas = _get_saas_summary(tenant_id)
+    optimization = summary.get("optimization_savings") or summary.get("optimization")
 
     y = _draw_heading(pdf, "Executive Summary", y)
     y = _draw_text_lines(
         pdf,
         [
-            f"Enterprise spend: {_safe_float(summary.get('total_spend') or spend.get('total_spend')):,.2f}",
-            f"Optimization savings: {_safe_float(summary.get('optimization_savings') or summary.get('optimization')):,.2f}",
+            "Enterprise spend: "
+            f"{_safe_float(summary.get('total_spend') or spend.get('total_spend')):,.2f}",
+            "Optimization savings: "
+            f"{_safe_float(optimization):,.2f}",
             f"Governance score: {_safe_float(summary.get('governance_score')):,.0f}%",
         ],
         y,
@@ -837,9 +854,9 @@ def _draw_board_pack(pdf: canvas.Canvas, y: int, tenant_id: str, requested_by: s
 
 
 def _draw_financial_review(pdf: canvas.Canvas, y: int, tenant_id: str, requested_by: str) -> int:
-    spend = _get_spend_breakdown()
-    budget = _get_budget_actual()
-    forecast = _get_forecast_total()
+    spend = _get_spend_breakdown(tenant_id)
+    budget = _get_budget_actual(tenant_id)
+    forecast = _get_forecast_total(tenant_id)
     recommendations = _get_recommendation_summary(tenant_id)
 
     y = _draw_heading(pdf, "Financial Review", y)
@@ -859,17 +876,19 @@ def _draw_financial_review(pdf: canvas.Canvas, y: int, tenant_id: str, requested
 
 
 def _draw_governance_review(pdf: canvas.Canvas, y: int, tenant_id: str) -> int:
-    summary = _fetch_one("mart_executive_summary")
+    summary = _fetch_one("mart_executive_summary", tenant_id)
     governance = get_governance_summary(tenant_id=tenant_id)
     anomaly_summary = _get_anomaly_summary(tenant_id=tenant_id)
-    approvals = _get_approval_metrics()
-    audit = _get_audit_summary()
+    approvals = _get_approval_metrics(tenant_id)
+    audit = _get_audit_summary(tenant_id)
 
     y = _draw_heading(pdf, "Governance Review", y)
     lines = [
         f"Governance score: {_safe_float(summary.get('governance_score')):,.0f}%",
         f"Risks: {anomaly_summary.get('count', 0)}",
-        f"Approval metrics: {approvals.get('PENDING', 0)} pending, {approvals.get('APPROVED', 0)} approved, {approvals.get('REJECTED', 0)} rejected",
+        f"Approval metrics: {approvals.get('PENDING', 0)} pending, "
+        f"{approvals.get('APPROVED', 0)} approved, "
+        f"{approvals.get('REJECTED', 0)} rejected",
         f"Audit summary: {audit['events']} events across {audit['event_types']} event types",
         f"Compliance: {_safe_float(summary.get('governance_score')):,.0f}%",
     ]
@@ -880,7 +899,7 @@ def _draw_governance_review(pdf: canvas.Canvas, y: int, tenant_id: str) -> int:
 
 def _draw_optimization_review(pdf: canvas.Canvas, y: int, tenant_id: str) -> int:
     recommendations = _get_recommendation_summary(tenant_id)
-    saas = _get_saas_summary()
+    saas = _get_saas_summary(tenant_id)
 
     y = _draw_heading(pdf, "Optimization Review", y)
     lines = [
@@ -954,6 +973,7 @@ def build_report_pdf(
         y = _draw_saas_license_section(
             pdf=pdf,
             y=y,
+            tenant_id=tenant_id,
         )
     else:
         return build_executive_pdf(
@@ -968,12 +988,100 @@ def build_report_pdf(
         [
             f"Report type: {report_type.replace('_', ' ').title()}",
             "Sections are generated from currently available Nexora data sources.",
-            "If source detail is limited, the PDF includes a labeled placeholder section instead of reusing the wrong report body.",
+            "If source detail is limited, the PDF includes a labeled placeholder section "
+            "instead of reusing the wrong report body.",
         ],
         y,
     )
 
     return _finish_pdf(buffer, pdf)
+
+
+def _executive_export_payload(tenant_id: str) -> dict[str, Any]:
+    """Collect tenant-scoped evidence once for governed office exports."""
+    return {
+        "spend": _get_spend_breakdown(tenant_id),
+        "budget": _get_budget_actual(tenant_id),
+        "forecast": _get_forecast_total(tenant_id),
+        "recommendations": _get_recommendation_summary(tenant_id),
+        "saas": _get_saas_summary(tenant_id),
+        "approvals": _get_approval_metrics(tenant_id),
+        "audit": _get_audit_summary(tenant_id),
+    }
+
+
+def build_report_xlsx(
+    report_name: str,
+    tenant_id: str,
+    requested_by: str = "api",
+) -> bytes:
+    """Build an evidence workbook without introducing a second reporting engine."""
+    from services.impact_analysis_service import _minimal_xlsx
+
+    payload = _executive_export_payload(tenant_id)
+    metadata = [{
+        "report_name": report_name,
+        "tenant_id": tenant_id,
+        "requested_by": requested_by,
+        "generated_at_utc": datetime.utcnow().isoformat(),
+        "classification": "CERTIFIED_TENANT_SCOPED_DATA",
+    }]
+    recommendations = payload["recommendations"]["items"] or [{"status": "UNKNOWN"}]
+    return _minimal_xlsx({
+        "Report Metadata": metadata,
+        "Enterprise Spend": [payload["spend"]],
+        "Budget and Forecast": [{**payload["budget"], "forecast": payload["forecast"]}],
+        "Recommendations": recommendations,
+        "SaaS": [payload["saas"]],
+        "Approvals": [payload["approvals"]],
+        "Audit": [payload["audit"]],
+    })
+
+
+def build_board_pack_pptx(
+    tenant_id: str,
+    requested_by: str = "api",
+) -> bytes:
+    """Build a board-ready presentation from the same tenant-scoped evidence."""
+    from services.impact_analysis_service import _minimal_pptx
+
+    payload = _executive_export_payload(tenant_id)
+    spend = payload["spend"]
+    budget = payload["budget"]
+    recommendations = payload["recommendations"]
+    approvals = payload["approvals"]
+    top_recommendations = [
+        str(item.get("title") or item.get("message") or "Recommendation")
+        for item in recommendations["items"][:5]
+    ] or ["No certified recommendations are currently available"]
+    return _minimal_pptx([
+        (
+            "Nexora Executive Board Pack",
+            [
+                f"Tenant: {tenant_id}",
+                f"Prepared for: {requested_by}",
+                "Classification: certified tenant-scoped data",
+            ],
+        ),
+        (
+            "Financial posture",
+            [
+                f"Enterprise spend: {spend['total_spend']:,.2f}",
+                f"Budget: {budget['budget']:,.2f}",
+                f"Actual: {budget['actual']:,.2f}",
+                f"Forecast: {payload['forecast']:,.2f}",
+            ],
+        ),
+        ("Priority decisions", top_recommendations),
+        (
+            "Governance and action",
+            [
+                f"Pending approvals: {approvals.get('PENDING', 0)}",
+                f"Certified recommendations: {recommendations['count']}",
+                f"Audit events: {payload['audit']['events']}",
+            ],
+        ),
+    ])
 
 
 def send_executive_report_email(
@@ -992,12 +1100,7 @@ def send_executive_report_email(
     anomaly_summary = _get_anomaly_summary(tenant_id=tenant_id)
     subject = f"{report_name} - {tenant_id}"
     body = _build_email_body(tenant_id, cost_payload, governance, anomaly_summary)
-    file_name = (
-        report_name.lower()
-        .replace("&", "and")
-        .replace("/", "_")
-        .replace(" ", "-")
-    )
+    file_name = report_name.lower().replace("&", "and").replace("/", "_").replace(" ", "-")
 
     result = send_email_alert(
         subject=subject,
@@ -1022,4 +1125,3 @@ def send_executive_report_email(
         notes=result.get("reason"),
     )
     return result
-

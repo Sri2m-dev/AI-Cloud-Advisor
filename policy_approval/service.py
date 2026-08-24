@@ -19,6 +19,7 @@ from policy_approval.models import (
     PolicyEvaluation,
     PolicyEvaluationResult,
     PolicyException,
+    PolicyPreviewResult,
     PolicyReference,
     PolicyState,
 )
@@ -120,72 +121,20 @@ class PolicyApprovalService:
         package = self._approved_package(context, evidence_package_id)
         if recommendation.evidence_package_id != package.package_id:
             raise PolicyApprovalError("Decision evidence package binding does not match")
-        try:
-            policy = self._get_policy(context, policy_id, policy_version)
-        except PolicyApprovalError:
-            policy = None
         now = evaluated_at or datetime.now(timezone.utc)
-        normalized = dict(sorted(inputs.items()))
-        states = (
-            dict(evidence_states)
-            if evidence_states is not None
-            else {use.evidence_id: EvidenceState.AVAILABLE for use in package.evidence}
+        policy, normalized, states, result, reasons, matched, unmet = self._evaluate_rules(
+            context, package, policy_id, policy_version, inputs, evidence_states, now
         )
-        for use in package.evidence:
-            states.setdefault(use.evidence_id, EvidenceState.MISSING)
-        reasons: list[str] = []
-        result = PolicyEvaluationResult.ALLOW
-
         if decision.disposition is not DecisionDisposition.APPROVE:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append("invalid Decision disposition")
+            result, reasons = (
+                PolicyEvaluationResult.INDETERMINATE,
+                [*reasons, "invalid Decision disposition"],
+            )
         if recommendation.state is not RecommendationState.APPROVED or not decision_active:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append("Decision is invalid or superseded")
-        if policy is None:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append("missing policy version")
-        elif policy.evaluator_version != _EVALUATOR_VERSION:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append("unsupported policy evaluator version")
-        if policy is not None and (
-            policy.state is not PolicyState.ACTIVE or now < policy.effective_at
-        ):
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append(f"policy authority is {policy.state.value}")
-        if policy is not None and policy.expires_at is not None and now >= policy.expires_at:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append("policy authority is expired")
-        missing = sorted(
-            name
-            for name in (() if policy is None else policy.required_inputs)
-            if name not in normalized
-        )
-        if missing:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append(f"missing mandatory inputs: {', '.join(missing)}")
-        unsafe_evidence = sorted(
-            f"{evidence_id}:{EvidenceState(state).value}"
-            for evidence_id, state in states.items()
-            if EvidenceState(state) is not EvidenceState.AVAILABLE
-        )
-        if unsafe_evidence:
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append(f"evidence is not available: {', '.join(unsafe_evidence)}")
-        if self._evidence.is_package_superseded(context, package.package_id):
-            result = PolicyEvaluationResult.INDETERMINATE
-            reasons.append("evidence package is superseded")
-        if result is PolicyEvaluationResult.ALLOW and policy is not None:
-            failures = [
-                rule.failure_reason
-                for rule in policy.rules
-                if normalized.get(rule.input_name) != rule.expected_value
-            ]
-            if failures:
-                result = PolicyEvaluationResult.DENY
-                reasons.extend(failures)
-            else:
-                reasons.append("all deterministic policy rules passed")
+            result, reasons = (
+                PolicyEvaluationResult.INDETERMINATE,
+                [*reasons, "Decision is invalid or superseded"],
+            )
 
         content = {
             "tenant": context.to_serializable(),
@@ -233,6 +182,138 @@ class PolicyApprovalService:
             raise PolicyApprovalError("evaluation is immutable")
         self._evaluations[key] = evaluation
         return evaluation
+
+    def preview(
+        self,
+        context: TenantContext,
+        *,
+        recommendation: Recommendation,
+        recommendation_version: int,
+        evidence_package_id: str,
+        evidence_package_hash: str,
+        policy_id: str,
+        policy_version: int,
+        proposed_scope: AuthorityScope,
+        proposed_actor: Actor,
+        inputs: dict[str, Any],
+        evidence_states: dict[str, EvidenceState] | None = None,
+        evaluated_at: datetime | None = None,
+    ) -> PolicyPreviewResult:
+        context.assert_record_matches(recommendation, "recommendation")
+        if recommendation.version != recommendation_version:
+            raise PolicyApprovalError("exact recommendation version is required")
+        if recommendation.state not in {
+            RecommendationState.PROPOSED,
+            RecommendationState.UNDER_REVIEW,
+        }:
+            raise PolicyApprovalError("recommendation is not eligible for policy preview")
+        package = self._approved_package(context, evidence_package_id)
+        if (
+            recommendation.evidence_package_id != package.package_id
+            or package.package_hash != evidence_package_hash
+        ):
+            raise PolicyApprovalError("exact approved evidence package binding is required")
+        now = evaluated_at or datetime.now(timezone.utc)
+        policy, normalized, states, result, reasons, matched, unmet = self._evaluate_rules(
+            context, package, policy_id, policy_version, inputs, evidence_states, now
+        )
+        content = {
+            "tenant": context.to_serializable(),
+            "recommendation_id": recommendation.recommendation_id,
+            "recommendation_version": recommendation.version,
+            "package": package.package_hash,
+            "policy_id": policy_id,
+            "policy_version": policy_version,
+            "scope": proposed_scope,
+            "actor": proposed_actor,
+            "inputs": normalized,
+            "states": states,
+            "evaluated_at": now,
+        }
+        integrity_hash = _SERIALIZER.content_hash(content)
+        return PolicyPreviewResult(
+            f"preview:{integrity_hash[:24]}",
+            context.organization_id,
+            context.tenant_id,
+            recommendation.recommendation_id,
+            recommendation.version,
+            package.package_id,
+            package.package_hash or "",
+            policy_id,
+            policy_version,
+            proposed_scope,
+            proposed_actor,
+            result,
+            tuple(matched),
+            tuple(unmet),
+            tuple(reasons),
+            states,
+            ("explicit scoped human authority required",),
+            ("proposer/requester cannot self-approve", "AI cannot approve"),
+            ("authorization must be effective and unexpired",),
+            bool(unmet),
+            now,
+            integrity_hash,
+            False,
+        )
+
+    def _evaluate_rules(
+        self, context, package, policy_id, policy_version, inputs, evidence_states, now
+    ):
+        try:
+            policy = self._get_policy(context, policy_id, policy_version)
+        except PolicyApprovalError:
+            policy = None
+        normalized = dict(sorted(inputs.items()))
+        states = (
+            dict(evidence_states)
+            if evidence_states is not None
+            else {use.evidence_id: EvidenceState.AVAILABLE for use in package.evidence}
+        )
+        for use in package.evidence:
+            states.setdefault(use.evidence_id, EvidenceState.MISSING)
+        reasons, matched, unmet = [], [], []
+        result = PolicyEvaluationResult.ALLOW
+        if policy is None or policy.evaluator_version != _EVALUATOR_VERSION:
+            result = PolicyEvaluationResult.INDETERMINATE
+            reasons.append("missing or unsupported policy version")
+        elif policy.state is not PolicyState.ACTIVE or now < policy.effective_at:
+            result = PolicyEvaluationResult.INDETERMINATE
+            reasons.append(f"policy authority is {policy.state.value}")
+        if policy is not None and policy.expires_at is not None and now >= policy.expires_at:
+            result = PolicyEvaluationResult.INDETERMINATE
+            reasons.append("policy authority is expired")
+        missing = sorted(
+            name
+            for name in (() if policy is None else policy.required_inputs)
+            if name not in normalized
+        )
+        unsafe = sorted(
+            f"{key}:{EvidenceState(value).value}"
+            for key, value in states.items()
+            if EvidenceState(value) is not EvidenceState.AVAILABLE
+        )
+        if missing or unsafe or self._evidence.is_package_superseded(context, package.package_id):
+            result = PolicyEvaluationResult.INDETERMINATE
+            if missing:
+                reasons.append(f"missing mandatory inputs: {', '.join(missing)}")
+            if unsafe:
+                reasons.append(f"evidence is not available: {', '.join(unsafe)}")
+            if self._evidence.is_package_superseded(context, package.package_id):
+                reasons.append("evidence package is superseded")
+        if policy is not None:
+            for rule in policy.rules:
+                (
+                    matched if normalized.get(rule.input_name) == rule.expected_value else unmet
+                ).append(rule.rule_id)
+            if result is PolicyEvaluationResult.ALLOW and unmet:
+                result = PolicyEvaluationResult.DENY
+                reasons.extend(
+                    rule.failure_reason for rule in policy.rules if rule.rule_id in unmet
+                )
+        if result is PolicyEvaluationResult.ALLOW:
+            reasons.append("all deterministic policy rules passed")
+        return policy, normalized, states, result, reasons, matched, unmet
 
     def issue_approval(
         self,

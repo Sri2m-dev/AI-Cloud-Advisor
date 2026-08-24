@@ -32,11 +32,13 @@ st.set_page_config(
 
 init_session()
 
-require_role([
-    "executive",
-    "technical",
-    "super_admin",
-])
+require_role(
+    [
+        "executive",
+        "technical",
+        "super_admin",
+    ]
+)
 
 try:
     tenant_context = authenticated_tenant_context(st.session_state)
@@ -105,6 +107,7 @@ budget_health = legacy_metrics["budget_health"]
 optimization_health = legacy_metrics["optimization_health"]
 risk_posture = legacy_metrics["risk_posture"]
 opportunities_found = legacy_metrics["opportunities_found"]
+data_available = legacy_metrics["data_available"]
 
 
 def inject_executive_dashboard_styles():
@@ -142,6 +145,30 @@ def inject_executive_dashboard_styles():
 def render_dashboard_content():
     inject_executive_dashboard_styles()
     posture = certification["financial_posture"]
+    if not data_available:
+        st.warning(
+            "No certified tenant data is available for this checkpoint. Values remain "
+            "unknown until the enterprise financial marts or canonical spend service are populated."
+        )
+        render_empty_state(
+            "Executive metrics are unknown",
+            "Load and certify tenant-scoped enterprise spend, budget, forecast, "
+            "recommendation, and risk data before using this dashboard for decisions.",
+        )
+        with st.expander("Data readiness evidence", expanded=False):
+            st.caption("Configured sources")
+            st.dataframe(
+                pd.DataFrame(evidence["source_data"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.caption("Current coverage")
+            st.dataframe(
+                pd.DataFrame(evidence["data_coverage"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+        return
     if posture.quarantined_spend:
         st.warning(
             f"Cloud spend of {posture.quarantined_spend:,.2f} {posture.currency} "
@@ -152,7 +179,8 @@ def render_dashboard_content():
 
     render_section(
         "Executive Summary",
-        "Board-level summary of enterprise technology posture, financial reconciliation, and recommended attention.",
+        "Board-level summary of enterprise technology posture, financial reconciliation, "
+        "and recommended attention.",
         divider=False,
     )
 
@@ -258,7 +286,8 @@ def render_dashboard_content():
 
     render_section(
         "Executive KPI Summary",
-        "Enterprise spend, optimization value, governance health, executive actions, and active risk.",
+        "Enterprise spend, optimization value, governance health, executive actions, "
+        "and active risk.",
         divider=True,
     )
 
@@ -305,14 +334,18 @@ def render_dashboard_content():
         render_health_card(
             "Spend Threshold",
             "On Track" if budget_health >= 80 else "Review",
-            subtitle="Spend within approved threshold" if budget_health >= 80 else "Spend requires budget threshold review",
+            subtitle="Spend within approved threshold"
+            if budget_health >= 80
+            else "Spend requires budget threshold review",
             status="healthy" if budget_health >= 80 else "warning",
         )
     with attention_cols[1]:
         render_insight_card(
             "Optimization",
             format_compact_currency(potential_savings) if potential_savings else "Clear",
-            subtitle="Optimization opportunity identified" if potential_savings else "No material opportunity identified",
+            subtitle="Optimization opportunity identified"
+            if potential_savings
+            else "No material opportunity identified",
             status="warning" if potential_savings else "healthy",
             icon="cost",
         )
@@ -320,21 +353,27 @@ def render_dashboard_content():
         render_approval_card(
             "Approvals",
             pending_approvals,
-            subtitle="No approvals awaiting action" if pending_approvals == 0 else "Approvals awaiting executive action",
+            subtitle="No approvals awaiting action"
+            if pending_approvals == 0
+            else "Approvals awaiting executive action",
             status="healthy" if pending_approvals == 0 else "watch",
         )
     with attention_cols[3]:
         render_risk_card(
             "Critical Review",
             critical_risks,
-            subtitle="No critical risks require review" if critical_risks == 0 else "Critical risks require review",
+            subtitle="No critical risks require review"
+            if critical_risks == 0
+            else "Critical risks require review",
             status="healthy" if critical_risks == 0 else "critical",
         )
     with attention_cols[4]:
         render_health_card(
             "Governance",
             f"{governance_score}%",
-            subtitle="Governance health remains stable" if governance_score >= 75 else "Governance health requires review",
+            subtitle="Governance health remains stable"
+            if governance_score >= 75
+            else "Governance health requires review",
             status="healthy" if governance_score >= 75 else "warning",
         )
 
@@ -344,12 +383,14 @@ def render_dashboard_content():
         divider=True,
     )
 
-    allocation_df = pd.DataFrame([
-        {"Category": "Cloud", "Spend": cloud_cost},
-        {"Category": "SaaS", "Spend": saas_cost},
-        {"Category": "MSP", "Spend": msp_cost},
-        {"Category": "Licenses", "Spend": license_cost},
-    ])
+    allocation_df = pd.DataFrame(
+        [
+            {"Category": "Cloud", "Spend": cloud_cost},
+            {"Category": "SaaS", "Spend": saas_cost},
+            {"Category": "MSP", "Spend": msp_cost},
+            {"Category": "Licenses", "Spend": license_cost},
+        ]
+    )
 
     allocation_display_df = allocation_df.copy()
     allocation_display_df["Spend"] = allocation_display_df["Spend"].apply(format_compact_currency)
@@ -382,7 +423,8 @@ def render_dashboard_content():
         else:
             render_empty_state(
                 "No spend allocation available",
-                "Cloud, SaaS, managed services, and license spend will appear once source data is loaded.",
+                "Cloud, SaaS, managed services, and license spend will appear once "
+                "source data is loaded.",
             )
 
     render_section(
@@ -462,18 +504,39 @@ def render_dashboard_content():
     health_cols = st.columns(4)
 
     with health_cols[0]:
-        render_health_card("Governance", f"{governance_score}%", subtitle="Policy and ownership", status="healthy" if governance_score >= 75 else "warning")
+        render_health_card(
+            "Governance",
+            f"{governance_score}%",
+            subtitle="Policy and ownership",
+            status="healthy" if governance_score >= 75 else "warning",
+        )
     with health_cols[1]:
-        render_health_card("Budget Health", f"{budget_health}%", subtitle="Spend control", status="healthy" if budget_health >= 80 else "warning")
+        render_health_card(
+            "Budget Health",
+            f"{budget_health}%",
+            subtitle="Spend control",
+            status="healthy" if budget_health >= 80 else "warning",
+        )
     with health_cols[2]:
-        render_health_card("Optimization", f"{optimization_health}%", subtitle="Savings program", status="healthy" if optimization_health >= 80 else "warning")
+        render_health_card(
+            "Optimization",
+            f"{optimization_health}%",
+            subtitle="Savings program",
+            status="healthy" if optimization_health >= 80 else "warning",
+        )
     with health_cols[3]:
-        render_health_card("Risk Posture", f"{risk_posture}%", subtitle="Operational exposure", status="healthy" if risk_posture >= 80 else "warning")
+        render_health_card(
+            "Risk Posture",
+            f"{risk_posture}%",
+            subtitle="Operational exposure",
+            status="healthy" if risk_posture >= 80 else "warning",
+        )
 
     narrative = (
         f"Enterprise technology spend is {format_compact_currency(total_spend)} with "
         f"{format_compact_currency(potential_savings)} in identified optimization potential. "
-        f"Governance health is {governance_score}% and {critical_risks} critical risks are currently flagged."
+        f"Governance health is {governance_score}% and {critical_risks} critical "
+        "risks are currently flagged."
     )
     render_insight_card(
         "Leadership Interpretation",
@@ -483,19 +546,16 @@ def render_dashboard_content():
         status="info",
     )
 
-    render_section(
-        "Evidence",
-        "Source data, coverage, financial reconciliation, AI interpretation, and raw evidence supporting this dashboard.",
-        divider=True,
-    )
-
-    evidence_tabs = st.tabs([
-        "Source Data",
-        "Data Coverage",
-        "Financial Reconciliation",
-        "AI Interpretation",
-        "Raw Evidence",
-    ])
+    with st.expander("Evidence and methodology", expanded=False):
+        evidence_tabs = st.tabs(
+            [
+                "Source Data",
+                "Data Coverage",
+                "Financial Reconciliation",
+                "AI Interpretation",
+                "Raw Evidence",
+            ]
+        )
 
     with evidence_tabs[0]:
         st.dataframe(
@@ -546,7 +606,10 @@ def render_dashboard_content():
 
 render_page(
     title="Enterprise Business Health",
-    description="Executive overview of enterprise spend, risk, governance, and optimization opportunities.",
+    description=(
+        "Executive overview of enterprise spend, risk, governance, and "
+        "optimization opportunities."
+    ),
     breadcrumbs=["Executive Overview", "Executive", "Executive Dashboard"],
     content=render_dashboard_content,
 )

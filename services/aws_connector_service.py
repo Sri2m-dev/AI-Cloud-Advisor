@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config import DEFAULT_ORG_ID
-from services.supabase_client import supabase
 from connectors.aws.aws_production_connector import AWSProductionConnector
 from connectors.common.normalization import (
     resources_to_discovered_assets,
@@ -22,13 +21,19 @@ from connectors.common.persistence import (
     upsert_technology_relationships,
 )
 from connectors.common.tenant_guard import resolve_organization_id, with_organization
+from services.supabase_client import supabase
 
 
 class AWSConnectorService:
     CONNECTOR_NAME = "AWS"
 
     @staticmethod
-    def test_connection(role_arn=None, external_id=None, region="us-east-1"):
+    def test_connection(
+        role_arn=None,
+        external_id=None,
+        region="us-east-1",
+        organization_id: str | None = None,
+    ):
         try:
             connector = AWSProductionConnector(role_arn, external_id, region)
             result = connector.test_connection()
@@ -43,6 +48,7 @@ class AWSConnectorService:
             status=status,
             objects_synced=0,
             error_message=result.get("error"),
+            organization_id=organization_id,
         )
 
         return result
