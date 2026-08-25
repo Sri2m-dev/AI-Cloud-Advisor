@@ -41,7 +41,7 @@ class NormalizerRegistry:
         primitive_types = set(definition.concept.expected_primitive_types)
         if primitive_types == {"BOOLEAN"}:
             return normalize_boolean
-        if primitive_types <= {"DATE"}:
+        if "DATE" in primitive_types:
             return normalize_date
         if primitive_types <= {"DATETIME"}:
             return normalize_datetime
