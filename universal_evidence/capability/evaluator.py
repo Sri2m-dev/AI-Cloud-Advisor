@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from universal_evidence.capability.authorization import (
+    build_alignments,
+    build_authorizations,
+    build_record_basis,
+)
 from universal_evidence.capability.coverage import assess_coverage, scope_from_runs
 from universal_evidence.capability.dimensions import qualify_dimensions
 from universal_evidence.capability.fingerprint import fingerprint
@@ -57,23 +62,42 @@ class CapabilityEvaluator:
             self._evaluate_capability(definition, scope, coverage, dimensions, measures, runs)
             for definition in self.registry
         )
+        record_basis = build_record_basis(runs, scope, self.capability_policy)
+        alignments = build_alignments(runs, scope, measures, dimensions, self.capability_policy)
         assessment_fingerprint = fingerprint(
             scope.key,
             tuple(item.fingerprint for item in coverage),
             tuple(item.fingerprint for item in dimensions),
             tuple(item.fingerprint for item in measures),
             tuple(item.fingerprint for item in capabilities),
+            record_basis.fingerprint,
+            tuple(item.fingerprint for item in alignments),
             self.coverage_policy.version,
             self.capability_policy.version,
             CAPABILITY_REGISTRY_VERSION,
         )
+        assessment_id = "capability-assessment-" + assessment_fingerprint[:24]
+        authorizations = build_authorizations(
+            assessment_id,
+            assessment_fingerprint,
+            scope,
+            capabilities,
+            measures,
+            dimensions,
+            alignments,
+            record_basis,
+            self.capability_policy,
+        )
         assessment = CapabilityAssessment(
-            "capability-assessment-" + assessment_fingerprint[:24],
+            assessment_id,
             scope,
             coverage,
             dimensions,
             measures,
             capabilities,
+            record_basis,
+            alignments,
+            authorizations,
             self.coverage_policy.version,
             self.capability_policy.version,
             assessment_fingerprint,
@@ -113,7 +137,13 @@ class CapabilityEvaluator:
                 eligible_dimensions = supported_dimensions
                 if definition.name == "MONETARY_TOTAL_BY_DIMENSION" and any_measure:
                     eligible_dimensions = self._row_compatible_dimensions(
-                        runs, supported_dimensions, any_measure.semantic_concept_id
+                        runs,
+                        tuple(
+                            item
+                            for item in supported_dimensions
+                            if item.semantic_concept_id != "financial.currency"
+                        ),
+                        any_measure.semantic_concept_id,
                     )
                 if eligible_dimensions:
                     support_items.extend(eligible_dimensions)
@@ -137,11 +167,20 @@ class CapabilityEvaluator:
                         for fragment in self.capability_policy.time_concept_fragments
                     )
                 )
-                if temporal:
-                    support_items.extend(temporal)
+                eligible_temporal = temporal
+                if definition.name == "MONETARY_TREND" and any_measure:
+                    eligible_temporal = self._row_compatible_dimensions(
+                        runs, temporal, any_measure.semantic_concept_id
+                    )
+                if eligible_temporal:
+                    support_items.extend(eligible_temporal)
                 else:
-                    state = CapabilityState.NOT_SUPPORTED
-                    reasons.append(ReasonCode.REQUIRED_TIME_DIMENSION_MISSING)
+                    state = CapabilityState.BLOCKED if temporal else CapabilityState.NOT_SUPPORTED
+                    reasons.append(
+                        ReasonCode.ROW_BINDING_INCOMPLETE
+                        if temporal
+                        else ReasonCode.REQUIRED_TIME_DIMENSION_MISSING
+                    )
             elif requirement.requirement_type == "MONETARY_MEASURE":
                 if supported_measure:
                     support_items.append(supported_measure)

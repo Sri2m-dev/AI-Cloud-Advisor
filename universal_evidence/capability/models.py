@@ -24,6 +24,32 @@ class CapabilityState(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class AuthorizedOperation(str, Enum):
+    COUNT = "COUNT"
+    SUM = "SUM"
+    GROUPED_COUNT = "GROUPED_COUNT"
+    GROUPED_SUM = "GROUPED_SUM"
+    TIME_BUCKETED_SUM = "TIME_BUCKETED_SUM"
+
+
+class AlignmentStatus(str, Enum):
+    ALIGNED = "ALIGNED"
+    PARTIALLY_ALIGNED = "PARTIALLY_ALIGNED"
+    NOT_ALIGNED = "NOT_ALIGNED"
+    CONFLICTED = "CONFLICTED"
+    BLOCKED = "BLOCKED"
+
+
+class AssessmentState(str, Enum):
+    CURRENT = "CURRENT"
+    SUPERSEDED = "SUPERSEDED"
+    STALE = "STALE"
+
+
+class RecordBasisType(str, Enum):
+    SOURCE_ROW = "SOURCE_ROW"
+
+
 class ReasonCode(str, Enum):
     GOVERNED_EVIDENCE_PRESENT = "GOVERNED_EVIDENCE_PRESENT"
     NO_GOVERNED_EVIDENCE = "NO_GOVERNED_EVIDENCE"
@@ -120,7 +146,7 @@ class GovernedMeasure:
     row_binding_ratio: float
     state: CapabilityState
     aggregation_eligibility: CapabilityState
-    permitted_aggregation_functions: tuple[str, ...]
+    permitted_aggregation_functions: tuple[AuthorizedOperation, ...]
     reason_codes: tuple[ReasonCode, ...]
     policy_version: str
     provenance: CapabilityProvenance
@@ -150,6 +176,65 @@ class EvidenceCapability:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordCountBasis:
+    record_basis_id: str
+    scope: CapabilityScope
+    basis_type: RecordBasisType
+    join_basis: str
+    distinct_source_row_count: int
+    row_identity_fingerprints: tuple[str, ...]
+    row_set_fingerprint: str
+    lineage_expression: str
+    normalization_run_ids: tuple[str, ...]
+    policy_version: str
+    fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceAlignment:
+    alignment_id: str
+    scope: CapabilityScope
+    measure_id: str
+    dimension_id: str | None
+    time_dimension_id: str | None
+    currency_coverage_id: str | None
+    join_basis: str
+    measure_normalization_run_ids: tuple[str, ...]
+    related_normalization_run_ids: tuple[str, ...]
+    measure_row_count: int
+    related_row_count: int
+    aligned_row_count: int
+    aligned_row_fingerprints: tuple[str, ...]
+    aligned_row_set_fingerprint: str
+    lineage_expression: str
+    alignment_status: AlignmentStatus
+    reason_codes: tuple[ReasonCode, ...]
+    policy_version: str
+    fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionAuthorization:
+    authorization_id: str
+    capability_assessment_id: str
+    capability_id: str
+    scope: CapabilityScope
+    authorized_operations: tuple[AuthorizedOperation, ...]
+    measure_id: str | None
+    dimension_ids: tuple[str, ...]
+    time_dimension_id: str | None
+    allowed_time_buckets: tuple[str, ...]
+    currency_requirement: str | None
+    unit_requirement: str | None
+    alignment_id: str | None
+    record_basis_id: str | None
+    normalization_run_ids: tuple[str, ...]
+    policy_version: str
+    assessment_fingerprint: str
+    authorization_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityAssessment:
     assessment_id: str
     scope: CapabilityScope
@@ -157,6 +242,9 @@ class CapabilityAssessment:
     dimensions: tuple[GovernedDimension, ...]
     measures: tuple[GovernedMeasure, ...]
     capabilities: tuple[EvidenceCapability, ...]
+    record_count_basis: RecordCountBasis
+    alignments: tuple[EvidenceAlignment, ...]
+    execution_authorizations: tuple[ExecutionAuthorization, ...]
     coverage_policy_version: str
     capability_policy_version: str
     fingerprint: str

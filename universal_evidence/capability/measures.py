@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from universal_evidence.capability.fingerprint import fingerprint
 from universal_evidence.capability.models import (
+    AuthorizedOperation,
     CapabilityState,
     CoverageState,
     EvidenceCoverage,
@@ -120,7 +121,7 @@ def qualify_measures(
                 binding_ratio,
                 state,
                 aggregation,
-                ("SUM",) if aggregation is CapabilityState.SUPPORTED else (),
+                (AuthorizedOperation.SUM,) if aggregation is CapabilityState.SUPPORTED else (),
                 tuple(reasons),
                 capability_policy.version,
                 provenance,

@@ -18,6 +18,13 @@ DEFAULT_CAPABILITY_REGISTRY = (
     CapabilityDefinition("COUNT_EVIDENCE_RECORDS", (CapabilityRequirement("COVERAGE"),)),
     CapabilityDefinition("FILTER_BY_DIMENSION", (CapabilityRequirement("ANY_DIMENSION"),)),
     CapabilityDefinition("TIME_RANGE_ANALYSIS", (CapabilityRequirement("TIME_DIMENSION"),)),
+    CapabilityDefinition(
+        "MONETARY_TREND",
+        (
+            CapabilityRequirement("MONETARY_MEASURE"),
+            CapabilityRequirement("TIME_DIMENSION"),
+        ),
+    ),
     CapabilityDefinition("MONETARY_TOTAL", (CapabilityRequirement("MONETARY_MEASURE"),)),
     CapabilityDefinition(
         "MONETARY_TOTAL_BY_DIMENSION",
