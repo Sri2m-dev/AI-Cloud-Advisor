@@ -42,6 +42,9 @@ class ConceptDefinition:
 @dataclass(frozen=True, slots=True)
 class SemanticDiscoveryProvenance:
     analysis_id: str
+    prospect_id: str
+    organization_id: str | None
+    tenant_id: str | None
     source_id: str
     file_id: str
     sheet_id: str

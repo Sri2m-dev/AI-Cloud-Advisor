@@ -58,6 +58,9 @@ def discover_semantics(
             )
             provenance = SemanticDiscoveryProvenance(
                 column.column.context.analysis_id,
+                column.column.context.prospect_id,
+                column.column.context.organization_id,
+                column.column.context.tenant_id,
                 column.column.context.source_id,
                 column.column.file_id,
                 column.column.sheet_id,

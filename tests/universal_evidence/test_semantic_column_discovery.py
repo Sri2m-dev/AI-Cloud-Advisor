@@ -24,10 +24,19 @@ from universal_evidence.semantic import (
 )
 
 
-def source() -> EvidenceSource:
+def source(
+    *,
+    prospect_id: str = "prospect-sem-1",
+    organization_id: str | None = None,
+    tenant_id: str | None = None,
+) -> EvidenceSource:
     now = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
     context = EvidenceAnalysisContext(
-        "analysis-sem-1", "source-sem-1", "prospect-sem-1"
+        "analysis-sem-1",
+        "source-sem-1",
+        prospect_id,
+        organization_id,
+        tenant_id,
     )
     return EvidenceSource(
         context, "authorized:source-sem-1", now, now + timedelta(days=30)
@@ -173,6 +182,9 @@ def test_explanations_versions_and_provenance_are_complete():
     assert result.ontology_version == "pue-ontology-1"
     assert result.policy_version == "pue-semantic-policy-1"
     assert result.provenance.analysis_id == "analysis-sem-1"
+    assert result.provenance.prospect_id == "prospect-sem-1"
+    assert result.provenance.organization_id is None
+    assert result.provenance.tenant_id is None
     assert result.provenance.file_id
     assert result.provenance.sheet_id
     assert result.provenance.column_id == result.source_column_reference
@@ -187,6 +199,54 @@ def test_semantic_discovery_is_deterministic():
     second = discover_semantics(profile)
     assert first.semantic_fingerprint == second.semantic_fingerprint
     assert first.columns == second.columns
+
+
+@pytest.mark.parametrize(
+    ("scope_name", "first_value", "second_value"),
+    [
+        ("prospect_id", "prospect-a", "prospect-b"),
+        ("organization_id", "organization-a", "organization-b"),
+        ("tenant_id", "tenant-a", "tenant-b"),
+    ],
+)
+def test_scope_change_alters_semantic_identity(scope_name, first_value, second_value):
+    content = b"Currency\nUSD\nUSD\nEUR\nEUR\n"
+    first_profile = profile_evidence(
+        source=source(**{scope_name: first_value}),
+        filename="same.csv",
+        content=content,
+    )
+    second_profile = profile_evidence(
+        source=source(**{scope_name: second_value}),
+        filename="same.csv",
+        content=content,
+    )
+    first = discover_semantics(first_profile)
+    second = discover_semantics(second_profile)
+    assert first.structural_profile_fingerprint != second.structural_profile_fingerprint
+    assert first.semantic_fingerprint != second.semantic_fingerprint
+    assert first.columns[0].discovery_id != second.columns[0].discovery_id
+
+
+def test_complete_scope_is_copied_only_from_evidence_analysis_context():
+    profile = profile_evidence(
+        source=source(
+            prospect_id="prospect-explicit",
+            organization_id="organization-explicit",
+            tenant_id="tenant-explicit",
+        ),
+        filename="tenant-other_prospect-other.csv",
+        content=b"Currency\nUSD\nUSD\nEUR\nEUR\n",
+    )
+    first = discover_semantics(profile)
+    second = discover_semantics(profile)
+    provenance = first.columns[0].provenance
+    assert provenance.analysis_id == "analysis-sem-1"
+    assert provenance.prospect_id == "prospect-explicit"
+    assert provenance.organization_id == "organization-explicit"
+    assert provenance.tenant_id == "tenant-explicit"
+    assert first.semantic_fingerprint == second.semantic_fingerprint
+    assert first.columns[0].discovery_id == second.columns[0].discovery_id
 
 
 def test_filename_alone_never_classifies_provider():
