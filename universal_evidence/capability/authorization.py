@@ -151,6 +151,23 @@ def build_authorizations(
     by_name = {item.capability_name: item for item in capabilities}
     results = []
 
+    def currency_run_ids(measure):
+        if measure is None:
+            return set()
+        return {
+            run_id
+            for item in alignments
+            if item.measure_id == measure.measure_id
+            and item.alignment_status is AlignmentStatus.ALIGNED
+            and item.dimension_id is not None
+            and any(
+                dimension.dimension_id == item.dimension_id
+                and dimension.semantic_concept_id == "financial.currency"
+                for dimension in dimensions
+            )
+            for run_id in item.related_normalization_run_ids
+        }
+
     def add(
         capability_name,
         operation,
@@ -199,6 +216,7 @@ def build_authorizations(
                 tuple(
                     sorted(
                         set(capability.provenance.normalization_run_ids)
+                        | currency_run_ids(measure)
                         | (set(alignment.measure_normalization_run_ids) if alignment else set())
                         | (set(alignment.related_normalization_run_ids) if alignment else set())
                     )
