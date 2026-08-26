@@ -56,7 +56,9 @@ class CapabilityEvaluator:
     def evaluate(self, runs: tuple[NormalizationRun, ...]) -> CapabilityAssessment:
         scope = scope_from_runs(runs)
         coverage = assess_coverage(runs, self.coverage_policy)
-        dimensions = qualify_dimensions(coverage, self.coverage_policy, self.capability_policy)
+        dimensions = qualify_dimensions(
+            runs, coverage, self.coverage_policy, self.capability_policy
+        )
         measures = qualify_measures(runs, coverage, self.coverage_policy, self.capability_policy)
         capabilities = tuple(
             self._evaluate_capability(definition, scope, coverage, dimensions, measures, runs)

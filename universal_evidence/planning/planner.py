@@ -13,6 +13,7 @@ from universal_evidence.aggregation.models import (
 )
 from universal_evidence.capability import (
     CapabilityState,
+    DimensionValueType,
     InMemoryCapabilityRepository,
 )
 from universal_evidence.planning.fingerprint import fingerprint
@@ -28,8 +29,6 @@ from universal_evidence.planning.models import (
 from universal_evidence.planning.policy import AnalyticalPlanningPolicy
 from universal_evidence.planning.registry import INTENT_REGISTRY, PLANNING_REGISTRY_VERSION
 from universal_evidence.planning.repository import InMemoryAnalyticalPlanRepository
-
-FILTER_VALUE_TYPES = (str, int, float, Decimal, date, datetime)
 
 
 class AnalyticalQueryPlanner:
@@ -323,14 +322,30 @@ class AnalyticalQueryPlanner:
             authorized.add(authorization.time_dimension_id)
         for item in intent.filters:
             dimension = dimensions.get(item.dimension_concept_id)
-            tuple_value = (
-                isinstance(item.value, tuple)
-                and item.value
-                and all(isinstance(value, FILTER_VALUE_TYPES) for value in item.value)
-            )
-            scalar_value = isinstance(item.value, FILTER_VALUE_TYPES)
-            value_ok = tuple_value if item.operator is FilterOperator.IN else scalar_value
-            strings = item.value if isinstance(item.value, tuple) else (item.value,)
+            if dimension is None or dimension.dimension_id not in authorized:
+                return (), PlanningReason.FILTER_NOT_AUTHORIZED
+            if (
+                not isinstance(item.operator, FilterOperator)
+                or item.operator.value not in dimension.allowed_filter_operators
+            ):
+                return (), PlanningReason.FILTER_OPERATOR_NOT_ALLOWED
+            values = item.value if isinstance(item.value, tuple) else (item.value,)
+            if item.operator is FilterOperator.IN and (
+                not isinstance(item.value, tuple) or not item.value
+            ):
+                return (), PlanningReason.FILTER_LIST_MEMBER_TYPE_MISMATCH
+            if item.operator is not FilterOperator.IN and isinstance(item.value, tuple):
+                return (), PlanningReason.FILTER_VALUE_TYPE_MISMATCH
+            if not all(
+                self._value_matches_type(value, dimension.normalized_value_type) for value in values
+            ):
+                reason = (
+                    PlanningReason.FILTER_LIST_MEMBER_TYPE_MISMATCH
+                    if item.operator is FilterOperator.IN
+                    else PlanningReason.FILTER_VALUE_TYPE_MISMATCH
+                )
+                return (), reason
+            strings = values
             injection_like = any(
                 isinstance(value, str)
                 and any(
@@ -339,16 +354,26 @@ class AnalyticalQueryPlanner:
                 )
                 for value in strings
             )
-            if (
-                dimension is None
-                or dimension.dimension_id not in authorized
-                or not isinstance(item.operator, FilterOperator)
-                or not value_ok
-                or injection_like
-            ):
+            if injection_like:
                 return (), PlanningReason.FILTER_NOT_AUTHORIZED
             results.append(AggregationFilter(dimension.dimension_id, item.operator, item.value))
         return tuple(results), None
+
+    @staticmethod
+    def _value_matches_type(value, value_type):
+        if value_type is DimensionValueType.STRING:
+            return type(value) is str
+        if value_type is DimensionValueType.INTEGER:
+            return type(value) is int
+        if value_type is DimensionValueType.DECIMAL:
+            return type(value) is Decimal
+        if value_type is DimensionValueType.BOOLEAN:
+            return type(value) is bool
+        if value_type is DimensionValueType.DATE:
+            return type(value) is date
+        if value_type is DimensionValueType.DATETIME:
+            return type(value) is datetime
+        return False
 
     def _ready(
         self,

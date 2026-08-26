@@ -52,6 +52,7 @@ class CapabilityPolicy:
     time_concept_fragments: tuple[str, ...] = ("date", "time", "period")
     allowed_time_buckets: tuple[str, ...] = ("DAY", "MONTH", "QUARTER", "YEAR")
     execution_authorization_version: str = "pue-execution-authorization-policy-1"
+    dimension_value_policy_version: str = "pue-dimension-value-policy-1"
     max_materialized_row_references: int = 1000
 
     def __post_init__(self) -> None:

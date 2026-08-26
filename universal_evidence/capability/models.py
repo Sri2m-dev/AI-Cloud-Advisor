@@ -50,6 +50,15 @@ class RecordBasisType(str, Enum):
     SOURCE_ROW = "SOURCE_ROW"
 
 
+class DimensionValueType(str, Enum):
+    STRING = "STRING"
+    INTEGER = "INTEGER"
+    DECIMAL = "DECIMAL"
+    BOOLEAN = "BOOLEAN"
+    DATE = "DATE"
+    DATETIME = "DATETIME"
+
+
 class ReasonCode(str, Enum):
     GOVERNED_EVIDENCE_PRESENT = "GOVERNED_EVIDENCE_PRESENT"
     NO_GOVERNED_EVIDENCE = "NO_GOVERNED_EVIDENCE"
@@ -68,6 +77,8 @@ class ReasonCode(str, Enum):
     FX_NOT_SUPPORTED = "FX_NOT_SUPPORTED"
     CAPABILITY_PREREQUISITES_MET = "CAPABILITY_PREREQUISITES_MET"
     SCOPE_CONFLICT = "SCOPE_CONFLICT"
+    DIMENSION_VALUE_TYPE_CERTIFIED = "DIMENSION_VALUE_TYPE_CERTIFIED"
+    DIMENSION_VALUE_TYPE_CONFLICT = "DIMENSION_VALUE_TYPE_CONFLICT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +139,10 @@ class GovernedDimension:
     coverage_id: str
     state: CapabilityState
     cardinality: int | None
+    normalized_value_type: DimensionValueType | None
+    allowed_filter_operators: tuple[str, ...]
+    filterable: bool
+    value_policy_version: str
     reason_codes: tuple[ReasonCode, ...]
     policy_version: str
     provenance: CapabilityProvenance
