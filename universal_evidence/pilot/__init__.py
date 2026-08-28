@@ -10,6 +10,11 @@ from universal_evidence.pilot.dev_control import (
     dev_control_enabled,
     render_dev_control,
 )
+from universal_evidence.pilot.governed_intelligence import (
+    AskState,
+    GovernedAskNexoraService,
+    GovernedAskResponse,
+)
 from universal_evidence.pilot.materialization import (
     EntityProposal,
     GovernedEntityMaterializationService,
@@ -130,4 +135,7 @@ __all__ = [
     "SourceAuthorityPolicy",
     "SourceIdentityBinding",
     "SourceIdentityObservation",
+    "AskState",
+    "GovernedAskNexoraService",
+    "GovernedAskResponse",
 ]

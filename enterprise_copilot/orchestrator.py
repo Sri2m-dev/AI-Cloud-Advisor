@@ -14,16 +14,20 @@ from enterprise_copilot.prompts import prompt as system_prompt
 from enterprise_copilot.providers import default_providers
 from enterprise_copilot.router import route_intent
 from enterprise_intelligence import SearchRequest
+from universal_evidence.pilot.governed_intelligence import AskState
 
 
 class EnterpriseAIOrchestrator:
     """Policy -> route -> retrieve -> ground -> provider -> cited response."""
 
-    def __init__(self, *, search, intelligence, providers=None, scenario_service=None):
+    def __init__(
+        self, *, search, intelligence, providers=None, scenario_service=None, governed_ask=None
+    ):
         self.search = search
         self.intelligence = intelligence
         self.providers = providers or default_providers()
         self.scenario_service = scenario_service
+        self.governed_ask = governed_ask
 
     def explain_scenario(self, request: CopilotRequest, scenario_request) -> CopilotResponse:
         """Explain an explicit ScenarioRequest without silently changing its inputs."""
@@ -70,6 +74,13 @@ class EnterpriseAIOrchestrator:
         allowed, decision = evaluate_prompt(request.prompt, request.persona)
         if request.persona != self.intelligence.role:
             raise PermissionError("copilot persona does not match authorization scope")
+        if self.governed_ask is not None and self._is_governed_question(request.prompt):
+            governed = self.governed_ask.ask(
+                request.prompt,
+                scope=request.tenant_context,
+                actor_id=request.session_id,
+            )
+            return self._governed_response(request, governed, started)
         if not allowed:
             return self._blocked(request, decision, started)
         intent, routing_ms = route_intent(request.prompt)
@@ -143,6 +154,59 @@ class EnterpriseAIOrchestrator:
                 "output_tokens": generated.output_tokens,
                 "citations_used": len(citations),
                 "policy_blocks": 0,
+            },
+            CopilotResponse.now(),
+        )
+
+    @staticmethod
+    def _is_governed_question(prompt: str) -> bool:
+        text = str(prompt or "").casefold()
+        return any(
+            term in text
+            for term in (
+                "who owns",
+                "owner",
+                "cost centre",
+                "cost center",
+                "depend",
+                "what applications",
+                "sources describe",
+                "provenance",
+                "total cost",
+                "governed records",
+                "cost by service",
+            )
+        )
+
+    @staticmethod
+    def _governed_response(request, governed, started):
+        citations = tuple(
+            CopilotCitation(
+                f"G{index}",
+                str(item.get("type", "governed_evidence")),
+                str(item.get("canonical_id", item.get("relationship", "governed"))),
+                "ACT-008 governed evidence",
+                1.0 if governed.state is AskState.SUPPORTED else None,
+                governed.state.value,
+            )
+            for index, item in enumerate(governed.citations, 1)
+        )
+        return CopilotResponse(
+            CopilotResponse.identifier(),
+            governed.answer,
+            governed.question_class,
+            None,
+            citations,
+            1.0 if governed.state is AskState.SUPPORTED else None,
+            None,
+            (f"ACT-008:{governed.state.value}",),
+            "deterministic-governed",
+            governed.state is AskState.BLOCKED,
+            governed.state is AskState.UNSUPPORTED,
+            {
+                "latency_ms": (perf_counter() - started) * 1000,
+                "governed_state": governed.state.value,
+                "answer_fingerprint": governed.answer_fingerprint,
             },
             CopilotResponse.now(),
         )
