@@ -33,10 +33,22 @@ from services.prospect_data_intake_service import (  # noqa: E402
     ingest_upload,
     prospect_encryption_key,
 )
-from shared.currency import SUPPORTED_CURRENCIES, format_currency_amount  # noqa: E402
 from shared.auth import require_role  # noqa: E402
+from shared.currency import SUPPORTED_CURRENCIES, format_currency_amount  # noqa: E402
 from shared.session import init_session  # noqa: E402
 from shared.styles import configure_page  # noqa: E402
+from universal_evidence.pilot import (  # noqa: E402
+    PilotAnalysisContext,
+    admit_uploaded_evidence,
+    get_pilot_service,
+    render_dev_control,
+    render_pue_stage12,
+)
+from universal_evidence.pilot.dev_harness import (  # noqa: E402
+    bootstrap_dev_pilot_session,
+    harness_enabled,
+    publish_active_prospect_scope,
+)
 
 
 def _pipeline(title: str, stages: tuple[tuple[str, str], ...]) -> None:
@@ -90,8 +102,53 @@ def _reset_journey() -> None:
         "environment_analysis_result",
         "prospect_analysis",
         "prospect_analysis_error",
+        "pue_pilot_context",
+        "pue_dev_harness_active",
+        "pue_shadow_analysis",
+        "pue_shadow_request",
+        "pue_upload_admission",
+        "pue_upload_admission_error",
+        "pue_local_pilot_stage",
+        "pue_local_pilot_kill_switch",
+        "pue_local_pilot_scope_fingerprint",
     ):
         st.session_state.pop(key, None)
+
+
+def _prospect_pue_pilot_model(prospect_analysis):
+    """Resolve an additive pilot model; never alter the legacy prospect result."""
+    bootstrap_dev_pilot_session(st.session_state, prospect_analysis)
+    context = st.session_state.get("pue_pilot_context")
+    if not isinstance(context, PilotAnalysisContext):
+        return None
+    service = get_pilot_service()
+    shadow_result = st.session_state.get("pue_shadow_analysis")
+    request = st.session_state.get("pue_shadow_request")
+    if shadow_result is None and request is not None:
+        shadow_result = service.run_or_reuse_shadow(request)
+        if shadow_result is not None:
+            st.session_state["pue_shadow_analysis"] = shadow_result
+    return service.experience(
+        prospect_analysis=prospect_analysis,
+        context=context,
+        shadow_result=shadow_result,
+    )
+
+
+def _upload_pue_pilot_model(admission):
+    return get_pilot_service().experience_upload(admission)
+
+
+def _render_dev_pilot_control(admission=None, prospect_analysis=None):
+    if admission is not None:
+        return render_dev_control(st, admission)
+    if admission is None and prospect_analysis is not None:
+        publish_active_prospect_scope(prospect_analysis)
+    if harness_enabled() and st.button(
+        "Apply local PUE pilot control",
+        key="apply_local_pue_pilot_control",
+    ):
+        st.rerun()
 
 
 def _select_path(path: str) -> None:
@@ -468,22 +525,41 @@ if selected_path == "upload" and not prospect_result:
                             retention_days=DEFAULT_RETENTION_DAYS,
                             key=key,
                         )
-                        prospect_analysis = ingest_upload(
-                            tenant,
-                            profile=profile,
-                            filename=upload.name,
-                            content=upload.getvalue(),
-                            actor=actor,
-                            role=role,
-                            key=key,
-                        )
+                        content = upload.getvalue()
                         st.session_state["prospect_tenant"] = tenant
-                        st.session_state["prospect_analysis"] = prospect_analysis
                         st.session_state["prospect_name"] = prospect_name.strip()
-                        st.session_state.pop("prospect_analysis_error", None)
-                        st.success(
-                            "Evidence was scanned, validated, normalized, encrypted, and analyzed."
-                        )
+                        try:
+                            admission = admit_uploaded_evidence(
+                                tenant,
+                                filename=upload.name,
+                                content=content,
+                            )
+                            st.session_state["pue_upload_admission"] = admission
+                            st.session_state.pop("pue_upload_admission_error", None)
+                        except Exception:  # noqa: BLE001 - shadow admission is isolated
+                            st.session_state.pop("pue_upload_admission", None)
+                            st.session_state["pue_upload_admission_error"] = (
+                                "Additional governed evidence analysis is temporarily unavailable."
+                            )
+                        try:
+                            prospect_analysis = ingest_upload(
+                                tenant,
+                                profile=profile,
+                                filename=upload.name,
+                                content=content,
+                                actor=actor,
+                                role=role,
+                                key=key,
+                            )
+                            st.session_state["prospect_analysis"] = prospect_analysis
+                            st.session_state.pop("prospect_analysis_error", None)
+                            st.success(
+                                "Evidence was scanned, validated, normalized, encrypted, "
+                                "and analyzed."
+                            )
+                        except ProspectIntakeError as exc:
+                            st.session_state.pop("prospect_analysis", None)
+                            st.session_state["prospect_analysis_error"] = str(exc)
                         st.rerun()
                     except ProspectIntakeError as exc:
                         st.session_state["prospect_analysis_error"] = str(exc)
@@ -531,7 +607,14 @@ if cloud_result:
         st.error("Analysis failed. No discovery stage is marked complete.")
 
 prospect_result = st.session_state.get("prospect_analysis")
+upload_admission = st.session_state.get("pue_upload_admission")
 if prospect_result and selected_path == "upload":
+    _render_dev_pilot_control(upload_admission, prospect_result)
+    pue_pilot_model = (
+        _upload_pue_pilot_model(upload_admission)
+        if upload_admission is not None
+        else _prospect_pue_pilot_model(prospect_result)
+    )
     if prospect_result.currency_resolution_required:
         _step_header(
             4,
@@ -571,6 +654,7 @@ if prospect_result and selected_path == "upload":
                     st.rerun()
                 except ProspectIntakeError as exc:
                     st.error(str(exc))
+        render_pue_stage12(st, pue_pilot_model)
         st.stop()
     _step_header(
         4,
@@ -601,6 +685,7 @@ if prospect_result and selected_path == "upload":
             prospect_result.opportunity_evidence_qualified, prospect_result.currency
         ),
     )
+    render_pue_stage12(st, pue_pilot_model)
     st.page_link(
         "pages/prospect_data_intake.py",
         label="Open Results, Ask Nexora, and Board Pack",
@@ -609,6 +694,31 @@ if prospect_result and selected_path == "upload":
     if st.button("Analyze another environment", key="restart_upload_complete"):
         _reset_journey()
         st.rerun()
+
+if upload_admission is not None and prospect_result is None and selected_path == "upload":
+    _render_dev_pilot_control(upload_admission)
+    if st.session_state.get("prospect_analysis_error"):
+        st.error(str(st.session_state["prospect_analysis_error"]))
+    st.warning(
+        "The existing prospect analysis could not normalize this schema. "
+        "The separate governed evidence pilot remains shadow-only."
+    )
+    render_pue_stage12(st, _upload_pue_pilot_model(upload_admission))
+
+if (
+    upload_admission is not None
+    and prospect_result is None
+    and st.session_state.get("pue_upload_admission_error")
+    and selected_path == "upload"
+):
+    st.info(str(st.session_state["pue_upload_admission_error"]))
+
+if (
+    prospect_result is not None
+    and st.session_state.get("pue_upload_admission_error")
+    and selected_path == "upload"
+):
+    st.info(str(st.session_state["pue_upload_admission_error"]))
 
 if not selected_path:
     st.stop()

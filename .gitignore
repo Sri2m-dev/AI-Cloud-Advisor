@@ -24,6 +24,8 @@ sync_logs/
 exports/
 var/prospect_data/
 .streamlit/prospect-data.key
+.streamlit/pue-pilot-dev.json
+.streamlit/pue-pilot-active-scope.json
 
 # JavaScript
 node_modules/
