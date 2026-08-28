@@ -18,8 +18,18 @@ from universal_evidence.pilot.models import (
     PilotVisibility,
     PuePilotViewModel,
 )
+from universal_evidence.pilot.normalization_control import render_governed_normalization
+from universal_evidence.pilot.normalization_service import PilotGovernedNormalizationService
+from universal_evidence.pilot.normalization_view_models import (
+    GovernedNormalizationViewModel,
+    NormalizationPlan,
+    NormalizationPlanItem,
+    NormalizationQualitySummary,
+    ObservationQuality,
+)
 from universal_evidence.pilot.render import render_pue_stage12
 from universal_evidence.pilot.runtime import (
+    get_normalization_pilot_service,
     get_pilot_service,
     get_semantic_pilot_service,
 )
@@ -63,9 +73,17 @@ __all__ = [
     "apply_dev_control",
     "dev_control_enabled",
     "get_pilot_service",
+    "get_normalization_pilot_service",
     "get_semantic_pilot_service",
     "authenticated_confirmation_actor",
     "render_dev_control",
     "render_pue_stage12",
     "render_semantic_governance",
+    "render_governed_normalization",
+    "PilotGovernedNormalizationService",
+    "GovernedNormalizationViewModel",
+    "NormalizationPlan",
+    "NormalizationPlanItem",
+    "NormalizationQualitySummary",
+    "ObservationQuality",
 ]

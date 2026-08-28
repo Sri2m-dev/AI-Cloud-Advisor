@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -45,6 +45,8 @@ class EvidencePilotAdmission:
     legacy_analysis_reference: str | None
     authority: str
     fingerprint: str
+    original_filename: str
+    source_content: bytes = field(repr=False)
 
 
 def admit_uploaded_evidence(
@@ -103,7 +105,14 @@ def admit_uploaded_evidence(
         legacy_reference,
         "SHADOW / NON-AUTHORITATIVE",
         identity,
+        filename,
+        bytes(content),
     )
+
+
+def admitted_source_rows(admission: EvidencePilotAdmission):
+    """Read the immutable admitted source without consulting another tenant or upload."""
+    return _source_rows(admission.original_filename, admission.source_content)
 
 
 def discover_structural_regions(profile, *, filename, content):

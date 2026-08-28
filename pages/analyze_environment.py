@@ -42,6 +42,7 @@ from universal_evidence.pilot import (  # noqa: E402
     admit_uploaded_evidence,
     get_pilot_service,
     render_dev_control,
+    render_governed_normalization,
     render_pue_stage12,
     render_semantic_governance,
 )
@@ -143,6 +144,7 @@ def _upload_pue_pilot_model(admission):
 def _render_upload_pue(admission):
     render_pue_stage12(st, _upload_pue_pilot_model(admission))
     render_semantic_governance(st, admission)
+    render_governed_normalization(st, admission)
 
 
 def _render_dev_pilot_control(admission=None, prospect_analysis=None):
@@ -663,6 +665,7 @@ if prospect_result and selected_path == "upload":
         render_pue_stage12(st, pue_pilot_model)
         if upload_admission is not None:
             render_semantic_governance(st, upload_admission)
+            render_governed_normalization(st, upload_admission)
         st.stop()
     _step_header(
         4,
@@ -696,6 +699,7 @@ if prospect_result and selected_path == "upload":
     render_pue_stage12(st, pue_pilot_model)
     if upload_admission is not None:
         render_semantic_governance(st, upload_admission)
+        render_governed_normalization(st, upload_admission)
     st.page_link(
         "pages/prospect_data_intake.py",
         label="Open Results, Ask Nexora, and Board Pack",

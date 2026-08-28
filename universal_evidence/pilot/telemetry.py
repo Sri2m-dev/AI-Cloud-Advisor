@@ -29,6 +29,8 @@ class InMemoryPilotTelemetry:
             "mapping_overridden_count",
             "ambiguous_mapping_count",
             "stale_mapping_count",
+            "normalization_run_count",
+            "normalized_observation_count",
         }
     )
 
