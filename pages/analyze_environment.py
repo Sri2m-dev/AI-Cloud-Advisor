@@ -43,6 +43,7 @@ from universal_evidence.pilot import (  # noqa: E402
     get_pilot_service,
     render_dev_control,
     render_pue_stage12,
+    render_semantic_governance,
 )
 from universal_evidence.pilot.dev_harness import (  # noqa: E402
     bootstrap_dev_pilot_session,
@@ -137,6 +138,11 @@ def _prospect_pue_pilot_model(prospect_analysis):
 
 def _upload_pue_pilot_model(admission):
     return get_pilot_service().experience_upload(admission)
+
+
+def _render_upload_pue(admission):
+    render_pue_stage12(st, _upload_pue_pilot_model(admission))
+    render_semantic_governance(st, admission)
 
 
 def _render_dev_pilot_control(admission=None, prospect_analysis=None):
@@ -655,6 +661,8 @@ if prospect_result and selected_path == "upload":
                 except ProspectIntakeError as exc:
                     st.error(str(exc))
         render_pue_stage12(st, pue_pilot_model)
+        if upload_admission is not None:
+            render_semantic_governance(st, upload_admission)
         st.stop()
     _step_header(
         4,
@@ -686,6 +694,8 @@ if prospect_result and selected_path == "upload":
         ),
     )
     render_pue_stage12(st, pue_pilot_model)
+    if upload_admission is not None:
+        render_semantic_governance(st, upload_admission)
     st.page_link(
         "pages/prospect_data_intake.py",
         label="Open Results, Ask Nexora, and Board Pack",
@@ -703,7 +713,7 @@ if upload_admission is not None and prospect_result is None and selected_path ==
         "The existing prospect analysis could not normalize this schema. "
         "The separate governed evidence pilot remains shadow-only."
     )
-    render_pue_stage12(st, _upload_pue_pilot_model(upload_admission))
+    _render_upload_pue(upload_admission)
 
 if (
     upload_admission is not None

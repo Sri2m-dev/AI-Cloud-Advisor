@@ -22,6 +22,13 @@ class InMemoryPilotTelemetry:
             "kill_switch_suppressions",
             "rollback_events",
             "shadow_reuse",
+            "semantic_candidates_shown",
+            "confirmation_required_count",
+            "mapping_confirmed_count",
+            "mapping_rejected_count",
+            "mapping_overridden_count",
+            "ambiguous_mapping_count",
+            "stale_mapping_count",
         }
     )
 

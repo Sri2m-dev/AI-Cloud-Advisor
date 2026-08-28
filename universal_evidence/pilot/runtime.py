@@ -8,6 +8,8 @@ from universal_evidence.activation import (
     PueActivationResolver,
     PueActivationService,
 )
+from universal_evidence.governance import ConfirmationService
+from universal_evidence.pilot.semantic_service import PilotSemanticGovernanceService
 from universal_evidence.pilot.service import PueStage12PilotService
 from universal_evidence.shadow import ShadowOrchestrator
 
@@ -33,7 +35,19 @@ PILOT_SERVICE = PueStage12PilotService(
     audit_sink=ACTIVATION_AUDIT,
     clock=_clock,
 )
+CONFIRMATION_SERVICE = ConfirmationService(clock=_clock)
+SEMANTIC_PILOT_SERVICE = PilotSemanticGovernanceService(
+    activation_resolver=ACTIVATION_RESOLVER,
+    confirmation_service=CONFIRMATION_SERVICE,
+    telemetry=PILOT_SERVICE.telemetry,
+    audit_sink=ACTIVATION_AUDIT,
+    clock=_clock,
+)
 
 
 def get_pilot_service():
     return PILOT_SERVICE
+
+
+def get_semantic_pilot_service():
+    return SEMANTIC_PILOT_SERVICE

@@ -19,7 +19,22 @@ from universal_evidence.pilot.models import (
     PuePilotViewModel,
 )
 from universal_evidence.pilot.render import render_pue_stage12
-from universal_evidence.pilot.runtime import get_pilot_service
+from universal_evidence.pilot.runtime import (
+    get_pilot_service,
+    get_semantic_pilot_service,
+)
+from universal_evidence.pilot.semantic_control import (
+    authenticated_confirmation_actor,
+    render_semantic_governance,
+)
+from universal_evidence.pilot.semantic_service import PilotSemanticGovernanceService
+from universal_evidence.pilot.semantic_view_models import (
+    SemanticCandidateViewModel,
+    SemanticDecisionViewModel,
+    SemanticGovernanceViewModel,
+    SemanticMappingStatus,
+    SemanticMappingViewModel,
+)
 from universal_evidence.pilot.service import PueStage12PilotService
 from universal_evidence.pilot.telemetry import (
     InMemoryPilotTelemetry,
@@ -37,11 +52,20 @@ __all__ = [
     "PilotVisibility",
     "PuePilotViewModel",
     "PueStage12PilotService",
+    "PilotSemanticGovernanceService",
+    "SemanticCandidateViewModel",
+    "SemanticDecisionViewModel",
+    "SemanticGovernanceViewModel",
+    "SemanticMappingStatus",
+    "SemanticMappingViewModel",
     "StructuralTableRegion",
     "admit_uploaded_evidence",
     "apply_dev_control",
     "dev_control_enabled",
     "get_pilot_service",
+    "get_semantic_pilot_service",
+    "authenticated_confirmation_actor",
     "render_dev_control",
     "render_pue_stage12",
+    "render_semantic_governance",
 ]
