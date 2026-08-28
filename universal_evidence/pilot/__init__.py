@@ -10,9 +10,6 @@ from universal_evidence.pilot.dev_control import (
     dev_control_enabled,
     render_dev_control,
 )
-from universal_evidence.pilot.measurement_control import render_governed_measurement
-from universal_evidence.pilot.measurement_service import PilotGovernedMeasurementService
-from universal_evidence.pilot.measurement_view_models import MeasurementReadinessViewModel
 from universal_evidence.pilot.materialization import (
     EntityProposal,
     GovernedEntityMaterializationService,
@@ -22,6 +19,9 @@ from universal_evidence.pilot.materialization import (
     MaterializationState,
     RelationshipProposal,
 )
+from universal_evidence.pilot.measurement_control import render_governed_measurement
+from universal_evidence.pilot.measurement_service import PilotGovernedMeasurementService
+from universal_evidence.pilot.measurement_view_models import MeasurementReadinessViewModel
 from universal_evidence.pilot.models import (
     CapabilityViewItem,
     EvidenceViewItem,
@@ -38,6 +38,17 @@ from universal_evidence.pilot.normalization_view_models import (
     NormalizationPlanItem,
     NormalizationQualitySummary,
     ObservationQuality,
+)
+from universal_evidence.pilot.reconciliation import (
+    GovernedIdentityReconciliationService,
+    ReconciliationDecision,
+    ReconciliationDecisionType,
+    ReconciliationProposal,
+    ReconciliationReport,
+    ReconciliationState,
+    SourceAuthorityPolicy,
+    SourceIdentityBinding,
+    SourceIdentityObservation,
 )
 from universal_evidence.pilot.render import render_pue_stage12
 from universal_evidence.pilot.runtime import (
@@ -110,4 +121,13 @@ __all__ = [
     "MaterializationReport",
     "MaterializationState",
     "RelationshipProposal",
+    "GovernedIdentityReconciliationService",
+    "ReconciliationDecision",
+    "ReconciliationDecisionType",
+    "ReconciliationProposal",
+    "ReconciliationReport",
+    "ReconciliationState",
+    "SourceAuthorityPolicy",
+    "SourceIdentityBinding",
+    "SourceIdentityObservation",
 ]
