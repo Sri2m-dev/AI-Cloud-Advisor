@@ -9,6 +9,7 @@ from universal_evidence.activation import (
     PueActivationService,
 )
 from universal_evidence.governance import ConfirmationService
+from universal_evidence.pilot.measurement_service import PilotGovernedMeasurementService
 from universal_evidence.pilot.normalization_service import PilotGovernedNormalizationService
 from universal_evidence.pilot.semantic_service import PilotSemanticGovernanceService
 from universal_evidence.pilot.service import PueStage12PilotService
@@ -50,6 +51,13 @@ NORMALIZATION_PILOT_SERVICE = PilotGovernedNormalizationService(
     confirmation_service=CONFIRMATION_SERVICE,
     telemetry=PILOT_SERVICE.telemetry,
 )
+MEASUREMENT_PILOT_SERVICE = PilotGovernedMeasurementService(
+    activation_resolver=ACTIVATION_RESOLVER,
+    normalization_service=NORMALIZATION_PILOT_SERVICE,
+    telemetry=PILOT_SERVICE.telemetry,
+    audit_sink=ACTIVATION_AUDIT,
+    clock=_clock,
+)
 
 
 def get_pilot_service():
@@ -62,3 +70,7 @@ def get_semantic_pilot_service():
 
 def get_normalization_pilot_service():
     return NORMALIZATION_PILOT_SERVICE
+
+
+def get_measurement_pilot_service():
+    return MEASUREMENT_PILOT_SERVICE

@@ -31,6 +31,15 @@ class InMemoryPilotTelemetry:
             "stale_mapping_count",
             "normalization_run_count",
             "normalized_observation_count",
+            "measurement_plan_created",
+            "measurement_execution_blocked",
+            "measurement_execution_succeeded",
+            "measurement_record_count",
+            "measurement_exclusion_count",
+            "measurement_operation_count",
+            "measurement_operation_sum",
+            "measurement_operation_grouped_sum",
+            "measurement_latency_ms",
         }
     )
 

@@ -10,6 +10,9 @@ from universal_evidence.pilot.dev_control import (
     dev_control_enabled,
     render_dev_control,
 )
+from universal_evidence.pilot.measurement_control import render_governed_measurement
+from universal_evidence.pilot.measurement_service import PilotGovernedMeasurementService
+from universal_evidence.pilot.measurement_view_models import MeasurementReadinessViewModel
 from universal_evidence.pilot.models import (
     CapabilityViewItem,
     EvidenceViewItem,
@@ -29,6 +32,7 @@ from universal_evidence.pilot.normalization_view_models import (
 )
 from universal_evidence.pilot.render import render_pue_stage12
 from universal_evidence.pilot.runtime import (
+    get_measurement_pilot_service,
     get_normalization_pilot_service,
     get_pilot_service,
     get_semantic_pilot_service,
@@ -74,6 +78,7 @@ __all__ = [
     "dev_control_enabled",
     "get_pilot_service",
     "get_normalization_pilot_service",
+    "get_measurement_pilot_service",
     "get_semantic_pilot_service",
     "authenticated_confirmation_actor",
     "render_dev_control",
@@ -86,4 +91,7 @@ __all__ = [
     "NormalizationPlanItem",
     "NormalizationQualitySummary",
     "ObservationQuality",
+    "render_governed_measurement",
+    "PilotGovernedMeasurementService",
+    "MeasurementReadinessViewModel",
 ]
