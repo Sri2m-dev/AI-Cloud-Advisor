@@ -149,14 +149,20 @@ class GovernedIdentityReconciliationService:
         activation_resolver=None,
         authority_policy: SourceAuthorityPolicy | None = None,
         audit_sink=None,
+        bindings=(),
+        decisions=(),
     ) -> None:
         self.registry = registry
         self.activation_resolver = activation_resolver
         self.authority_policy = authority_policy or SourceAuthorityPolicy()
         self.audit_sink = audit_sink
-        self._bindings: dict[tuple[str, ...], SourceIdentityBinding] = {}
+        self._bindings: dict[tuple[str, ...], SourceIdentityBinding] = {
+            self._binding_key(item): item for item in bindings
+        }
         self._cross_references: dict[tuple[str, ...], str] = {}
-        self._decisions: dict[str, ReconciliationDecision] = {}
+        self._decisions: dict[str, ReconciliationDecision] = {
+            item.proposal_fingerprint: item for item in decisions
+        }
 
     def reconcile(
         self,
@@ -477,6 +483,15 @@ class GovernedIdentityReconciliationService:
         )
         self._bindings[key] = binding
         return binding
+
+    @staticmethod
+    def _binding_key(binding):
+        return (
+            *binding.scope,
+            binding.source_system,
+            binding.source_identifier,
+            binding.entity_type.value,
+        )
 
     def _audit(self, event_type, observation, subject):
         if self.audit_sink is not None:

@@ -52,6 +52,7 @@ class GovernedAskNexoraService:
         registry=None,
         graph=None,
         bindings: Iterable[Any] = (),
+        activation_resolver=None,
         interpreter=None,
         policy=None,
     ) -> None:
@@ -59,6 +60,7 @@ class GovernedAskNexoraService:
         self.registry = registry
         self.graph = graph
         self.bindings = tuple(bindings)
+        self.activation_resolver = activation_resolver
         self.interpreter = interpreter or DeterministicAnalyticalInterpreter()
         self.policy = policy or InterpretationPolicy()
 
@@ -74,6 +76,13 @@ class GovernedAskNexoraService:
     ) -> GovernedAskResponse:
         text = " ".join(str(question or "").split())
         source_bindings = tuple(self.bindings if bindings is None else bindings)
+        if self._activation_blocked(scope):
+            return self._finish(
+                AskState.BLOCKED,
+                text,
+                "activation",
+                "Governed Ask Nexora is suppressed by the active kill switch.",
+            )
         if not text:
             return self._finish(AskState.INSUFFICIENT, text, "unknown", "No question was supplied.")
         if self._injection_like(text):
@@ -428,6 +437,37 @@ class GovernedAskNexoraService:
             term in lower
             for term in ("forecast", "optimize", "optimization", "convert", "fx", "terminate")
         )
+
+    def _activation_blocked(self, scope):
+        if self.activation_resolver is None:
+            return False
+        from universal_evidence.activation import ActivationScope, RoutingReason, ScopeLevel
+
+        analysis_id = getattr(scope, "analysis_id", None)
+        prospect_id = getattr(scope, "prospect_id", None)
+        tenant_id = getattr(scope, "tenant_id", None)
+        organization_id = getattr(scope, "organization_id", None)
+        level = (
+            ScopeLevel.ANALYSIS
+            if analysis_id
+            else ScopeLevel.PROSPECT
+            if prospect_id
+            else ScopeLevel.TENANT
+            if tenant_id
+            else ScopeLevel.ORGANIZATION
+            if organization_id
+            else ScopeLevel.GLOBAL
+        )
+        activation = self.activation_resolver.resolve(
+            ActivationScope(
+                level,
+                organization_id=organization_id,
+                tenant_id=tenant_id,
+                prospect_id=prospect_id,
+                analysis_id=analysis_id,
+            )
+        )
+        return RoutingReason.KILL_SWITCH_ACTIVE in activation.reason_codes
 
     @staticmethod
     def _format_measurement(intent_type, result):
