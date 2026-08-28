@@ -13,6 +13,15 @@ from universal_evidence.pilot.dev_control import (
 from universal_evidence.pilot.measurement_control import render_governed_measurement
 from universal_evidence.pilot.measurement_service import PilotGovernedMeasurementService
 from universal_evidence.pilot.measurement_view_models import MeasurementReadinessViewModel
+from universal_evidence.pilot.materialization import (
+    EntityProposal,
+    GovernedEntityMaterializationService,
+    MaterializationAction,
+    MaterializationObservation,
+    MaterializationReport,
+    MaterializationState,
+    RelationshipProposal,
+)
 from universal_evidence.pilot.models import (
     CapabilityViewItem,
     EvidenceViewItem,
@@ -94,4 +103,11 @@ __all__ = [
     "render_governed_measurement",
     "PilotGovernedMeasurementService",
     "MeasurementReadinessViewModel",
+    "EntityProposal",
+    "GovernedEntityMaterializationService",
+    "MaterializationAction",
+    "MaterializationObservation",
+    "MaterializationReport",
+    "MaterializationState",
+    "RelationshipProposal",
 ]
