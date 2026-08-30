@@ -450,7 +450,9 @@ class DurableReconciliationRepository:
 class DurableRuntimeComposition:
     """Explicit composition root; no production downgrade to in-memory state."""
 
-    def __init__(self, database, *, migrate=True):
+    def __init__(
+        self, database, *, migrate=True, operations=None, operation_context=None
+    ):
         if database is None or not str(database).strip():
             raise ValueError("durable lifecycle database is required")
         self.lifecycle = SQLiteLifecycleRepository(database, migrate=migrate)
@@ -461,13 +463,34 @@ class DurableRuntimeComposition:
         self.plans = DurableAnalyticalPlanRepository(self.lifecycle)
         self.results = DurableAggregationRepository(self.lifecycle)
         self.lineage = DurableLineageRepository(self.lifecycle)
+        if operations is None and operation_context is not None:
+            from universal_evidence.operations import GovernedOperationsService
+
+            operations = GovernedOperationsService(self.lifecycle)
+        self.operations = operations
+        self.operation_context = operation_context
+
+    def build_lifecycle_operations(self):
+        if self.operations is None or self.operation_context is None:
+            raise ValueError("operations and operation context are required")
+        from universal_evidence.operations import GovernedLifecycleOperations
+
+        return GovernedLifecycleOperations(
+            self.lifecycle, self.operations, self.operation_context
+        )
 
     def build_activation_services(self, *, audit_sink, clock):
         from universal_evidence.activation import PueActivationResolver, PueActivationService
 
         return (
             PueActivationResolver(repository=self.activation, clock=clock),
-            PueActivationService(repository=self.activation, audit_sink=audit_sink, clock=clock),
+            PueActivationService(
+                repository=self.activation,
+                audit_sink=audit_sink,
+                clock=clock,
+                operations=self.operations,
+                operation_context=self.operation_context,
+            ),
         )
 
     def build_pilot_services(self, *, activation_resolver, audit_sink=None, clock=None):
@@ -487,12 +510,16 @@ class DurableRuntimeComposition:
             telemetry=telemetry,
             audit_sink=audit_sink,
             clock=clock,
+            operations=self.operations,
+            operation_context=self.operation_context,
         )
         normalization = PilotGovernedNormalizationService(
             activation_resolver=activation_resolver,
             semantic_service=semantic,
             confirmation_service=confirmation,
             telemetry=telemetry,
+            operations=self.operations,
+            operation_context=self.operation_context,
         )
         normalization.normalization = DurableNormalizationAdapter(
             normalization.normalization, self.lifecycle
@@ -503,10 +530,28 @@ class DurableRuntimeComposition:
             telemetry=telemetry,
             audit_sink=audit_sink,
             clock=clock,
+            operations=self.operations,
+            operation_context=self.operation_context,
         )
         measurement.planner.repository = self.plans
         measurement.executor.repository = self.results
         return confirmation, semantic, normalization, measurement
+
+    def build_materialization_service(
+        self, registry, relationships, *, activation_resolver=None, audit_sink=None
+    ):
+        from universal_evidence.pilot.materialization import (
+            GovernedEntityMaterializationService,
+        )
+
+        return GovernedEntityMaterializationService(
+            registry,
+            relationships,
+            activation_resolver=activation_resolver,
+            audit_sink=audit_sink,
+            operations=self.operations,
+            operation_context=self.operation_context,
+        )
 
     def build_reconciliation_service(self, registry, scope, *, activation_resolver=None):
         from universal_evidence.pilot.reconciliation import (
@@ -518,6 +563,8 @@ class DurableRuntimeComposition:
             activation_resolver=activation_resolver,
             bindings=self.reconciliation.bindings(scope),
             decisions=self.reconciliation.decisions(scope),
+            operations=self.operations,
+            operation_context=self.operation_context,
         )
 
     def build_governed_ask_service(self, registry, graph, scope, *, activation_resolver=None):
@@ -530,6 +577,8 @@ class DurableRuntimeComposition:
             graph=graph,
             bindings=self.reconciliation.bindings(scope),
             activation_resolver=activation_resolver,
+            operations=self.operations,
+            operation_context=self.operation_context,
         )
 
 

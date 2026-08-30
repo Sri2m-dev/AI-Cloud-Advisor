@@ -33,12 +33,16 @@ class PilotGovernedMeasurementService:
         telemetry,
         audit_sink=None,
         clock=None,
+        operations=None,
+        operation_context=None,
     ) -> None:
         self.activation_resolver = activation_resolver
         self.normalization_service = normalization_service
         self.telemetry = telemetry
         self.audit_sink = audit_sink
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.operations = operations
+        self.operation_context = operation_context
         capability_repository = normalization_service.capabilities.repository
         self.planner = AnalyticalQueryPlanner(
             capability_repository=capability_repository, clock=self.clock
@@ -143,12 +147,61 @@ class PilotGovernedMeasurementService:
         dimension_concept_ids=(),
     ):
         started = perf_counter()
+        from universal_evidence.operations import (
+            FailureClass,
+            GovernedEventType,
+            ReasonCode,
+            Severity,
+            observe,
+            workflow_context,
+        )
+
+        context = workflow_context(self.operation_context, admission.scope, actor=actor)
         activation = self._activation(admission)
         if self._suppressed(activation) or activation.stage < ActivationStage.CAPABILITY_VISIBLE:
             self._metric("measurement_execution_blocked", admission, 1)
             self._audit("PUE_MEASUREMENT_EXECUTION_BLOCKED", admission, actor)
+            observe(
+                self.operations,
+                GovernedEventType.EXECUTION_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.EXPECTED_BLOCK,
+                reason_code=ReasonCode.KILL_SWITCH_ACTIVE
+                if RoutingReason.KILL_SWITCH_ACTIVE in activation.reason_codes
+                else ReasonCode.EXECUTION_NOT_AUTHORIZED,
+            )
             raise PermissionError("ACT-C1 activation does not authorize measurement execution")
         runs, assessment = self._current(admission, actor=actor)
+        observe(
+            self.operations,
+            GovernedEventType.CAPABILITY_EVALUATED,
+            context,
+            audit=False,
+            references={"evidence": admission.evidence_fingerprint},
+        )
+        authorizations = tuple(assessment.execution_authorizations)
+        if authorizations:
+            observe(
+                self.operations,
+                GovernedEventType.EXECUTION_AUTHORIZED,
+                context,
+                references={"evidence": admission.evidence_fingerprint},
+                attributes={"authorization_count": len(authorizations), "phase": "AUTHORIZED"},
+            )
+        else:
+            observe(
+                self.operations,
+                GovernedEventType.CAPABILITY_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.USER_GOVERNANCE_REQUIRED,
+                reason_code=ReasonCode.MISSING_GOVERNED_CURRENCY,
+            )
         intent_fingerprint = fingerprint(
             admission.evidence_fingerprint,
             assessment.fingerprint,
@@ -176,10 +229,49 @@ class PilotGovernedMeasurementService:
         planning = self.planner.plan(intent)
         self._metric("measurement_plan_created", admission, 1)
         self._audit("PUE_MEASUREMENT_PLAN_CREATED", admission, actor)
+        observe(
+            self.operations,
+            GovernedEventType.PLAN_CREATED,
+            context,
+            audit=False,
+            references={
+                "evidence": admission.evidence_fingerprint,
+                "plan": planning.plan.plan_fingerprint,
+            },
+        )
         if planning.plan.planning_status is not PlanningStatus.READY:
             self._metric("measurement_execution_blocked", admission, 1)
             self._audit("PUE_MEASUREMENT_EXECUTION_BLOCKED", admission, actor)
+            observe(
+                self.operations,
+                GovernedEventType.CAPABILITY_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.USER_GOVERNANCE_REQUIRED,
+                reason_code=ReasonCode.MISSING_GOVERNED_CURRENCY,
+                references={"plan": planning.plan.plan_fingerprint},
+            )
+            observe(
+                self.operations,
+                GovernedEventType.EXECUTION_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.USER_GOVERNANCE_REQUIRED,
+                reason_code=ReasonCode.MISSING_GOVERNED_CURRENCY,
+                references={"plan": planning.plan.plan_fingerprint},
+            )
             return planning, None
+        observe(
+            self.operations,
+            GovernedEventType.EXECUTION_STARTED,
+            context,
+            audit=False,
+            references={"plan": planning.plan.plan_fingerprint},
+        )
         result = self.executor.execute(planning.aggregation_request, assessment, runs)
         operation_metric = {
             AuthorizedOperation.COUNT: "measurement_operation_count",
@@ -205,9 +297,29 @@ class PilotGovernedMeasurementService:
             )
             self._metric("measurement_exclusion_count", admission, excluded)
             self._audit("PUE_AGGREGATION_EXECUTED", admission, actor)
+            observe(
+                self.operations,
+                GovernedEventType.EXECUTION_COMPLETED,
+                context,
+                audit=False,
+                duration_ms=(perf_counter() - started) * 1000,
+                references={
+                    "plan": planning.plan.plan_fingerprint,
+                    "result": result.result_fingerprint,
+                },
+            )
         else:
             self._metric("measurement_execution_blocked", admission, 1)
             self._audit("PUE_MEASUREMENT_EXECUTION_BLOCKED", admission, actor)
+            observe(
+                self.operations,
+                GovernedEventType.EXECUTION_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.EXPECTED_BLOCK,
+            )
         return planning, result
 
     def record_result_viewed(self, admission, *, actor):

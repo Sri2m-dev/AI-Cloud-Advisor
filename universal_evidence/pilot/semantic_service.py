@@ -28,12 +28,16 @@ class PilotSemanticGovernanceService:
         telemetry,
         audit_sink=None,
         clock=None,
+        operations=None,
+        operation_context=None,
     ) -> None:
         self.activation_resolver = activation_resolver
         self.confirmation_service = confirmation_service
         self.telemetry = telemetry
         self.audit_sink = audit_sink
         self.clock = clock
+        self.operations = operations
+        self.operation_context = operation_context
         self._discovery_cache = {}
 
     def discovery(self, admission):
@@ -122,6 +126,7 @@ class PilotSemanticGovernanceService:
                 ).decisions
                 if item.decision_id == effective.decision_id
             )
+        self._operation("MAPPING_CONFIRMED", admission, actor, column_reference)
         self.confirmation_service.request_confirmation(
             discovery, column_reference, concept_id
         )
@@ -132,6 +137,9 @@ class PilotSemanticGovernanceService:
         return decision
 
     def reject(self, admission, column_reference, concept_id, *, actor, reason):
+        self._operation(
+            "MAPPING_REJECTED", admission, actor, column_reference, attributes={"reason": reason}
+        )
         discovery = self.discovery(admission)
         self.confirmation_service.request_confirmation(
             discovery, column_reference, concept_id
@@ -147,6 +155,9 @@ class PilotSemanticGovernanceService:
         return decision
 
     def override(self, admission, column_reference, concept_id, *, actor, reason):
+        self._operation(
+            "MAPPING_OVERRIDDEN", admission, actor, column_reference, attributes={"reason": reason}
+        )
         decision = self.confirmation_service.override_mapping(
             self.discovery(admission),
             column_reference,
@@ -156,6 +167,24 @@ class PilotSemanticGovernanceService:
         )
         self.telemetry.increment("mapping_overridden_count", admission.scope.key)
         return decision
+
+    def _operation(self, event_type, admission, actor, mapping_reference, *, attributes=None):
+        from universal_evidence.operations import (
+            GovernedEventType,
+            observe,
+            workflow_context,
+        )
+
+        observe(
+            self.operations,
+            GovernedEventType(event_type),
+            workflow_context(self.operation_context, admission.scope, actor=actor),
+            references={
+                "evidence": admission.evidence_fingerprint,
+                "governance": str(mapping_reference),
+            },
+            attributes={"phase": "AUTHORIZED", **(attributes or {})},
+        )
 
     def _mapping(self, discovery, column, actor):
         history = self.confirmation_service.get_decision_history(column, actor=actor)

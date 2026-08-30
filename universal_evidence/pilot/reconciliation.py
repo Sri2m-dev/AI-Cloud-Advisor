@@ -151,11 +151,15 @@ class GovernedIdentityReconciliationService:
         audit_sink=None,
         bindings=(),
         decisions=(),
+        operations=None,
+        operation_context=None,
     ) -> None:
         self.registry = registry
         self.activation_resolver = activation_resolver
         self.authority_policy = authority_policy or SourceAuthorityPolicy()
         self.audit_sink = audit_sink
+        self.operations = operations
+        self.operation_context = operation_context
         self._bindings: dict[tuple[str, ...], SourceIdentityBinding] = {
             self._binding_key(item): item for item in bindings
         }
@@ -188,6 +192,13 @@ class GovernedIdentityReconciliationService:
                 if row.scope == proposal.scope and row.entity_type is proposal.entity_type
             )
             self._audit(f"ACT007_RECONCILIATION_{proposal.state.value}", first, proposal)
+            self._operation(
+                "MATCH_CONFLICT"
+                if proposal.state is ReconciliationState.CONFLICT
+                else "MATCH_PROPOSED",
+                proposal,
+                audit=False,
+            )
         bindings = []
         for proposal in proposals:
             if proposal.state not in {
@@ -203,6 +214,13 @@ class GovernedIdentityReconciliationService:
                 if binding is not None:
                     bindings.append(binding)
                     self._audit("ACT007_SOURCE_IDENTITY_BOUND", row, proposal)
+                    if binding.binding_id not in existing_binding_ids:
+                        self._operation(
+                            "BINDING_CREATED",
+                            proposal,
+                            audit=False,
+                            references={"binding": binding.binding_id},
+                        )
         counts = {state.value.lower(): 0 for state in ReconciliationState}
         for proposal in proposals:
             counts[proposal.state.value.lower()] += 1
@@ -229,6 +247,12 @@ class GovernedIdentityReconciliationService:
             raise ValueError("confirmed canonical entity type does not match proposal")
         if entity.organization_id != proposal.scope[0] or entity.tenant_id != proposal.scope[1]:
             raise ValueError("confirmed canonical entity crosses scope boundary")
+        self._operation(
+            "MATCH_CONFIRMED",
+            proposal,
+            actor_id=actor_id,
+            attributes={"reason": reason, "phase": "AUTHORIZED"},
+        )
         return self._record_decision(
             proposal, ReconciliationDecisionType.CONFIRM_MATCH, actor_id, reason, canonical_id
         )
@@ -236,12 +260,51 @@ class GovernedIdentityReconciliationService:
     def reject_match(
         self, proposal: ReconciliationProposal, *, actor_id: str, reason: str
     ) -> ReconciliationDecision:
+        self._operation(
+            "MATCH_REJECTED",
+            proposal,
+            actor_id=actor_id,
+            attributes={"reason": reason, "phase": "AUTHORIZED"},
+        )
         return self._record_decision(
             proposal,
             ReconciliationDecisionType.REJECT_MATCH,
             actor_id,
             reason,
             proposal.candidate_canonical_id,
+        )
+
+    def _operation(
+        self,
+        event_type,
+        proposal,
+        *,
+        actor_id=None,
+        audit=None,
+        references=None,
+        attributes=None,
+    ):
+        from dataclasses import replace
+
+        from universal_evidence.operations import GovernedEventType, observe
+
+        context = self.operation_context
+        if context is not None:
+            context = replace(
+                context,
+                organization_id=proposal.scope[0],
+                tenant_id=proposal.scope[1],
+                prospect_id=proposal.scope[2],
+                analysis_id=proposal.scope[3],
+                actor_id=actor_id if actor_id is not None else context.actor_id,
+            )
+        observe(
+            self.operations,
+            GovernedEventType(event_type),
+            context,
+            audit=audit,
+            references={"reconciliation": proposal.proposal_id, **(references or {})},
+            attributes=attributes,
         )
 
     def register_cross_reference(

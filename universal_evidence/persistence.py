@@ -260,7 +260,11 @@ class SQLiteLifecycleRepository:
         )
 
     def purge_scope(self, scope: LifecycleScope, *, actor_id: str, reason: str) -> int:
-        records = self.list_scope(scope, include_purged=False)
+        records = tuple(
+            item
+            for item in self.list_scope(scope, include_purged=False)
+            if item.object_type != "governed_operation_event"
+        )
         connection = self.connection_factory()
         now = datetime.now(timezone.utc).isoformat()
         try:
@@ -268,7 +272,8 @@ class SQLiteLifecycleRepository:
             connection.execute(
                 """DELETE FROM universal_evidence_lifecycle
                                      WHERE organization_id=? AND tenant_id=?
-                                         AND prospect_id = ? AND analysis_id = ?""",
+                                         AND prospect_id = ? AND analysis_id = ?
+                                         AND object_type != 'governed_operation_event'""",
                 self._db_scope(scope),
             )
             for record in records:

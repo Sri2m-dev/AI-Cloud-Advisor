@@ -7,6 +7,7 @@ import io
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from openpyxl import load_workbook
@@ -56,8 +57,68 @@ def admit_uploaded_evidence(
     content: bytes,
     legacy_analysis=None,
     now=None,
+    operations=None,
+    operation_context=None,
 ):
     """Admit authorized evidence independently of legacy schema normalization."""
+    from universal_evidence.operations import GovernedEventType, Severity, observe
+
+    started = perf_counter()
+    try:
+        admission = _admit_uploaded_evidence(
+            tenant, filename=filename, content=content, legacy_analysis=legacy_analysis, now=now
+        )
+    except Exception as exc:
+        observe(
+            operations,
+            GovernedEventType.EVIDENCE_REJECTED,
+            operation_context,
+            audit=False,
+            severity=Severity.WARNING,
+            outcome="REJECTED",
+            duration_ms=(perf_counter() - started) * 1000,
+            attributes={"error_class": type(exc).__name__},
+        )
+        raise
+    detail_records = sum(
+        item.detail_record_count or 0
+        for item in admission.regions
+        if item.region_kind == "PRIMARY_DETAIL"
+    )
+    field_count = sum(
+        len(item.original_headers)
+        for item in admission.regions
+        if item.region_kind == "PRIMARY_DETAIL"
+    )
+    safe = {
+        "detail_records": detail_records,
+        "fields": field_count,
+        "legacy_compatibility": "NOTICE" if legacy_analysis is not None else "NOT_APPLICABLE",
+    }
+    references = {"evidence": admission.evidence_fingerprint}
+    elapsed = (perf_counter() - started) * 1000
+    observe(
+        operations,
+        GovernedEventType.EVIDENCE_ADMITTED,
+        operation_context,
+        audit=False,
+        duration_ms=elapsed,
+        references=references,
+        attributes=safe,
+    )
+    observe(
+        operations,
+        GovernedEventType.EVIDENCE_PROFILED,
+        operation_context,
+        audit=False,
+        duration_ms=elapsed,
+        references=references,
+        attributes=safe,
+    )
+    return admission
+
+
+def _admit_uploaded_evidence(tenant, *, filename, content, legacy_analysis=None, now=None):
     scan = scan_upload(filename, content)
     now = now or datetime.now(timezone.utc)
     evidence_fingerprint = scan["sha256"]

@@ -55,6 +55,8 @@ class GovernedAskNexoraService:
         activation_resolver=None,
         interpreter=None,
         policy=None,
+        operations=None,
+        operation_context=None,
     ) -> None:
         self.measurement_service = measurement_service
         self.registry = registry
@@ -63,8 +65,114 @@ class GovernedAskNexoraService:
         self.activation_resolver = activation_resolver
         self.interpreter = interpreter or DeterministicAnalyticalInterpreter()
         self.policy = policy or InterpretationPolicy()
+        self.operations = operations
+        self.operation_context = operation_context
 
     def ask(
+        self,
+        question: str,
+        *,
+        scope,
+        actor_id: str = "ask-nexora",
+        admission=None,
+        actor=None,
+        bindings: Iterable[Any] | None = None,
+    ) -> GovernedAskResponse:
+        from universal_evidence.operations import (
+            FailureClass,
+            GovernedEventType,
+            ReasonCode,
+            Severity,
+            observe,
+            workflow_context,
+        )
+
+        context = workflow_context(self.operation_context, scope, actor=actor, actor_id=actor_id)
+        reference = fingerprint(scope, question)
+        refs = {"question": reference}
+        observe(
+            self.operations,
+            GovernedEventType.ASK_RECEIVED,
+            context,
+            audit=False,
+            references=refs,
+        )
+        response = self._ask(
+            question,
+            scope=scope,
+            actor_id=actor_id,
+            admission=admission,
+            actor=actor,
+            bindings=bindings,
+        )
+        observe(
+            self.operations,
+            GovernedEventType.ASK_INTERPRETED,
+            context,
+            audit=False,
+            references=refs,
+            attributes={"question_class": response.question_class, "state": response.state.value},
+        )
+        if response.state is AskState.SUPPORTED:
+            for event_type in (
+                GovernedEventType.ASK_AUTHORIZED,
+                GovernedEventType.ASK_EXECUTED,
+                GovernedEventType.ASK_ANSWER_COMPOSED,
+            ):
+                observe(
+                    self.operations,
+                    event_type,
+                    context,
+                    audit=False,
+                    references={**refs, "result": response.answer_fingerprint},
+                )
+        elif response.state is AskState.UNSUPPORTED:
+            observe(
+                self.operations,
+                GovernedEventType.ASK_UNSUPPORTED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.UNSUPPORTED,
+                reason_code=ReasonCode.UNSUPPORTED_QUESTION,
+                references=refs,
+            )
+        else:
+            reason = (
+                ReasonCode.POTENTIAL_INJECTION
+                if self._injection_like(" ".join(str(question or "").split()))
+                else ReasonCode.KILL_SWITCH_ACTIVE
+                if self._activation_blocked(scope)
+                else ReasonCode.EXECUTION_NOT_AUTHORIZED
+            )
+            observe(
+                self.operations,
+                GovernedEventType.ASK_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.EXPECTED_BLOCK,
+                reason_code=reason,
+                references=refs,
+            )
+            if reason is ReasonCode.POTENTIAL_INJECTION:
+                observe(
+                    self.operations,
+                    GovernedEventType.POTENTIAL_INJECTION_BLOCKED,
+                    context,
+                    audit=False,
+                    severity=Severity.SECURITY,
+                    outcome="BLOCKED",
+                    failure_class=FailureClass.SECURITY_REJECTION,
+                    reason_code=reason,
+                    references=refs,
+                    attributes={"category": "governance_bypass", "source_type": "user_question"},
+                )
+        return response
+
+    def _ask(
         self,
         question: str,
         *,

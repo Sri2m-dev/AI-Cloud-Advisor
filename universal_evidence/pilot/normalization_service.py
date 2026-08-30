@@ -27,11 +27,22 @@ from universal_evidence.pilot.normalization_view_models import (
 
 
 class PilotGovernedNormalizationService:
-    def __init__(self, *, activation_resolver, semantic_service, confirmation_service, telemetry):
+    def __init__(
+        self,
+        *,
+        activation_resolver,
+        semantic_service,
+        confirmation_service,
+        telemetry,
+        operations=None,
+        operation_context=None,
+    ):
         self.activation_resolver = activation_resolver
         self.semantic_service = semantic_service
         self.confirmation_service = confirmation_service
         self.telemetry = telemetry
+        self.operations = operations
+        self.operation_context = operation_context
         self.normalization = NormalizationService(
             decision_repository=confirmation_service.repository
         )
@@ -107,8 +118,29 @@ class PilotGovernedNormalizationService:
         return self._view(plan, runs, executed=True)
 
     def execute(self, admission, *, plan=None, actor):
+        from time import perf_counter
+
+        from universal_evidence.operations import GovernedEventType, observe, workflow_context
+
+        context = workflow_context(self.operation_context, admission.scope, actor=actor)
+        started = perf_counter()
+        observe(
+            self.operations,
+            GovernedEventType.NORMALIZATION_STARTED,
+            context,
+            audit=False,
+            references={"evidence": admission.evidence_fingerprint},
+        )
         current_plan = self.plan(admission, actor=actor)
         if plan is not None and plan.fingerprint != current_plan.fingerprint:
+            observe(
+                self.operations,
+                GovernedEventType.NORMALIZATION_BLOCKED,
+                context,
+                audit=False,
+                outcome="BLOCKED",
+                references={"evidence": admission.evidence_fingerprint},
+            )
             raise PermissionError("normalization plan is stale for current evidence or governance")
         plan = current_plan
         discovery = self.semantic_service.discovery(admission)
@@ -132,6 +164,22 @@ class PilotGovernedNormalizationService:
             "normalized_observation_count",
             admission.scope.key,
             sum(run.processed_count for run in runs),
+        )
+        observe(
+            self.operations,
+            GovernedEventType.NORMALIZATION_COMPLETED,
+            context,
+            audit=False,
+            duration_ms=(perf_counter() - started) * 1000,
+            references={
+                "evidence": admission.evidence_fingerprint,
+                "governance": plan.governance_fingerprint,
+                "plan": plan.fingerprint,
+            },
+            attributes={
+                "runs": len(runs),
+                "records": sum(run.processed_count for run in runs),
+            },
         )
         return tuple(runs)
 

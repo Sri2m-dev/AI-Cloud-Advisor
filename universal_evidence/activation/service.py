@@ -14,11 +14,22 @@ from universal_evidence.activation.policy import PueActivationPolicy
 
 
 class PueActivationService:
-    def __init__(self, *, repository, audit_sink, policy=None, clock):
+    def __init__(
+        self,
+        *,
+        repository,
+        audit_sink,
+        policy=None,
+        clock,
+        operations=None,
+        operation_context=None,
+    ):
         self.repository = repository
         self.audit_sink = audit_sink
         self.policy = policy or PueActivationPolicy()
         self.clock = clock
+        self.operations = operations
+        self.operation_context = operation_context
 
     def configure(
         self,
@@ -77,6 +88,17 @@ class PueActivationService:
             ConfigState.ACTIVE,
             previous[-1].activation_id if previous else None,
             identity,
+        )
+        self._operation(
+            "ACTIVATION_CHANGED",
+            actor,
+            scope,
+            reason,
+            attributes={
+                "old_state": previous[-1].activation_stage.value if previous else None,
+                "new_state": stage.value,
+                "phase": "AUTHORIZED",
+            },
         )
         stored = self.repository.store(config)
         self.audit_sink.record(
@@ -145,6 +167,13 @@ class PueActivationService:
             self.policy.version,
             identity,
         )
+        self._operation(
+            "KILL_SWITCH_ENABLED" if enabled else "KILL_SWITCH_DISABLED",
+            actor,
+            None,
+            reason,
+            attributes={"enabled": bool(enabled), "phase": "AUTHORIZED"},
+        )
         stored = self.repository.store_kill_switch(config)
         self.audit_sink.record(
             event_type="PUE_KILL_SWITCH_CHANGED",
@@ -154,3 +183,13 @@ class PueActivationService:
             activation_id=stored.kill_switch_id,
         )
         return stored
+
+    def _operation(self, event_type, actor, scope, reason, *, attributes):
+        from universal_evidence.operations import GovernedEventType, observe, workflow_context
+
+        observe(
+            self.operations,
+            GovernedEventType(event_type),
+            workflow_context(self.operation_context, scope, actor=actor),
+            attributes={"reason": reason, **attributes},
+        )

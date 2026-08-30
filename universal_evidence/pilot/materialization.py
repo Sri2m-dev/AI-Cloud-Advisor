@@ -130,11 +130,22 @@ class MaterializationReport:
 class GovernedEntityMaterializationService:
     """Process-local ACT-006 adapter; canonical registries remain authoritative."""
 
-    def __init__(self, registry, relationships, *, activation_resolver=None, audit_sink=None):
+    def __init__(
+        self,
+        registry,
+        relationships,
+        *,
+        activation_resolver=None,
+        audit_sink=None,
+        operations=None,
+        operation_context=None,
+    ):
         self.registry = registry
         self.relationships = relationships
         self.activation_resolver = activation_resolver
         self.audit_sink = audit_sink
+        self.operations = operations
+        self.operation_context = operation_context
 
     def materialize(
         self,
@@ -146,7 +157,32 @@ class GovernedEntityMaterializationService:
         activation=None,
     ) -> MaterializationReport:
         rows = tuple(observations)
-        self._validate_scope(rows, context)
+        try:
+            self._validate_scope(rows, context)
+        except ValueError:
+            if rows:
+                from universal_evidence.operations import (
+                    FailureClass,
+                    GovernedEventType,
+                    ReasonCode,
+                    Severity,
+                    observe,
+                    workflow_context,
+                )
+
+                observe(
+                    self.operations,
+                    GovernedEventType.SCOPE_ACCESS_REJECTED,
+                    workflow_context(
+                        self.operation_context, context, actor_id=actor_id
+                    ),
+                    severity=Severity.SECURITY,
+                    outcome="DENIED",
+                    failure_class=FailureClass.SECURITY_REJECTION,
+                    reason_code=ReasonCode.CROSS_SCOPE_ACCESS,
+                    attributes={"attempted_object_class": "materialization_observation"},
+                )
+            raise
         if activation is None and self.activation_resolver is not None and rows:
             from universal_evidence.activation import ActivationScope, ScopeLevel
 
@@ -172,6 +208,9 @@ class GovernedEntityMaterializationService:
         for (concept, value), group in sorted(grouped.items()):
             proposal = self._propose_entity(group, context, blocked_reason, allow_materialization)
             proposals.append(proposal)
+            self._operation("ENTITY_PROPOSED", actor_id, group[0], proposal, audit=False)
+            if proposal.state is MaterializationState.CONFLICT:
+                self._operation("ENTITY_CONFLICT", actor_id, group[0], proposal, audit=False)
             if proposal.state in {
                 MaterializationState.BLOCKED,
                 MaterializationState.STALE,
@@ -190,6 +229,7 @@ class GovernedEntityMaterializationService:
             ):
                 entity = self.registry.register_entity(entity)
                 self._audit("ACT006_ENTITY_MATERIALIZED", actor_id, group[0], proposal)
+                self._operation("ENTITY_MATERIALIZED", actor_id, group[0], proposal, audit=False)
             elif proposal.action is MaterializationAction.MATCH:
                 entity = self.registry.get_entity(proposal.matched_canonical_id)
             entities.append(entity)
@@ -242,6 +282,22 @@ class GovernedEntityMaterializationService:
             tuple(entities),
             tuple(relationship_rows),
             counts,
+        )
+
+    def _operation(self, event_type, actor_id, observation, subject, *, audit):
+        from universal_evidence.operations import GovernedEventType, observe, workflow_context
+
+        observe(
+            self.operations,
+            GovernedEventType(event_type),
+            workflow_context(self.operation_context, observation, actor_id=actor_id),
+            audit=audit,
+            references={
+                "evidence": observation.evidence_reference
+                or observation.normalization_fingerprint,
+                "entity": subject.matched_canonical_id or subject.proposal_id,
+            },
+            attributes={"state": subject.state.value, "action": subject.action.value},
         )
 
     def _propose_entity(self, group, context, blocked_reason, allow_materialization):
