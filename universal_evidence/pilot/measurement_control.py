@@ -21,8 +21,8 @@ def render_governed_measurement(st, admission) -> bool:
     if model is None:
         return False
     with st.container(border=True):
-        st.caption("GOVERNED MEASUREMENT - DEVELOPMENT PILOT")
-        st.subheader("Measurement authority")
+        st.caption("REVIEW AVAILABLE INSIGHTS")
+        st.subheader("What Nexora can answer now")
         st.caption(
             f"State: {model.state} | Currency ready: {'Yes' if model.currency_ready else 'No'} | "
             f"Operations: {', '.join(model.available_operations) or 'None'}"
@@ -30,13 +30,13 @@ def render_governed_measurement(st, admission) -> bool:
         for reason in model.reasons:
             st.warning(reason)
         if "COUNT" in model.available_operations and st.button(
-            "Count governed records", key="act005_count"
+            "Run Record Count", key="act005_count"
         ):
             _execute(st, service, admission, actor, AnalyticalIntentType.COUNT_RECORDS)
         monetary = tuple(item for item in model.measure_concepts if item.startswith("financial."))
         if "SUM" in model.available_operations and monetary:
             selected = st.selectbox("Governed measure", monetary, key="act005_measure")
-            if st.button("Calculate governed total", key="act005_sum"):
+            if st.button("Authorize Total Cost Calculation", key="act005_sum"):
                 _execute(
                     st,
                     service,
@@ -71,7 +71,7 @@ def render_governed_measurement(st, admission) -> bool:
                 admission, planning, result, actor=actor
             ),
         )
-        st.caption("Ask Nexora and entity materialization remain outside ACT-005 authority.")
+        st.caption("Execution is limited to the certified operations shown above.")
     return True
 
 

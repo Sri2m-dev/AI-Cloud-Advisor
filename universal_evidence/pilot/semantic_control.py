@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from universal_evidence.governance import ActorType, ConfirmationActor
-from universal_evidence.pilot.dev_control import dev_control_enabled, valid_upload_scope
+from universal_evidence.pilot.dev_control import valid_upload_scope
 from universal_evidence.pilot.runtime import get_semantic_pilot_service
 
 
@@ -34,8 +34,8 @@ def render_semantic_governance(st, admission) -> bool:
         return False
 
     with st.container(border=True):
-        st.caption("GOVERNED SEMANTIC MAPPING - PILOT")
-        st.subheader("Observed field meanings")
+        st.caption("REVIEW MAPPINGS")
+        st.subheader("Confirm what your fields mean")
         st.caption(
             "Candidates are evidence-backed hypotheses. Only an effective governed decision "
             "is authoritative."
@@ -52,8 +52,7 @@ def render_semantic_governance(st, admission) -> bool:
                         f"({candidate.confidence_percent}%)"
                     )
                     st.caption(candidate.explanation)
-                if dev_control_enabled():
-                    _render_actions(st, admission, mapping, actor)
+                _render_actions(st, admission, mapping, actor)
                 if mapping.history:
                     st.caption(f"Governance history: {len(mapping.history)} immutable decision(s)")
         st.caption(

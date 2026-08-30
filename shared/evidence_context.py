@@ -19,6 +19,7 @@ class ActiveEvidenceContext:
     kind: EvidenceContextKind
     organization_id: str | None = None
     prospect_analysis: Any | None = None
+    evidence_admission: Any | None = None
 
     @property
     def is_prospect(self) -> bool:
@@ -32,11 +33,17 @@ def resolve_active_evidence_context(
 ) -> ActiveEvidenceContext:
     """Resolve the evidence boundary before any page-specific source is loaded."""
     prospect = session.get("prospect_analysis")
-    if prospect is not None:
+    admission = session.get("pue_upload_admission")
+    if prospect is not None or admission is not None:
         return ActiveEvidenceContext(
             EvidenceContextKind.PROSPECT,
-            organization_id=str(getattr(prospect, "tenant_id", "") or "") or None,
+            organization_id=str(
+                getattr(prospect, "tenant_id", "")
+                or getattr(getattr(admission, "scope", None), "prospect_id", "")
+                or ""
+            ) or None,
             prospect_analysis=prospect,
+            evidence_admission=admission,
         )
 
     organization_id = str(
@@ -58,5 +65,17 @@ def clear_prospect_context(session: Any) -> None:
         "prospect_name",
         "prospect_analysis_error",
         "analysis_start_path",
+        "pue_upload_admission",
+        "pue_upload_admission_error",
+        "pue_pilot_context",
+        "pue_shadow_analysis",
+        "pue_shadow_request",
+        "act005_result",
+        "pue_enterprise_context_view",
+        "pue_reconciliation_view",
+        "pue_reconciliation_control",
     ):
         session.pop(key, None)
+    for key in tuple(session):
+        if str(key).startswith(("prospect_copilot:", "pue_semantic_")):
+            session.pop(key, None)

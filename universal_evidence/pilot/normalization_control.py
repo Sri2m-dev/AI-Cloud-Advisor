@@ -16,12 +16,12 @@ def render_governed_normalization(st, admission) -> bool:
     if model is None:
         return False
     with st.container(border=True):
-        st.caption("GOVERNED NORMALIZATION - DEVELOPMENT PILOT")
-        st.subheader("Normalization plan and evidence quality")
+        st.caption("VALIDATE DATA")
+        st.subheader("Data Quality")
         eligible = sum(item.eligible for item in model.plan.items)
         st.caption(
             f"Governed fields: {eligible} | Blocked fields: {model.quality.blocked} | "
-            f"Plan: {model.plan.fingerprint[:12]}"
+            f"Fields evaluated: {len(model.plan.items)}"
         )
         if model.executed:
             st.caption(
@@ -34,5 +34,5 @@ def render_governed_normalization(st, admission) -> bool:
         else:
             st.caption("Execution is unavailable until the capability-visible pilot stage.")
         st.warning(f"Total Cost: {model.total_cost_state} - {model.total_cost_reason}")
-        st.caption("No aggregated monetary value or executive answer is exposed by ACT-004.")
+        st.caption("Only governed, valid observations can support analysis.")
     return True

@@ -37,6 +37,7 @@ from shared.auth import require_role  # noqa: E402
 from shared.currency import SUPPORTED_CURRENCIES, format_currency_amount  # noqa: E402
 from shared.session import init_session  # noqa: E402
 from shared.styles import configure_page  # noqa: E402
+from universal_evidence.persistence import LifecyclePersistenceError  # noqa: E402
 from universal_evidence.pilot import (  # noqa: E402
     PilotAnalysisContext,
     admit_uploaded_evidence,
@@ -51,6 +52,21 @@ from universal_evidence.pilot.dev_harness import (  # noqa: E402
     bootstrap_dev_pilot_session,
     harness_enabled,
     publish_active_prospect_scope,
+)
+from universal_evidence.pilot.production_render import (  # noqa: E402
+    render_enterprise_context,
+    render_reconciliation,
+)
+from universal_evidence.pilot.production_views import (  # noqa: E402
+    build_enterprise_context,
+    build_reconciliation_view,
+)
+from universal_evidence.production_workflow import (  # noqa: E402
+    activate_production_workflow,
+    evidence_counts,
+    load_configured_production_views,
+    load_live_canonical_views,
+    upload_outcome,
 )
 
 
@@ -115,6 +131,9 @@ def _reset_journey() -> None:
         "pue_local_pilot_kill_switch",
         "pue_local_pilot_scope_fingerprint",
         "act005_result",
+        "pue_enterprise_context_view",
+        "pue_reconciliation_view",
+        "pue_reconciliation_control",
     ):
         st.session_state.pop(key, None)
 
@@ -144,10 +163,91 @@ def _upload_pue_pilot_model(admission):
 
 
 def _render_upload_pue(admission):
+    records, fields = evidence_counts(admission)
+    st.markdown("### Evidence overview")
+    summary = st.columns(4)
+    summary[0].metric("Evidence", admission.original_filename)
+    summary[1].metric("Detail records", f"{records:,}")
+    summary[2].metric("Fields discovered", f"{fields:,}")
+    summary[3].metric("Analysis status", "Review required")
+    st.caption("Scope: Current prospect · Uploaded evidence")
     render_pue_stage12(st, _upload_pue_pilot_model(admission))
     render_semantic_governance(st, admission)
     render_governed_normalization(st, admission)
     render_governed_measurement(st, admission)
+    _render_enterprise_workflow(admission)
+
+
+def _render_enterprise_workflow(admission):
+    durable = None
+    try:
+        durable = load_configured_production_views(admission)
+    except LifecyclePersistenceError:
+        st.error(
+            "Enterprise workflow state is temporarily unavailable. "
+            "No stale or inferred context has been displayed."
+        )
+        return
+    if durable is not None:
+        durable_context, durable_reconciliation = durable
+        st.session_state["pue_enterprise_context_view"] = (
+            admission.fingerprint,
+            durable_context,
+        )
+        st.session_state["pue_reconciliation_view"] = (
+            admission.fingerprint,
+            durable_reconciliation,
+        )
+    elif st.session_state.get("pue_enterprise_context_view") is None:
+        try:
+            live_context, live_reconciliation = load_live_canonical_views(
+                st.session_state, admission, role=role
+            )
+        except (PermissionError, RuntimeError, ValueError):
+            st.error(
+                "Enterprise context is temporarily unavailable. "
+                "No stale or inferred context has been displayed."
+            )
+            return
+        st.session_state["pue_enterprise_context_view"] = (
+            admission.fingerprint,
+            live_context,
+        )
+        st.session_state["pue_reconciliation_view"] = (
+            admission.fingerprint,
+            live_reconciliation,
+        )
+    context = _scoped_production_view(
+        "pue_enterprise_context_view",
+        admission,
+        build_enterprise_context(()),
+    )
+    reconciliation = _scoped_production_view(
+        "pue_reconciliation_view",
+        admission,
+        build_reconciliation_view(),
+    )
+    control = _scoped_production_view("pue_reconciliation_control", admission, None)
+    controls = None
+    if isinstance(control, tuple) and len(control) == 2:
+        service, proposals = control
+        controls = (service, {item.proposal_fingerprint: item for item in proposals})
+    render_enterprise_context(st, context)
+    render_reconciliation(
+        st,
+        reconciliation,
+        controls=controls,
+        actor_id=str(st.session_state.get("user_id") or st.session_state.get("email") or ""),
+        role=role,
+    )
+
+
+def _scoped_production_view(key, admission, empty):
+    stored = st.session_state.get(key)
+    if not isinstance(stored, tuple) or len(stored) != 2:
+        return empty
+    fingerprint, model = stored
+    return model if fingerprint == admission.fingerprint else empty
 
 
 def _render_dev_pilot_control(admission=None, prospect_analysis=None):
@@ -546,6 +646,7 @@ if selected_path == "upload" and not prospect_result:
                                 content=content,
                             )
                             st.session_state["pue_upload_admission"] = admission
+                            activate_production_workflow(admission)
                             st.session_state.pop("pue_upload_admission_error", None)
                         except Exception:  # noqa: BLE001 - shadow admission is isolated
                             st.session_state.pop("pue_upload_admission", None)
@@ -670,6 +771,7 @@ if prospect_result and selected_path == "upload":
             render_semantic_governance(st, upload_admission)
             render_governed_normalization(st, upload_admission)
             render_governed_measurement(st, upload_admission)
+            _render_enterprise_workflow(upload_admission)
         st.stop()
     _step_header(
         4,
@@ -705,6 +807,7 @@ if prospect_result and selected_path == "upload":
         render_semantic_governance(st, upload_admission)
         render_governed_normalization(st, upload_admission)
         render_governed_measurement(st, upload_admission)
+        _render_enterprise_workflow(upload_admission)
     st.page_link(
         "pages/prospect_data_intake.py",
         label="Open Results, Ask Nexora, and Board Pack",
@@ -715,13 +818,13 @@ if prospect_result and selected_path == "upload":
         st.rerun()
 
 if upload_admission is not None and prospect_result is None and selected_path == "upload":
-    _render_dev_pilot_control(upload_admission)
-    if st.session_state.get("prospect_analysis_error"):
-        st.error(str(st.session_state["prospect_analysis_error"]))
-    st.warning(
-        "The existing prospect analysis could not normalize this schema. "
-        "The separate governed evidence pilot remains shadow-only."
+    outcome = upload_outcome(
+        admission=upload_admission,
+        legacy_error=st.session_state.get("prospect_analysis_error"),
     )
+    st.success(outcome.message)
+    if outcome.compatibility_notice:
+        st.info(outcome.compatibility_notice)
     _render_upload_pue(upload_admission)
 
 if (

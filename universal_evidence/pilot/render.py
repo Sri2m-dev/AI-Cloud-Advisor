@@ -7,8 +7,7 @@ def render_pue_stage12(st, model):
     if model is None or model.visibility is PilotVisibility.HIDDEN:
         return
     with st.container(border=True):
-        st.caption(model.pilot_label)
-        st.caption(model.authority_caption)
+        st.caption("DISCOVER & UNDERSTAND")
         if model.safe_message:
             st.info(model.safe_message)
             return
@@ -24,7 +23,7 @@ def render_pue_stage12(st, model):
                 if item.reason and item.state != "SUPPORTED":
                     st.caption(item.reason)
         if model.details:
-            with st.expander("Why?"):
+            with st.expander("Evidence details"):
                 st.write(f"Sources: {model.details.source_count}")
                 st.write(f"Sheets: {model.details.sheet_count}")
                 if model.details.record_count is not None:

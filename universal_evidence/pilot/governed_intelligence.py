@@ -400,6 +400,7 @@ class GovernedAskNexoraService:
             term in lower
             for term in (
                 "how many records",
+                "how many detail records",
                 "total cost",
                 "total governed cost",
                 "cost by service",
