@@ -220,6 +220,21 @@ class GovernedOperationsService:
             : max(0, min(int(query.limit), 1000))
         ]
 
+    def query_authorized(self, authorization, **filters) -> tuple[GovernedEvent, ...]:
+        """Query only the complete lifecycle scope carried by trusted authority."""
+        from universal_evidence.operations.models import OperationContext
+
+        context = OperationContext(
+            authorization.tenant.organization_id,
+            authorization.tenant.tenant_id,
+            authorization.prospect_id,
+            authorization.analysis_id,
+            authorization.actor_id,
+            authorization.role,
+            authorization.tenant.correlation_id or "NX-COR-AUTHORIZED-AUDIT",
+        )
+        return self.query(AuditQuery(context, authorization.role, **filters))
+
 
 def _scope(context):
     return LifecycleScope(

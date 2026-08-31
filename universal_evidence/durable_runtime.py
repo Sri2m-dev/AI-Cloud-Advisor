@@ -391,9 +391,19 @@ class DurableReconciliationRepository:
 
     def save_binding(self, binding):
         scope = LifecycleScope(*binding.scope)
+        # A source identity has one durable slot independent of its proposed
+        # canonical target. Concurrent competing targets therefore converge to
+        # one effective record instead of creating two current bindings.
+        identity_key = ":".join(
+            (
+                binding.source_system,
+                binding.source_identifier,
+                binding.entity_type.value,
+            )
+        )
         return self.lifecycle.put(
             "source_binding",
-            binding.binding_id,
+            identity_key,
             scope,
             payload=_json(binding),
             fingerprint_value=binding.binding_fingerprint,
@@ -532,6 +542,7 @@ class DurableRuntimeComposition:
             clock=clock,
             operations=self.operations,
             operation_context=self.operation_context,
+            lifecycle=self.lifecycle,
         )
         measurement.planner.repository = self.plans
         measurement.executor.repository = self.results
@@ -565,6 +576,7 @@ class DurableRuntimeComposition:
             decisions=self.reconciliation.decisions(scope),
             operations=self.operations,
             operation_context=self.operation_context,
+            persistence=self.reconciliation,
         )
 
     def build_governed_ask_service(self, registry, graph, scope, *, activation_resolver=None):

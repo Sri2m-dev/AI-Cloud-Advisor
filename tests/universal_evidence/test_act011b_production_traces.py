@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from auth.tenant_authorization import TenantAuthorizationContext
 from data_fabric.contracts import EntityType
 from data_fabric.foundation import TenantContext
 from enterprise_registry.relationship_intelligence import RelationshipIntelligenceService
@@ -58,6 +59,7 @@ from universal_evidence.pilot.reconciliation import (
     SourceIdentityObservation,
 )
 from universal_evidence.planning import AnalyticalIntentType
+from universal_evidence.security import WorkflowAuthorizationContext
 
 
 def _context(**overrides):
@@ -76,6 +78,21 @@ def _context(**overrides):
 
 def _operations(tmp_path):
     return GovernedOperationsService(SQLiteLifecycleRepository(tmp_path / "act011b.db"))
+
+
+def _trusted(role="operations", actor_id="alice", *, organization_id=ORG, tenant_id=TENANT):
+    return WorkflowAuthorizationContext(
+        TenantAuthorizationContext(
+            organization_id,
+            tenant_id,
+            actor_id,
+            "user",
+            roles=frozenset({role}),
+            source_boundary="test-authenticated-principal",
+        ),
+        "prospect-1",
+        "analysis-1",
+    )
 
 
 def test_controlled_production_materialization_reconciliation_and_ask_share_trace(tmp_path):
@@ -296,7 +313,14 @@ def test_real_purge_trace_survives_restart_and_appends(tmp_path):
     repository.put("fixture", "one", scope, payload={"safe": True})
     first_ops = GovernedOperationsService(repository)
     lifecycle = GovernedLifecycleOperations(repository, first_ops, _context())
-    assert lifecycle.purge_scope(scope, actor_id="alice", reason="retention request") == 1
+    assert (
+        lifecycle.purge_scope(
+            scope,
+            authorization=_trusted(),
+            reason="retention request",
+        )
+        == 1
+    )
     restarted_repo = SQLiteLifecycleRepository(database)
     restarted_ops = GovernedOperationsService(restarted_repo)
     before = restarted_ops.query(AuditQuery(_context(), "auditor"))
@@ -385,7 +409,11 @@ def test_real_reconciliation_confirmation_fails_before_change_without_audit(tmp_
         service.confirm_match(
             proposal,
             canonical_id=canonical.canonical_id,
-            actor_id="owner",
+            authorization=_trusted(
+                actor_id="owner",
+                organization_id=tenant.organization_id,
+                tenant_id=tenant.tenant_id,
+            ),
             reason="reviewed",
         )
     assert not service.reconcile(rows, context=tenant, activation=Activation()).decisions

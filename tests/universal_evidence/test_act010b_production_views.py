@@ -14,6 +14,7 @@ from tests.universal_evidence.test_pue_governed_materialization import (
 from tests.universal_evidence.test_pue_governed_reconciliation import (
     ORG,
     TENANT,
+    _authorization,
     _entity,
     _observation,
     _service,
@@ -220,16 +221,14 @@ def test_reconciliation_decision_wrappers_enforce_existing_operational_roles():
                     service,
                     proposal,
                     canonical_id=canonical.canonical_id,
-                    actor_id="viewer",
-                    role="executive",
+                    authorization=_authorization("executive", "viewer"),
                     reason="reviewed",
                 )
             else:
                 reject_reconciliation(
                     service,
                     proposal,
-                    actor_id="viewer",
-                    role="executive",
+                    authorization=_authorization("executive", "viewer"),
                     reason="reviewed",
                 )
         except PermissionError:
@@ -240,8 +239,7 @@ def test_reconciliation_decision_wrappers_enforce_existing_operational_roles():
         service,
         proposal,
         canonical_id=canonical.canonical_id,
-        actor_id="operator",
-        role="operations",
+        authorization=_authorization("operations", "operator"),
         reason="reviewed authoritative records",
     )
     assert decision.candidate_canonical_id == canonical.canonical_id

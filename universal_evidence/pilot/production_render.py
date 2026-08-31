@@ -28,7 +28,7 @@ def render_enterprise_context(st, model) -> None:
                 st.write(f"→ {relationship.relationship} {relationship.target_name}")
 
 
-def render_reconciliation(st, model, *, controls=None, actor_id="", role="") -> None:
+def render_reconciliation(st, model, *, controls=None, authorization=None) -> None:
     st.markdown("### Source Reconciliation")
     if not model.items:
         st.info(model.empty_message)
@@ -49,10 +49,11 @@ def render_reconciliation(st, model, *, controls=None, actor_id="", role="") -> 
                 st.write(f"**{field} conflict**")
                 for source, value in values:
                     st.write(f"- {source}: {value}")
-            _render_decision_actions(st, item, controls, actor_id=actor_id, role=role)
+            _render_decision_actions(st, item, controls, authorization=authorization)
 
 
-def _render_decision_actions(st, item, controls, *, actor_id, role):
+def _render_decision_actions(st, item, controls, *, authorization):
+    role = authorization.role if authorization is not None else ""
     if (
         controls is None
         or item.status != "Needs Review"
@@ -87,8 +88,7 @@ def _render_decision_actions(st, item, controls, *, actor_id, role):
                 service,
                 proposal,
                 canonical_id=target_by_label[selected],
-                actor_id=actor_id,
-                role=role,
+                authorization=authorization,
                 reason=reason,
             )
         except (PermissionError, ValueError) as exc:
@@ -104,8 +104,7 @@ def _render_decision_actions(st, item, controls, *, actor_id, role):
             reject_reconciliation(
                 service,
                 proposal,
-                actor_id=actor_id,
-                role=role,
+                authorization=authorization,
                 reason=reason,
             )
         except (PermissionError, ValueError) as exc:

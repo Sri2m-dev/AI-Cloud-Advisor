@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from threading import RLock
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
@@ -12,6 +13,11 @@ from data_fabric.contracts import EntityType
 from data_fabric.foundation import TenantContext
 from universal_evidence.activation import ActivationStage, RoutingReason
 from universal_evidence.normalization.fingerprints import fingerprint
+from universal_evidence.security import (
+    RECONCILIATION_MUTATION_ROLES,
+    UniversalEvidenceSecurityPolicy,
+    WorkflowAuthorizationContext,
+)
 
 
 class ReconciliationState(str, Enum):
@@ -153,6 +159,7 @@ class GovernedIdentityReconciliationService:
         decisions=(),
         operations=None,
         operation_context=None,
+        persistence=None,
     ) -> None:
         self.registry = registry
         self.activation_resolver = activation_resolver
@@ -160,6 +167,10 @@ class GovernedIdentityReconciliationService:
         self.audit_sink = audit_sink
         self.operations = operations
         self.operation_context = operation_context
+        self.security_policy = UniversalEvidenceSecurityPolicy()
+        self._decision_lock = RLock()
+        self._binding_lock = RLock()
+        self.persistence = persistence
         self._bindings: dict[tuple[str, ...], SourceIdentityBinding] = {
             self._binding_key(item): item for item in bindings
         }
@@ -237,9 +248,12 @@ class GovernedIdentityReconciliationService:
         proposal: ReconciliationProposal,
         *,
         canonical_id: str,
-        actor_id: str,
+        authorization: WorkflowAuthorizationContext,
         reason: str,
     ) -> ReconciliationDecision:
+        self._authorize_mutation(proposal, authorization, "confirm match")
+        actor_id = authorization.actor_id
+        actor_role = authorization.role
         if not canonical_id.strip():
             raise ValueError("canonical_id is required for a confirmed match")
         entity = self.registry.get_entity(canonical_id)
@@ -247,32 +261,53 @@ class GovernedIdentityReconciliationService:
             raise ValueError("confirmed canonical entity type does not match proposal")
         if entity.organization_id != proposal.scope[0] or entity.tenant_id != proposal.scope[1]:
             raise ValueError("confirmed canonical entity crosses scope boundary")
-        self._operation(
-            "MATCH_CONFIRMED",
-            proposal,
-            actor_id=actor_id,
-            attributes={"reason": reason, "phase": "AUTHORIZED"},
-        )
-        return self._record_decision(
-            proposal, ReconciliationDecisionType.CONFIRM_MATCH, actor_id, reason, canonical_id
-        )
+        with self._decision_lock:
+            self._require_undecided(proposal)
+            self._operation(
+                "MATCH_CONFIRMED",
+                proposal,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                attributes={"reason": reason, "phase": "AUTHORIZED"},
+            )
+            return self._record_decision(
+                proposal,
+                ReconciliationDecisionType.CONFIRM_MATCH,
+                actor_id,
+                reason,
+                canonical_id,
+            )
 
     def reject_match(
-        self, proposal: ReconciliationProposal, *, actor_id: str, reason: str
+        self,
+        proposal: ReconciliationProposal,
+        *,
+        authorization: WorkflowAuthorizationContext,
+        reason: str,
     ) -> ReconciliationDecision:
-        self._operation(
-            "MATCH_REJECTED",
-            proposal,
-            actor_id=actor_id,
-            attributes={"reason": reason, "phase": "AUTHORIZED"},
-        )
-        return self._record_decision(
-            proposal,
-            ReconciliationDecisionType.REJECT_MATCH,
-            actor_id,
-            reason,
-            proposal.candidate_canonical_id,
-        )
+        self._authorize_mutation(proposal, authorization, "reject match")
+        actor_id = authorization.actor_id
+        actor_role = authorization.role
+        with self._decision_lock:
+            self._require_undecided(proposal)
+            self._operation(
+                "MATCH_REJECTED",
+                proposal,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                attributes={"reason": reason, "phase": "AUTHORIZED"},
+            )
+            return self._record_decision(
+                proposal,
+                ReconciliationDecisionType.REJECT_MATCH,
+                actor_id,
+                reason,
+                proposal.candidate_canonical_id,
+            )
+
+    def _require_undecided(self, proposal):
+        if proposal.proposal_fingerprint in self._decisions:
+            raise RuntimeError("reconciliation proposal already has an authoritative decision")
 
     def _operation(
         self,
@@ -280,9 +315,11 @@ class GovernedIdentityReconciliationService:
         proposal,
         *,
         actor_id=None,
+        actor_role=None,
         audit=None,
         references=None,
         attributes=None,
+        **event_kwargs,
     ):
         from dataclasses import replace
 
@@ -297,6 +334,7 @@ class GovernedIdentityReconciliationService:
                 prospect_id=proposal.scope[2],
                 analysis_id=proposal.scope[3],
                 actor_id=actor_id if actor_id is not None else context.actor_id,
+                actor_role=actor_role if actor_role is not None else context.actor_role,
             )
         observe(
             self.operations,
@@ -305,7 +343,64 @@ class GovernedIdentityReconciliationService:
             audit=audit,
             references={"reconciliation": proposal.proposal_id, **(references or {})},
             attributes=attributes,
+            **event_kwargs,
         )
+
+    def _authorize_mutation(self, proposal, authorization, action):
+        actor_id = authorization.actor_id
+        actor_role = authorization.role
+        try:
+            authorization.authorize_scope(proposal.scope)
+        except PermissionError:
+            if self.operations is not None and self.operation_context is not None:
+                from dataclasses import replace
+
+                from universal_evidence.operations import GovernedEventType
+
+                trusted = replace(
+                    self.operation_context,
+                    organization_id=authorization.tenant.organization_id,
+                    tenant_id=authorization.tenant.tenant_id,
+                    prospect_id=authorization.prospect_id,
+                    analysis_id=authorization.analysis_id,
+                    actor_id=actor_id,
+                    actor_role=actor_role,
+                )
+                self.operations.emit(
+                    GovernedEventType.SCOPE_ACCESS_REJECTED,
+                    trusted,
+                    severity="SECURITY",
+                    outcome="DENIED",
+                    failure_class="SECURITY_REJECTION",
+                    reason_code="CROSS_SCOPE_ACCESS",
+                    attributes={"attempted_action": action},
+                )
+            raise
+        try:
+            role = self.security_policy.authorize(
+                actor_role, RECONCILIATION_MUTATION_ROLES, "reconciliation mutation"
+            )
+        except PermissionError:
+            role = str(actor_role or "").strip().lower()
+        else:
+            return
+        from universal_evidence.operations import (
+            FailureClass,
+            GovernedEventType,
+            Severity,
+        )
+
+        self._operation(
+            GovernedEventType.UNAUTHORIZED_ACTION,
+            proposal,
+            actor_id=actor_id,
+            actor_role=role or None,
+            severity=Severity.SECURITY,
+            outcome="DENIED",
+            failure_class=FailureClass.SECURITY_REJECTION,
+            attributes={"attempted_action": action},
+        )
+        raise PermissionError("reconciliation mutation requires an authorized operational role")
 
     def register_cross_reference(
         self,
@@ -515,6 +610,10 @@ class GovernedIdentityReconciliationService:
         )
 
     def _bind(self, row, proposal, decision, blocked_reason):
+        with self._binding_lock:
+            return self._bind_locked(row, proposal, decision, blocked_reason)
+
+    def _bind_locked(self, row, proposal, decision, blocked_reason):
         key = row.identity_key
         existing = self._bindings.get(key)
         if existing is not None:
@@ -544,6 +643,8 @@ class GovernedIdentityReconciliationService:
             (row.evidence_fingerprint,),
             datetime.now(timezone.utc),
         )
+        if self.persistence is not None:
+            self.persistence.save_binding(binding)
         self._bindings[key] = binding
         return binding
 
@@ -585,6 +686,8 @@ class GovernedIdentityReconciliationService:
             datetime.now(timezone.utc),
             decision_fp,
         )
+        if self.persistence is not None:
+            self.persistence.save_decision(decision)
         self._decisions[proposal.proposal_fingerprint] = decision
         return decision
 

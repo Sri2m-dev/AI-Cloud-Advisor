@@ -35,6 +35,7 @@ class PilotGovernedMeasurementService:
         clock=None,
         operations=None,
         operation_context=None,
+        lifecycle=None,
     ) -> None:
         self.activation_resolver = activation_resolver
         self.normalization_service = normalization_service
@@ -43,6 +44,7 @@ class PilotGovernedMeasurementService:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.operations = operations
         self.operation_context = operation_context
+        self.lifecycle = lifecycle
         capability_repository = normalization_service.capabilities.repository
         self.planner = AnalyticalQueryPlanner(
             capability_repository=capability_repository, clock=self.clock
@@ -265,6 +267,34 @@ class PilotGovernedMeasurementService:
                 references={"plan": planning.plan.plan_fingerprint},
             )
             return planning, None
+        # Activation is mutable operational authority.  Re-resolve it after
+        # planning so a kill switch raised between admission and execution
+        # cannot be bypassed by a previously ready plan/authorization.
+        current_activation = self._activation(admission)
+        if self._suppressed(current_activation) or (
+            current_activation.stage < ActivationStage.CAPABILITY_VISIBLE
+        ):
+            self._metric("measurement_execution_blocked", admission, 1)
+            self._audit("PUE_MEASUREMENT_EXECUTION_BLOCKED", admission, actor)
+            observe(
+                self.operations,
+                GovernedEventType.EXECUTION_BLOCKED,
+                context,
+                audit=False,
+                severity=Severity.INFO,
+                outcome="BLOCKED",
+                failure_class=FailureClass.EXPECTED_BLOCK,
+                reason_code=ReasonCode.KILL_SWITCH_ACTIVE
+                if RoutingReason.KILL_SWITCH_ACTIVE in current_activation.reason_codes
+                else ReasonCode.EXECUTION_NOT_AUTHORIZED,
+                references={"plan": planning.plan.plan_fingerprint},
+            )
+            raise PermissionError("ACT-C1 activation changed before measurement execution")
+        if not self._lifecycle_is_current(admission):
+            raise PermissionError("analysis lifecycle changed before measurement execution")
+        _current_runs, current_assessment = self._current(admission, actor=actor)
+        if current_assessment.fingerprint != assessment.fingerprint:
+            raise PermissionError("governance changed before measurement execution")
         observe(
             self.operations,
             GovernedEventType.EXECUTION_STARTED,
@@ -321,6 +351,22 @@ class PilotGovernedMeasurementService:
                 failure_class=FailureClass.EXPECTED_BLOCK,
             )
         return planning, result
+
+    def _lifecycle_is_current(self, admission):
+        if self.lifecycle is None:
+            return True
+        from universal_evidence.persistence import LifecycleScope
+
+        scope = LifecycleScope(
+            admission.scope.organization_id or "UNKNOWN",
+            admission.scope.tenant_id or "UNKNOWN",
+            admission.scope.prospect_id,
+            admission.scope.analysis_id,
+        )
+        return not any(
+            item.object_type == "tombstone"
+            for item in self.lifecycle.list_scope(scope, include_purged=True)
+        )
 
     def record_result_viewed(self, admission, *, actor):
         self._audit("PUE_AGGREGATION_RESULT_VIEWED", admission, actor)

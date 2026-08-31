@@ -136,6 +136,15 @@ class PilotSemanticGovernanceService:
         self.telemetry.increment("mapping_confirmed_count", admission.scope.key)
         return decision
 
+    def confirm_authorized(self, admission, column_reference, concept_id, *, authorization):
+        authorization.authorize_scope(admission.scope)
+        return self.confirm(
+            admission,
+            column_reference,
+            concept_id,
+            actor=authorization.governance_actor(),
+        )
+
     def reject(self, admission, column_reference, concept_id, *, actor, reason):
         self._operation(
             "MAPPING_REJECTED", admission, actor, column_reference, attributes={"reason": reason}
@@ -154,6 +163,18 @@ class PilotSemanticGovernanceService:
         self.telemetry.increment("mapping_rejected_count", admission.scope.key)
         return decision
 
+    def reject_authorized(
+        self, admission, column_reference, concept_id, *, authorization, reason
+    ):
+        authorization.authorize_scope(admission.scope)
+        return self.reject(
+            admission,
+            column_reference,
+            concept_id,
+            actor=authorization.governance_actor(),
+            reason=reason,
+        )
+
     def override(self, admission, column_reference, concept_id, *, actor, reason):
         self._operation(
             "MAPPING_OVERRIDDEN", admission, actor, column_reference, attributes={"reason": reason}
@@ -167,6 +188,18 @@ class PilotSemanticGovernanceService:
         )
         self.telemetry.increment("mapping_overridden_count", admission.scope.key)
         return decision
+
+    def override_authorized(
+        self, admission, column_reference, concept_id, *, authorization, reason
+    ):
+        authorization.authorize_scope(admission.scope)
+        return self.override(
+            admission,
+            column_reference,
+            concept_id,
+            actor=authorization.governance_actor(),
+            reason=reason,
+        )
 
     def _operation(self, event_type, admission, actor, mapping_reference, *, attributes=None):
         from universal_evidence.operations import (

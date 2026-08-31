@@ -7,7 +7,9 @@ from typing import Any, Iterable
 
 from data_fabric.contracts import EntityType
 from universal_evidence.persistence import LifecycleScope
-from universal_evidence.pilot.reconciliation import ReconciliationState
+from universal_evidence.pilot.reconciliation import (
+    ReconciliationState,
+)
 
 ENTITY_LABELS = {
     EntityType.APPLICATION: "Applications",
@@ -54,11 +56,6 @@ RECONCILIATION_LABELS = {
     ReconciliationState.STALE: "Needs Review",
     ReconciliationState.BLOCKED: "Unresolved",
 }
-
-RECONCILIATION_MUTATION_ROLES = frozenset(
-    {"super_admin", "client_admin", "operations"}
-)
-
 
 @dataclass(frozen=True, slots=True)
 class RelationshipView:
@@ -246,17 +243,20 @@ def build_reconciliation_view(
 
 
 def confirm_reconciliation(
-    service, proposal, *, canonical_id: str, actor_id: str, role: str, reason: str
+    service, proposal, *, canonical_id: str, authorization, reason: str
 ):
-    _authorize_reconciliation(role)
     return service.confirm_match(
-        proposal, canonical_id=canonical_id, actor_id=actor_id, reason=reason
+        proposal,
+        canonical_id=canonical_id,
+        authorization=authorization,
+        reason=reason,
     )
 
 
-def reject_reconciliation(service, proposal, *, actor_id: str, role: str, reason: str):
-    _authorize_reconciliation(role)
-    return service.reject_match(proposal, actor_id=actor_id, reason=reason)
+def reject_reconciliation(service, proposal, *, authorization, reason: str):
+    return service.reject_match(
+        proposal, authorization=authorization, reason=reason
+    )
 
 
 def persist_production_views(lifecycle, scope: LifecycleScope, context, reconciliation):
@@ -343,11 +343,6 @@ def _source_label(value):
     normalized = str(value or "Unknown source").replace("_", " ").strip()
     acronyms = {"aws": "AWS", "cmdb": "CMDB", "gcp": "GCP", "saas": "SaaS"}
     return acronyms.get(normalized.casefold(), normalized.title())
-
-
-def _authorize_reconciliation(role):
-    if str(role or "").strip().lower() not in RECONCILIATION_MUTATION_ROLES:
-        raise PermissionError("reconciliation decisions require an authorized operational role")
 
 
 def _context_from_payload(payload):

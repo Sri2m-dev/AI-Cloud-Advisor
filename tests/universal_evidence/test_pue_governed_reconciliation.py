@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from auth.tenant_authorization import TenantAuthorizationContext
 from data_fabric.contracts import EntityType
 from data_fabric.foundation import TenantContext
 from data_fabric.identity import InMemoryIdentityResolver
@@ -16,9 +17,25 @@ from universal_evidence.pilot.reconciliation import (
     ReconciliationState,
     SourceIdentityObservation,
 )
+from universal_evidence.security import WorkflowAuthorizationContext
 
 ORG = "org-act007"
 TENANT = "tenant-act007"
+
+
+def _authorization(role="operations", actor_id="owner-1"):
+    return WorkflowAuthorizationContext(
+        TenantAuthorizationContext(
+            ORG,
+            TENANT,
+            actor_id,
+            "user",
+            roles=frozenset({role}),
+            source_boundary="test-authenticated-principal",
+        ),
+        "prospect-1",
+        "analysis-1",
+    )
 
 
 @dataclass
@@ -172,7 +189,7 @@ def test_same_name_without_authority_is_possible_then_requires_human_confirmatio
     decision = service.confirm_match(
         proposal,
         canonical_id=canonical.canonical_id,
-        actor_id="owner-1",
+        authorization=_authorization(),
         reason="Reviewed source records",
     )
     confirmed = service.reconcile(rows, context=context, activation=Activation())
@@ -196,7 +213,11 @@ def test_rejected_match_and_cross_entity_type_names_do_not_merge():
         _observation("source-b", "b", name="Payments"),
     )
     proposal = reconciler.reconcile(rows, context=context, activation=Activation()).proposals[0]
-    reconciler.reject_match(proposal, actor_id="owner-1", reason="No certified cross-reference")
+    reconciler.reject_match(
+        proposal,
+        authorization=_authorization(),
+        reason="No certified cross-reference",
+    )
     rejected = reconciler.reconcile(rows, context=context, activation=Activation())
     assert rejected.proposals[0].state is ReconciliationState.REJECTED
     assert not rejected.bindings
@@ -250,7 +271,10 @@ def test_stale_evidence_and_stale_decision_cannot_bind():
     )
     proposal = reconciler.reconcile(rows, context=context, activation=Activation()).proposals[0]
     decision = reconciler.confirm_match(
-        proposal, canonical_id=canonical.canonical_id, actor_id="owner", reason="Reviewed"
+        proposal,
+        canonical_id=canonical.canonical_id,
+        authorization=_authorization(actor_id="owner"),
+        reason="Reviewed",
     )
     changed = (
         _observation("source-a", "a", name="Payments", evidence="changed"),

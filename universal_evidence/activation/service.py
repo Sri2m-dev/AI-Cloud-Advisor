@@ -111,6 +111,13 @@ class PueActivationService:
         )
         return stored
 
+    def configure_authorized(self, *, authorization, scope, **values):
+        from universal_evidence.activation.models import ActivationPermission
+
+        authorization.authorize_scope(scope)
+        actor = authorization.activation_actor(ActivationPermission.CHANGE_PUE_STAGE)
+        return self.configure(scope=scope, actor=actor, **values)
+
     def rollback(self, config, *, target_stage, actor, reason):
         self.policy.authorize(actor, ActivationPermission.TRIGGER_PUE_ROLLBACK)
         self.policy.authorize(actor, ActivationPermission.CHANGE_PUE_STAGE)
@@ -183,6 +190,19 @@ class PueActivationService:
             activation_id=stored.kill_switch_id,
         )
         return stored
+
+    def set_kill_switch_authorized(self, *, authorization, enabled, reason, **values):
+        from universal_evidence.activation.models import ActivationPermission
+
+        actor = authorization.activation_actor(
+            ActivationPermission.TRIGGER_PUE_KILL_SWITCH
+        )
+        return self.set_kill_switch(
+            enabled=enabled,
+            actor=actor,
+            reason=reason,
+            **values,
+        )
 
     def _operation(self, event_type, actor, scope, reason, *, attributes):
         from universal_evidence.operations import GovernedEventType, observe, workflow_context
