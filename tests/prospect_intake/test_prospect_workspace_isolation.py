@@ -3,13 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from shared.evidence_context import (
+    ACTIVE_WORKSPACE_CONTEXT_KEY,
     EvidenceContextKind,
+    activate_demo_workspace,
+    activate_prospect_workspace,
     clear_prospect_context,
     resolve_active_evidence_context,
 )
 from shared.prospect_answers import prospect_evidence_answer
-
 
 ROOT = Path(__file__).parents[2]
 SYNTHETIC_MARKERS = (
@@ -44,13 +48,77 @@ def test_prospect_context_takes_precedence_over_demo_tenant() -> None:
 
 
 def test_resolver_distinguishes_demo_tenant_and_unknown() -> None:
-    assert resolve_active_evidence_context({}, demo_enabled=True).kind is EvidenceContextKind.UNKNOWN
+    assert (
+        resolve_active_evidence_context({}, demo_enabled=True).kind
+        is EvidenceContextKind.UNKNOWN
+    )
     assert (
         resolve_active_evidence_context(
             {"organization_id": "demo-nexora-global-retail"}, demo_enabled=True
         ).kind
         is EvidenceContextKind.DEMO
     )
+
+
+def test_explicit_demo_context_overrides_retained_prospect_presentation(monkeypatch) -> None:
+    monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
+    analysis = SimpleNamespace(tenant_id="prospect-retained")
+    session = {
+        "organization_id": "demo-nexora-global-retail",
+        "prospect_analysis": analysis,
+    }
+    activate_demo_workspace(session)
+    context = resolve_active_evidence_context(session)
+    assert context.kind is EvidenceContextKind.DEMO
+    assert context.prospect_analysis is None
+    assert session["prospect_analysis"] is analysis
+
+
+def test_explicit_prospect_resume_restores_exact_prospect_context() -> None:
+    admission = SimpleNamespace(
+        fingerprint="analysis-fingerprint",
+        original_filename="CUR Jan 2026.xlsx",
+        scope=SimpleNamespace(prospect_id="prospect-123"),
+    )
+    session = {
+        "organization_id": "demo-nexora-global-retail",
+        "pue_upload_admission": admission,
+        ACTIVE_WORKSPACE_CONTEXT_KEY: EvidenceContextKind.DEMO.value,
+    }
+    activate_prospect_workspace(session, expected_fingerprint="analysis-fingerprint")
+    context = resolve_active_evidence_context(session, demo_enabled=True)
+    assert context.kind is EvidenceContextKind.PROSPECT
+    assert context.evidence_admission is admission
+    assert context.label == "Prospect Analysis · CUR Jan 2026.xlsx"
+
+
+def test_workspace_context_tampering_fails_closed(monkeypatch) -> None:
+    monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
+    assert (
+        resolve_active_evidence_context(
+            {
+                "organization_id": "customer-production",
+                ACTIVE_WORKSPACE_CONTEXT_KEY: EvidenceContextKind.DEMO.value,
+            }
+        ).kind
+        is EvidenceContextKind.UNKNOWN
+    )
+    assert (
+        resolve_active_evidence_context(
+            {
+                "organization_id": "demo-nexora-global-retail",
+                ACTIVE_WORKSPACE_CONTEXT_KEY: EvidenceContextKind.PROSPECT.value,
+            }
+        ).kind
+        is EvidenceContextKind.UNKNOWN
+    )
+    with pytest.raises(PermissionError, match="identity mismatch"):
+        activate_prospect_workspace(
+            {
+                "pue_upload_admission": SimpleNamespace(fingerprint="actual"),
+            },
+            expected_fingerprint="forged",
+        )
     assert (
         resolve_active_evidence_context(
             {"organization_id": "customer-production"}, demo_enabled=True

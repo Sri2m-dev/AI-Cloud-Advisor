@@ -23,6 +23,9 @@ from services.demo_tenant_service import (  # noqa: E402
     is_demo_tenant,
     load_demo_tenant,
 )
+from services.enterprise_spend_composition import (  # noqa: E402
+    authenticated_tenant_context,
+)
 from services.prospect_data_intake_service import (  # noqa: E402
     DEFAULT_RETENTION_DAYS,
     PROSPECT_WATERMARK,
@@ -35,6 +38,11 @@ from services.prospect_data_intake_service import (  # noqa: E402
 )
 from shared.auth import require_role  # noqa: E402
 from shared.currency import SUPPORTED_CURRENCIES, format_currency_amount  # noqa: E402
+from shared.evidence_context import (  # noqa: E402
+    activate_demo_workspace,
+    activate_prospect_workspace,
+    activate_tenant_workspace,
+)
 from shared.session import init_session  # noqa: E402
 from shared.styles import configure_page  # noqa: E402
 from universal_evidence.persistence import LifecyclePersistenceError  # noqa: E402
@@ -66,7 +74,14 @@ from universal_evidence.production_workflow import (  # noqa: E402
     evidence_counts,
     load_configured_production_views,
     load_live_canonical_views,
+    persist_production_workspace,
+    resumable_production_workspaces,
+    resume_production_workspace,
     upload_outcome,
+)
+from universal_evidence.security import (  # noqa: E402
+    WorkflowAuthorizationContext,
+    WorkspaceAuthorizationContext,
 )
 
 
@@ -106,6 +121,7 @@ def _render_cloud_results(result: dict[str, object]) -> None:
 
 def _open_demo(organization_id: str) -> None:
     load_demo_tenant(organization_id)
+    activate_demo_workspace(st.session_state)
     st.switch_page("pages/welcome.py")
 
 
@@ -136,6 +152,18 @@ def _reset_journey() -> None:
         "pue_reconciliation_control",
     ):
         st.session_state.pop(key, None)
+
+
+def _leave_active_workspace() -> None:
+    """Return to source selection without deleting or replacing governed authority."""
+    st.session_state.pop("analysis_start_path", None)
+
+
+def _start_source_path(path: str) -> None:
+    """Start a distinct presentation journey after the user selects its source."""
+    _reset_journey()
+    activate_tenant_workspace(st.session_state)
+    st.session_state["analysis_start_path"] = path
 
 
 def _prospect_pue_pilot_model(prospect_analysis):
@@ -229,16 +257,25 @@ def _render_enterprise_workflow(admission):
     )
     control = _scoped_production_view("pue_reconciliation_control", admission, None)
     controls = None
+    authorization = None
     if isinstance(control, tuple) and len(control) == 2:
         service, proposals = control
         controls = (service, {item.proposal_fingerprint: item for item in proposals})
+        try:
+            authorization = WorkflowAuthorizationContext.from_authenticated(
+                authenticated_tenant_context(st.session_state),
+                prospect_id=admission.scope.prospect_id,
+                analysis_id=admission.scope.analysis_id,
+            )
+        except PermissionError:
+            # An incomplete authenticated boundary can never enable mutation controls.
+            controls = None
     render_enterprise_context(st, context)
     render_reconciliation(
         st,
         reconciliation,
         controls=controls,
-        actor_id=str(st.session_state.get("user_id") or st.session_state.get("email") or ""),
-        role=role,
+        authorization=authorization,
     )
 
 
@@ -309,9 +346,72 @@ demo_available = demo_mode_enabled() and is_demo_tenant(organization_id)
 selected_path = st.session_state.get("analysis_start_path")
 cloud_result = st.session_state.get("environment_analysis_result")
 prospect_result = st.session_state.get("prospect_analysis")
+active_upload_admission = st.session_state.get("pue_upload_admission")
+
+if selected_path and (cloud_result or prospect_result or active_upload_admission):
+    if st.button("← Choose another source", key="leave_active_workspace"):
+        _leave_active_workspace()
+        st.rerun()
 
 if not selected_path:
     _step_header(1, "Choose a source", "Select one governed path to begin.")
+    try:
+        workspace_authorization = WorkspaceAuthorizationContext.from_authenticated(
+            authenticated_tenant_context(st.session_state)
+        )
+        resumable_workspaces = resumable_production_workspaces(workspace_authorization)
+    except (PermissionError, RuntimeError):
+        resumable_workspaces = ()
+    if resumable_workspaces:
+        with st.container(border=True):
+            st.subheader("Resume governed analysis")
+            st.write(
+                "Continue retained evidence governance without uploading the source again."
+            )
+            if len(resumable_workspaces) == 1:
+                selected_workspace = resumable_workspaces[0]
+            else:
+                selected_workspace = st.selectbox(
+                    "Analysis",
+                    resumable_workspaces,
+                    format_func=lambda item: (
+                        f"{item.prospect_name} — {item.filename} — "
+                        f"{item.governed_mapping_count} governed mappings"
+                    ),
+                    key="pue_resume_workspace",
+                )
+            st.caption(
+                f"{selected_workspace.record_count:,} records · "
+                f"{selected_workspace.field_count:,} fields · tenant-scoped"
+            )
+            if st.button(
+                "Resume existing analysis",
+                key="resume_governed_analysis",
+                type="primary",
+            ):
+                try:
+                    admission, tenant, prospect_name, _profile = resume_production_workspace(
+                        selected_workspace,
+                        authorization=workspace_authorization,
+                    )
+                    st.session_state["analysis_start_path"] = "upload"
+                    st.session_state["pue_upload_admission"] = admission
+                    st.session_state["prospect_tenant"] = tenant
+                    st.session_state["prospect_name"] = prospect_name
+                    activate_prospect_workspace(
+                        st.session_state,
+                        expected_fingerprint=admission.fingerprint,
+                    )
+                    st.session_state["pue_upload_admission_error"] = (
+                        "Governed analysis resumed from encrypted retained evidence. "
+                        "No file was uploaded again."
+                    )
+                    st.rerun()
+                except Exception:  # noqa: BLE001 - resume fails closed at the UI boundary
+                    st.error(
+                        "The selected governed analysis could not be safely resumed. "
+                        "No other workspace was substituted."
+                    )
 action_specs = (
     (
         {
@@ -372,7 +472,7 @@ for column, card in zip(actions, action_specs, strict=True):
             if st.button(label, key=f"start_{key}", type="primary", use_container_width=True):
                 if key == "demo" and demo_available:
                     _open_demo(organization_id)
-                st.session_state["analysis_start_path"] = (
+                _start_source_path(
                     "demo_unavailable" if key == "demo" else key
                 )
                 st.rerun()
@@ -383,7 +483,12 @@ for column, card in zip(actions, action_specs, strict=True):
             else:
                 st.caption("Isolated synthetic data · never customer data")
 
-if selected_path and not cloud_result and not prospect_result:
+if (
+    selected_path
+    and not cloud_result
+    and not prospect_result
+    and not st.session_state.get("pue_upload_admission")
+):
     if st.button("← Choose another source", key="restart_analysis"):
         _reset_journey()
         st.rerun()
@@ -571,7 +676,11 @@ if selected_path in {"aws", "azure"} and not cloud_result:
                             }
                             st.rerun()
 
-if selected_path == "upload" and not prospect_result:
+if (
+    selected_path == "upload"
+    and not prospect_result
+    and not st.session_state.get("pue_upload_admission")
+):
     _step_header(
         2,
         "Upload billing evidence",
@@ -640,12 +749,28 @@ if selected_path == "upload" and not prospect_result:
                         st.session_state["prospect_tenant"] = tenant
                         st.session_state["prospect_name"] = prospect_name.strip()
                         try:
+                            authenticated = authenticated_tenant_context(st.session_state)
+                            workspace_authorization = (
+                                WorkspaceAuthorizationContext.from_authenticated(authenticated)
+                            )
                             admission = admit_uploaded_evidence(
                                 tenant,
                                 filename=upload.name,
                                 content=content,
+                                tenant_context=authenticated,
+                            )
+                            persist_production_workspace(
+                                admission,
+                                prospect_tenant=tenant,
+                                prospect_name=prospect_name.strip(),
+                                input_profile=profile,
+                                authorization=workspace_authorization,
                             )
                             st.session_state["pue_upload_admission"] = admission
+                            activate_prospect_workspace(
+                                st.session_state,
+                                expected_fingerprint=admission.fingerprint,
+                            )
                             activate_production_workflow(admission)
                             st.session_state.pop("pue_upload_admission_error", None)
                         except Exception:  # noqa: BLE001 - shadow admission is isolated

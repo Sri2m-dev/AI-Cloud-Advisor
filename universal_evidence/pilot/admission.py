@@ -59,6 +59,7 @@ def admit_uploaded_evidence(
     now=None,
     operations=None,
     operation_context=None,
+    tenant_context=None,
 ):
     """Admit authorized evidence independently of legacy schema normalization."""
     from universal_evidence.operations import GovernedEventType, Severity, observe
@@ -66,7 +67,12 @@ def admit_uploaded_evidence(
     started = perf_counter()
     try:
         admission = _admit_uploaded_evidence(
-            tenant, filename=filename, content=content, legacy_analysis=legacy_analysis, now=now
+            tenant,
+            filename=filename,
+            content=content,
+            legacy_analysis=legacy_analysis,
+            now=now,
+            tenant_context=tenant_context,
         )
     except Exception as exc:
         observe(
@@ -118,7 +124,9 @@ def admit_uploaded_evidence(
     return admission
 
 
-def _admit_uploaded_evidence(tenant, *, filename, content, legacy_analysis=None, now=None):
+def _admit_uploaded_evidence(
+    tenant, *, filename, content, legacy_analysis=None, now=None, tenant_context=None
+):
     scan = scan_upload(filename, content)
     now = now or datetime.now(timezone.utc)
     evidence_fingerprint = scan["sha256"]
@@ -126,12 +134,14 @@ def _admit_uploaded_evidence(tenant, *, filename, content, legacy_analysis=None,
         tenant.tenant_id, tenant.audit_id, evidence_fingerprint
     )[:24]
     source_id = "pue-upload-source-" + evidence_fingerprint[:24]
+    organization_id = getattr(tenant_context, "organization_id", None)
+    authorized_tenant_id = getattr(tenant_context, "tenant_id", None)
     context = EvidenceAnalysisContext(
         analysis_id,
         source_id,
         tenant.tenant_id,
-        None,
-        None,
+        organization_id,
+        authorized_tenant_id,
     )
     source = EvidenceSource(
         context,
@@ -141,7 +151,12 @@ def _admit_uploaded_evidence(tenant, *, filename, content, legacy_analysis=None,
     )
     profile = profile_evidence(source=source, filename=filename, content=content)
     regions = discover_structural_regions(profile, filename=filename, content=content)
-    scope = CapabilityScope(analysis_id, tenant.tenant_id, None, None)
+    scope = CapabilityScope(
+        analysis_id,
+        tenant.tenant_id,
+        organization_id,
+        authorized_tenant_id,
+    )
     legacy_reference = (
         str(getattr(legacy_analysis, "audit_id", "") or "") or None
     )

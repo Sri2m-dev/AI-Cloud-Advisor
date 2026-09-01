@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
+from dataclasses import asdict, is_dataclass
+from datetime import datetime
+from enum import Enum
 
 from universal_evidence.profiling import FileProfile
 from universal_evidence.semantic.concepts import DEFAULT_CONCEPT_REGISTRY
@@ -19,7 +22,26 @@ from universal_evidence.semantic.scoring import score_candidate
 
 
 def _fingerprint(value: object) -> str:
-    return hashlib.sha256(repr(value).encode("utf-8")).hexdigest()
+    return hashlib.sha256(repr(_stable_identity(value)).encode("utf-8")).hexdigest()
+
+
+def _stable_identity(value):
+    """Exclude observation time from deterministic semantic identity."""
+    if isinstance(value, datetime):
+        return "<observed-at>"
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return _stable_identity(asdict(value))
+    if isinstance(value, dict):
+        return tuple(
+            (key, _stable_identity(item))
+            for key, item in sorted(value.items())
+            if key not in {"decided_at", "classification_timestamp"}
+        )
+    if isinstance(value, (tuple, list)):
+        return tuple(_stable_identity(item) for item in value)
+    return value
 
 
 def discover_semantics(

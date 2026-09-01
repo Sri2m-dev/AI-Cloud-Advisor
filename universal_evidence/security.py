@@ -13,6 +13,37 @@ MATERIALIZATION_MUTATION_ROLES = frozenset({"super_admin", "client_admin", "oper
 
 
 @dataclass(frozen=True, slots=True)
+class WorkspaceAuthorizationContext:
+    """Trusted principal authorized to discover its own tenant-owned workspaces."""
+
+    tenant: TenantAuthorizationContext
+
+    @classmethod
+    def from_authenticated(cls, authenticated):
+        return cls(
+            TenantAuthorizationContext(
+                authenticated.organization_id,
+                authenticated.tenant_id,
+                authenticated.user_id,
+                "user",
+                roles=frozenset({authenticated.role}),
+                permissions=authenticated.authorization_claims,
+                source_boundary="authenticated-tenant-context",
+            )
+        )
+
+    @property
+    def actor_id(self):
+        return self.tenant.subject_id
+
+    def authorize_scope(self, scope):
+        self.tenant.authorize(
+            organization_id=scope.organization_id,
+            tenant_id=scope.tenant_id,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class UniversalEvidenceSecurityPolicy:
     version: str = "act012-security-policy-1"
 
@@ -35,6 +66,23 @@ class WorkflowAuthorizationContext:
     def __post_init__(self):
         if not str(self.prospect_id or "").strip() or not str(self.analysis_id or "").strip():
             raise PermissionError("trusted prospect and analysis scope are required")
+
+    @classmethod
+    def from_authenticated(cls, authenticated, *, prospect_id, analysis_id):
+        """Adapt the application's verified authenticated tenant at a workflow boundary."""
+        return cls(
+            TenantAuthorizationContext(
+                authenticated.organization_id,
+                authenticated.tenant_id,
+                authenticated.user_id,
+                "user",
+                roles=frozenset({authenticated.role}),
+                permissions=authenticated.authorization_claims,
+                source_boundary="authenticated-tenant-context",
+            ),
+            prospect_id,
+            analysis_id,
+        )
 
     @property
     def actor_id(self):
@@ -84,3 +132,16 @@ class WorkflowAuthorizationContext:
             "HUMAN_ADMIN",
             (ActivationPermission(permission),),
         )
+
+    @property
+    def allows_reconciliation_mutation(self):
+        """Presentation hint derived from trusted authority; services still enforce it."""
+        try:
+            UniversalEvidenceSecurityPolicy.authorize(
+                self.role,
+                RECONCILIATION_MUTATION_ROLES,
+                "reconciliation mutation",
+            )
+        except PermissionError:
+            return False
+        return True

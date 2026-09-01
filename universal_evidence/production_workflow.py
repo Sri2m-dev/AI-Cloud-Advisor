@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 from universal_evidence.activation import (
     ActivationActor,
@@ -22,6 +24,23 @@ class UploadOutcome:
     state: str
     message: str
     compatibility_notice: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ResumableAnalysis:
+    workspace_id: str
+    organization_id: str
+    tenant_id: str
+    prospect_id: str
+    analysis_id: str
+    filename: str
+    prospect_name: str
+    created_at: str
+    updated_at: str
+    record_count: int
+    field_count: int
+    governed_mapping_count: int
+    status: str
 
 
 def upload_outcome(*, admission=None, legacy_analysis=None, legacy_error=None) -> UploadOutcome:
@@ -69,6 +88,185 @@ def evidence_counts(admission) -> tuple[int, int]:
     return records, fields
 
 
+def persist_production_workspace(
+    admission,
+    *,
+    prospect_tenant,
+    prospect_name,
+    input_profile,
+    authorization,
+):
+    """Persist a safe locator plus encrypted source for a resumable governed analysis."""
+    authorization.authorize_scope(admission.scope)
+    from services.prospect_data_intake_service import (
+        prospect_encryption_key,
+        store_governed_upload,
+    )
+    from services.universal_evidence_runtime_service import (
+        initialize_universal_evidence_runtime,
+    )
+
+    database = os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB")
+    runtime = initialize_universal_evidence_runtime(database)
+    if runtime is None:
+        return None
+    root = Path(os.getenv("NEXORA_PROSPECT_DATA_ROOT", "var/prospect_data"))
+    store_governed_upload(
+        prospect_tenant,
+        filename=admission.original_filename,
+        content=admission.source_content,
+        input_profile=input_profile,
+        actor=authorization.actor_id,
+        root=root,
+        key=prospect_encryption_key(),
+    )
+    records, fields = evidence_counts(admission)
+    scope = _workspace_scope(admission)
+    return runtime.lifecycle.put(
+        "evidence_workspace",
+        admission.fingerprint,
+        scope,
+        payload={
+            "owner_subject_id": authorization.actor_id,
+            "prospect_audit_id": prospect_tenant.audit_id,
+            "prospect_created_at": prospect_tenant.created_at,
+            "prospect_expires_at": prospect_tenant.expires_at,
+            "retention_days": prospect_tenant.retention_days,
+            "prospect_name": str(prospect_name),
+            "filename": admission.original_filename,
+            "input_profile": input_profile,
+            "evidence_fingerprint": admission.evidence_fingerprint,
+            "admission_fingerprint": admission.fingerprint,
+            "record_count": records,
+            "field_count": fields,
+            "status": "GOVERNANCE_REQUIRED",
+        },
+        fingerprint_value=admission.fingerprint,
+        actor_id=authorization.actor_id,
+        reason="governed evidence workspace admitted",
+    )
+
+
+def resumable_production_workspaces(authorization) -> tuple[ResumableAnalysis, ...]:
+    """Discover only this trusted subject's active workspaces inside its tenant."""
+    from services.universal_evidence_runtime_service import (
+        initialize_universal_evidence_runtime,
+    )
+
+    runtime = initialize_universal_evidence_runtime(
+        os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB")
+    )
+    if runtime is None:
+        return ()
+    results = []
+    for row in runtime.lifecycle.list_type("evidence_workspace"):
+        payload = row.payload or {}
+        expires_at = payload.get("prospect_expires_at")
+        if (
+            row.scope.organization_id != authorization.tenant.organization_id
+            or row.scope.tenant_id != authorization.tenant.tenant_id
+            or payload.get("owner_subject_id") != authorization.actor_id
+            or not expires_at
+            or datetime.fromisoformat(expires_at) <= datetime.now(timezone.utc)
+        ):
+            continue
+        authorization.authorize_scope(_capability_scope(row.scope))
+        mapping_count = sum(
+            item.object_type == "mapping_decision"
+            and (item.payload or {}).get("decision_state")
+            in {"AUTO_ACCEPTED", "CONFIRMED", "OVERRIDDEN"}
+            for item in runtime.lifecycle.list_scope(row.scope)
+        )
+        results.append(
+            ResumableAnalysis(
+                row.object_key,
+                row.scope.organization_id,
+                row.scope.tenant_id,
+                row.scope.prospect_id or "",
+                row.scope.analysis_id or "",
+                str(payload.get("filename") or "Governed evidence"),
+                str(payload.get("prospect_name") or "Prospect analysis"),
+                row.created_at,
+                row.updated_at,
+                int(payload.get("record_count") or 0),
+                int(payload.get("field_count") or 0),
+                mapping_count,
+                str(payload.get("status") or "ACTIVE"),
+            )
+        )
+    return tuple(sorted(results, key=lambda item: (item.updated_at, item.workspace_id)))
+
+
+def resume_production_workspace(locator, *, authorization):
+    """Reconstruct one explicitly scoped workspace from encrypted retained evidence."""
+    from services.prospect_data_intake_service import (
+        load_governed_upload,
+        prospect_encryption_key,
+    )
+    from services.universal_evidence_runtime_service import (
+        initialize_universal_evidence_runtime,
+    )
+    from universal_evidence.pilot.admission import admit_uploaded_evidence
+
+    scope = LifecycleScope(
+        locator.organization_id,
+        locator.tenant_id,
+        locator.prospect_id,
+        locator.analysis_id,
+    )
+    authorization.authorize_scope(_capability_scope(scope))
+    runtime = initialize_universal_evidence_runtime(
+        os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB")
+    )
+    if runtime is None:
+        raise RuntimeError("durable evidence workspace service is unavailable")
+    record = runtime.lifecycle.get("evidence_workspace", locator.workspace_id, scope)
+    payload = record.payload or {}
+    if payload.get("owner_subject_id") != authorization.actor_id:
+        raise PermissionError("workspace is not authorized for this subject")
+    root = Path(os.getenv("NEXORA_PROSPECT_DATA_ROOT", "var/prospect_data"))
+    prospect, prospect_name, metadata, content = load_governed_upload(
+        locator.prospect_id,
+        root=root,
+        key=prospect_encryption_key(),
+    )
+    admission = admit_uploaded_evidence(
+        prospect,
+        filename=metadata["filename"],
+        content=content,
+        now=datetime.fromisoformat(payload["prospect_created_at"]),
+        tenant_context=authorization.tenant,
+    )
+    if (
+        admission.fingerprint != payload.get("admission_fingerprint")
+        or admission.evidence_fingerprint != payload.get("evidence_fingerprint")
+        or admission.scope.analysis_id != locator.analysis_id
+        or admission.scope.prospect_id != locator.prospect_id
+    ):
+        raise PermissionError("retained evidence does not match its governed workspace")
+    return admission, prospect, prospect_name, metadata["input_profile"]
+
+
+def _workspace_scope(admission):
+    return LifecycleScope(
+        admission.scope.organization_id or "UNKNOWN",
+        admission.scope.tenant_id or "UNKNOWN",
+        admission.scope.prospect_id,
+        admission.scope.analysis_id,
+    )
+
+
+def _capability_scope(scope):
+    from universal_evidence.capability import CapabilityScope
+
+    return CapabilityScope(
+        scope.analysis_id or "",
+        scope.prospect_id or "",
+        scope.organization_id,
+        scope.tenant_id,
+    )
+
+
 def activate_production_workflow(admission, *, activation_service=None) -> None:
     """Advance an admitted analysis to certified workflow visibility.
 
@@ -76,9 +274,9 @@ def activate_production_workflow(admission, *, activation_service=None) -> None:
     backend kill-switch resolution remains authoritative.
     """
     if activation_service is None:
-        from universal_evidence.pilot.runtime import ACTIVATION_SERVICE
+        from universal_evidence.pilot.runtime import get_activation_service
 
-        activation_service = ACTIVATION_SERVICE
+        activation_service = get_activation_service()
     actor = ActivationActor(
         "nexora-production-workflow",
         "pue_activation_admin",

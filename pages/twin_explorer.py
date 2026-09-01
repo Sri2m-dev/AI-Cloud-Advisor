@@ -26,7 +26,7 @@ from core.digital_twin.business_twin import (
 from core.entities.entity import EntityRelationship, EntityType
 from repositories.entity_repository import EntityRepository
 from services.business_digital_twin_service import BusinessDigitalTwinService
-from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
+from services.demo_tenant_service import load_demo_tenant
 from shared.styles import configure_page
 from shared.evidence_context import resolve_active_evidence_context
 
@@ -786,6 +786,7 @@ def render_page() -> None:
     _require_authorized_role()
     _render_sidebar()
     evidence_context = resolve_active_evidence_context(st.session_state)
+    st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
     if evidence_context.is_prospect:
         st.title("Digital Twin")
         st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
@@ -799,7 +800,7 @@ def render_page() -> None:
         )
         return
     organization_id = str(st.session_state.get("organization_id") or "")
-    if demo_mode_enabled() and is_demo_tenant(organization_id):
+    if evidence_context.is_demo:
         _render_demo_decision_twin(organization_id)
         return
     render_section()

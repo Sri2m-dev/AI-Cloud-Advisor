@@ -65,9 +65,9 @@ def apply_dev_control(
         raise ValueError("development pilot stage must be 0, 1, or 2")
 
     if activation_service is None:
-        from universal_evidence.pilot.runtime import ACTIVATION_SERVICE
+        from universal_evidence.pilot.runtime import get_activation_service
 
-        activation_service = ACTIVATION_SERVICE
+        activation_service = get_activation_service()
     actor = _actor()
     scope = ActivationScope(
         ScopeLevel.ANALYSIS,

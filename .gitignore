@@ -4,6 +4,8 @@
 !.env.example
 .streamlit/secrets.toml
 .streamlit/credential.key
+*.key
+*.pem
 
 # Python
 .venv/
@@ -21,6 +23,8 @@ __pycache__/
 *.log
 logs/
 sync_logs/
+telemetry/
+uploads/
 exports/
 var/prospect_data/
 .streamlit/prospect-data.key
@@ -41,3 +45,4 @@ cio-dashboard-8513.png
 data/business_digital_twins.json
 data/technology_digital_twins.json
 .streamlit/cache/
+.tmp/

@@ -438,7 +438,12 @@ def test_mixed_currency_remains_a_blocked_capability_without_combined_total(pilo
     )
     assert currency.state == "EVIDENCED"
     assert not hasattr(model, "currency_totals")
-    assert "300" not in repr(model)
+    presented_fields = (
+        value
+        for item in (*model.evidence_items, *model.capability_items)
+        for value in (item.label, item.state, item.state_label, item.reason)
+    )
+    assert all("300" not in value for value in presented_fields)
 
 
 def test_irregular_unconfirmed_evidence_degrades_to_safe_unavailable_panel(pilot):

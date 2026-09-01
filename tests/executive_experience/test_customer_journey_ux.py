@@ -187,11 +187,14 @@ def test_v30_home_composes_existing_certified_story_and_actions():
 
 def test_v30_polish_uses_governed_demo_answers_and_domain_visual_language():
     copilot = (ROOT / "pages" / "enterprise_ai_copilot.py").read_text(encoding="utf-8")
+    demo_ask = (ROOT / "services" / "demo_ask_nexora_service.py").read_text(
+        encoding="utf-8"
+    )
     styles = (ROOT / "shared" / "styles.py").read_text(encoding="utf-8")
     navigation = (ROOT / "components" / "navigation" / "sidebar.py").read_text(encoding="utf-8")
-    assert "_demo_executive_answer" in copilot
-    assert "qualified opportunity" in copilot
-    assert "verified as realized value" in copilot
+    assert "DemoAskNexoraService" in copilot
+    assert "qualified opportunity" in demo_ask
+    assert "verified as realized value" in demo_ask
     assert "nexora-domain-card.finance" in styles
     assert "nexora-domain-card.risk" in styles
     assert '"section": "Business"' in navigation

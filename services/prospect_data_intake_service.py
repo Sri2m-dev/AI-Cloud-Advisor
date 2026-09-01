@@ -439,6 +439,67 @@ def ingest_upload(
     return analysis
 
 
+def store_governed_upload(
+    tenant: ProspectTenant,
+    *,
+    filename: str,
+    content: bytes,
+    input_profile: str,
+    actor: str,
+    root: Path = STORE_ROOT,
+    key: str | bytes | None = None,
+) -> None:
+    """Retain an admitted source encrypted for governed workspace reconstruction."""
+    scan = scan_upload(filename, content)
+    cipher = _tenant_cipher(tenant.tenant_id, root=root, key=key)
+    tenant_path = _tenant_dir(tenant.tenant_id, root)
+    _write_encrypted(tenant_path / "governed_source.enc", content, cipher)
+    _write_encrypted(
+        tenant_path / "governed_upload.enc",
+        json.dumps(
+            {
+                "filename": filename,
+                "input_profile": input_profile,
+                "source_sha256": scan["sha256"],
+            },
+            sort_keys=True,
+        ).encode("utf-8"),
+        cipher,
+    )
+    _audit(
+        tenant,
+        "GOVERNED_SOURCE_RETAINED",
+        actor,
+        {"source_sha256": scan["sha256"]},
+        root=root,
+        cipher=cipher,
+    )
+
+
+def load_governed_upload(
+    tenant_id: str,
+    *,
+    root: Path = STORE_ROOT,
+    key: str | bytes | None = None,
+):
+    """Load one encrypted governed source after a separately authorized locator lookup."""
+    cipher = _tenant_cipher(tenant_id, root=root, key=key)
+    tenant_path = _tenant_dir(tenant_id, root)
+    manifest = json.loads(
+        _read_encrypted(tenant_path / "manifest.enc", cipher).decode("utf-8")
+    )
+    metadata = json.loads(
+        _read_encrypted(tenant_path / "governed_upload.enc", cipher).decode("utf-8")
+    )
+    content = _read_encrypted(tenant_path / "governed_source.enc", cipher)
+    if scan_upload(metadata["filename"], content)["sha256"] != metadata["source_sha256"]:
+        raise ProspectIntakeError("governed source identity does not match its locator")
+    tenant = ProspectTenant(
+        **{field: manifest[field] for field in ProspectTenant.__dataclass_fields__}
+    )
+    return tenant, manifest["prospect_name"], metadata, content
+
+
 def load_analysis(
     tenant_id: str, *, root: Path = STORE_ROOT, key: str | bytes | None = None
 ) -> ProspectAnalysis:

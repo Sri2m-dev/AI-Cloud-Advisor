@@ -13,7 +13,8 @@ if ROOT_DIR not in sys.path:
 
 from components.sidebar_navigation import render_sidebar_navigation
 from enterprise_copilot import CopilotRequest, enterprise_ai_copilot
-from services.demo_tenant_service import demo_mode_enabled, is_demo_tenant, load_demo_tenant
+from services.demo_ask_nexora_service import DemoAskNexoraService
+from services.demo_tenant_service import load_demo_tenant
 from services.enterprise_spend_composition import authenticated_tenant_context
 from shared.auth import require_role
 from shared.currency import format_currency_amount
@@ -33,6 +34,7 @@ require_role(ROLES)
 role = str(st.session_state.get("role") or "")
 render_sidebar_navigation(role)
 evidence_context = resolve_active_evidence_context(st.session_state)
+st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
 if evidence_context.is_prospect:
     analysis = evidence_context.prospect_analysis
     admission = evidence_context.evidence_admission
@@ -109,43 +111,21 @@ if evidence_context.is_prospect:
         )
         del prospect_history[:-10]
     st.stop()
-authenticated = authenticated_tenant_context(st.session_state)
-copilot = enterprise_ai_copilot(authenticated.fabric_context, role=authenticated.role)
-session_id = (
-    f"{authenticated.fabric_context.tenant_id}:{st.session_state.get('user_id', 'session')}"
-)
+organization_id = str(st.session_state.get("organization_id") or "")
+authenticated = None
+copilot = None
+if evidence_context.is_demo:
+    session_id = f"demo:{organization_id}:{st.session_state.get('user_id', 'session')}"
+else:
+    authenticated = authenticated_tenant_context(st.session_state)
+    copilot = enterprise_ai_copilot(authenticated.fabric_context, role=authenticated.role)
+    session_id = (
+        f"{authenticated.fabric_context.tenant_id}:"
+        f"{st.session_state.get('user_id', 'session')}"
+    )
 history_key = f"enterprise_copilot:{session_id}"
 history = st.session_state.setdefault(history_key, [])
 
-
-def _demo_executive_answer(question: str, organization_id: str) -> str | None:
-    """Answer supported demo questions from the same governed presentation dataset."""
-    if not (demo_mode_enabled() and is_demo_tenant(organization_id)):
-        return None
-    normalized = " ".join(question.lower().split())
-    if not any(term in normalized for term in ("saving", "opportunity", "value")):
-        return None
-    demo = load_demo_tenant(organization_id)
-    metrics = demo.get("metrics", {})
-    decisions = demo.get("decisions", [])
-    known_impacts = [
-        item for item in decisions if item.get("financial_impact") is not None
-    ]
-    largest = max(known_impacts, key=lambda item: item["financial_impact"], default=None)
-    largest_text = (
-        f" The largest decision-linked amount is {largest['title']} "
-        f"(${largest['financial_impact'] / 1_000_000:.1f}M)."
-        if largest
-        else ""
-    )
-    return (
-        "Based on the current governed demonstration evidence, "
-        f"${metrics.get('identified_savings', 0) / 1_000_000:.1f}M is qualified "
-        "opportunity and must not be treated as booked savings. "
-        f"${metrics.get('verified_realized_savings', 0) / 1_000_000:.1f}M has been "
-        f"verified as realized value.{largest_text} "
-        f"{len(decisions)} leadership decisions currently require action."
-    )
 
 st.title("Enterprise AI Copilot")
 st.markdown(
@@ -159,8 +139,7 @@ st.markdown(
 )
 st.caption("Read-only · governed tenant evidence · unsupported conclusions remain UNKNOWN")
 
-organization_id = str(st.session_state.get("organization_id") or "")
-if not history and demo_mode_enabled() and is_demo_tenant(organization_id):
+if not history and evidence_context.is_demo:
     demo = load_demo_tenant(organization_id)
     metrics = demo.get("metrics", {})
     st.markdown("### Current executive summary")
@@ -193,17 +172,28 @@ question = st.chat_input("Ask about governed enterprise entities, cost, ownershi
 if question:
     with st.chat_message("user"):
         st.write(question)
-    demo_answer = _demo_executive_answer(question, organization_id)
-    response = copilot.ask(
-        CopilotRequest(
-            authenticated.fabric_context,
-            question,
-            authenticated.role,
-            session_id,
+    demo_result = None
+    response = None
+    if evidence_context.is_demo:
+        demo_result = DemoAskNexoraService().ask(
+            question, organization_id=evidence_context.organization_id or ""
         )
-    )
+    else:
+        assert authenticated is not None and copilot is not None
+        response = copilot.ask(
+            CopilotRequest(
+                authenticated.fabric_context,
+                question,
+                authenticated.role,
+                session_id,
+            )
+        )
     with st.chat_message("assistant"):
-        answer = demo_answer or str(response.answer or "").strip()
+        answer = (
+            demo_result.answer
+            if demo_result is not None
+            else str(response.answer or "").strip()
+        )
         empty_answer = answer.lower() in {"", "unknown", "unknown remains unknown.", "[]", "{}"}
         if empty_answer:
             st.write(
@@ -212,9 +202,14 @@ if question:
             )
         else:
             st.write(answer)
-        if response.blocked and not demo_answer:
+        if demo_result is not None and not demo_result.supported:
+            st.warning(
+                "This question is not currently supported by certified demonstration "
+                "evidence. No conclusion has been inferred."
+            )
+        elif response is not None and response.blocked:
             st.error("Policy blocked this request.")
-        elif response.unsupported and not demo_answer:
+        elif response is not None and response.unsupported:
             st.warning(
                 "This question is not currently supported by certified evidence. "
                 "No conclusion has been inferred."
@@ -222,18 +217,36 @@ if question:
         with st.expander("Show Evidence"):
             tabs = st.tabs(["Citations", "Evidence", "Context", "Confidence"])
             with tabs[0]:
-                st.json([asdict(item) for item in response.citations])
+                st.json(
+                    list(demo_result.provenance)
+                    if demo_result is not None
+                    else [asdict(item) for item in response.citations]
+                )
             with tabs[1]:
                 st.json(
-                    asdict(response.grounded_context.evidence)
+                    {"facts": list(demo_result.facts)}
+                    if demo_result is not None
+                    else asdict(response.grounded_context.evidence)
                     if response.grounded_context
                     else {}
                 )
             with tabs[2]:
-                st.json(asdict(response.grounded_context) if response.grounded_context else {})
-            with tabs[3]:
                 st.json(
                     {
+                        "workspace": "DEMO",
+                        "classification": "SYNTHETIC_DEMONSTRATION_DATA",
+                        "unknowns": list(demo_result.unknowns),
+                    }
+                    if demo_result is not None
+                    else asdict(response.grounded_context)
+                    if response.grounded_context
+                    else {}
+                )
+            with tabs[3]:
+                st.json(
+                    {"evidence_kind": "synthetic_demo", "model_confidence": None}
+                    if demo_result is not None
+                    else {
                         "enterprise_confidence": response.enterprise_confidence,
                         "model_confidence": response.model_confidence,
                         "freshness": [item.freshness for item in response.citations],

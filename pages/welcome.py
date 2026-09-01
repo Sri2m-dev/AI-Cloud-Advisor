@@ -6,9 +6,12 @@ import streamlit as st
 
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import render_sidebar_navigation
-from services.demo_tenant_service import demo_mode_enabled, load_demo_tenant
+from services.demo_tenant_service import load_demo_tenant
 from shared.currency import format_currency_amount
-from shared.evidence_context import clear_prospect_context
+from shared.evidence_context import (
+    activate_demo_workspace,
+    resolve_active_evidence_context,
+)
 from shared.auth import require_role
 from shared.session import init_session
 from shared.styles import configure_page
@@ -24,14 +27,15 @@ display_name = str(st.session_state.get("display_name") or "").strip()
 if not display_name:
     display_name = str(st.session_state.get("email") or "Executive").split("@", 1)[0]
 display_name = html.escape(display_name.replace(".", " ").replace("_", " ").title())
-is_demo = demo_mode_enabled() and (
-    organization_id.startswith("demo-") or organization_id.startswith("de000000-")
-)
+evidence_context = resolve_active_evidence_context(st.session_state)
+is_demo = evidence_context.is_demo
 
-prospect_result = st.session_state.get("prospect_analysis")
+prospect_result = evidence_context.prospect_analysis if evidence_context.is_prospect else None
 prospect_name = str(
     st.session_state.get("prospect_name") or "Uploaded Environment"
 ).strip()
+if evidence_context.is_prospect:
+    st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
 
 if prospect_result and not getattr(prospect_result, "currency_resolution_required", True):
     currency = str(prospect_result.currency)
@@ -140,7 +144,7 @@ if prospect_result and not getattr(prospect_result, "currency_resolution_require
             use_container_width=True,
             key="return_to_demo_enterprise",
         ):
-            clear_prospect_context(st.session_state)
+            activate_demo_workspace(st.session_state)
             st.rerun()
 
     st.markdown("### Spend composition")
@@ -207,7 +211,20 @@ elif prospect_result:
         use_container_width=True,
     )
 
+elif evidence_context.is_prospect:
+    st.warning("The governed prospect workspace is active.")
+    st.write(
+        "Open Analyze Environment to review the retained evidence. Enterprise conclusions "
+        "remain unavailable unless supported by governed prospect evidence."
+    )
+    st.page_link(
+        "pages/analyze_environment.py",
+        label="Review Prospect Analysis",
+        use_container_width=True,
+    )
+
 elif is_demo:
+    st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
     demo = load_demo_tenant(organization_id)
     metrics = demo.get("metrics", {})
     story = demo.get("story", {})

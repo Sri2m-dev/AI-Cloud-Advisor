@@ -1,2 +1,4 @@
 [client]
 showSidebarNavigation = false
+# Client pages show only the exception type; full diagnostics remain in server logs.
+showErrorDetails = "type"

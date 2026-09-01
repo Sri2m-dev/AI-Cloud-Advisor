@@ -368,6 +368,7 @@ render_enterprise_sidebar(
 )
 
 evidence_context = resolve_active_evidence_context(st.session_state)
+st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
 if evidence_context.is_prospect:
     st.title("Business Services")
     st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")

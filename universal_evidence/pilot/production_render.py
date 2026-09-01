@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from universal_evidence.pilot.production_views import (
-    RECONCILIATION_MUTATION_ROLES,
     confirm_reconciliation,
     reject_reconciliation,
 )
@@ -53,11 +52,11 @@ def render_reconciliation(st, model, *, controls=None, authorization=None) -> No
 
 
 def _render_decision_actions(st, item, controls, *, authorization):
-    role = authorization.role if authorization is not None else ""
     if (
         controls is None
         or item.status != "Needs Review"
-        or role not in RECONCILIATION_MUTATION_ROLES
+        or authorization is None
+        or not authorization.allows_reconciliation_mutation
         or not item.proposal_fingerprint
     ):
         return
