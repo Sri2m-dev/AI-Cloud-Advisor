@@ -45,6 +45,13 @@ from agents.orchestrator import AgentOrchestrator
 class AICopilotService:
     _HISTORY: dict[str, list[dict[str, Any]]] = {}
 
+    @staticmethod
+    def ask_canonical_optimization(context, intent, repository=None):
+        """Bounded CMP-P2 answer path with no independent savings formula."""
+        from services.canonical_optimization_service import CanonicalOptimizationService
+
+        return CanonicalOptimizationService(repository).ask(context, intent)
+
     SUGGESTED_PROMPTS = [
         "Show top optimization opportunities",
         "Which applications are unhealthy?",

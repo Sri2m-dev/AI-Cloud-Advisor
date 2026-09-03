@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pandas as pd
@@ -8,7 +9,9 @@ import streamlit as st
 
 from auth.guards import require_login
 from auth.role_constants import normalize_role
+from components.optimization_governance import render_optimization_governance
 from components.sidebar_navigation import render_sidebar_navigation
+from services.enterprise_spend_composition import authenticated_tenant_context
 from services.savings_governance_service import SavingsGovernanceService
 
 
@@ -48,6 +51,21 @@ def main() -> None:
 
     st.title("Savings Governance")
     st.caption("Optimization lifecycle, implementation accountability, and realized savings governance")
+
+    if os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB", "").strip():
+        context = authenticated_tenant_context(st.session_state)
+        render_optimization_governance(
+            st,
+            context=context,
+            actor_id=str(user.get("email") or "unknown"),
+            actor_role=role,
+        )
+        canonical = SavingsGovernanceService.get_canonical_authority(context)
+        st.write("Canonical savings authority", canonical)
+        return
+    if os.getenv("ENVIRONMENT", "development").lower() == "production":
+        st.error("Canonical optimization authority is not configured.")
+        st.stop()
 
     kpis = SavingsGovernanceService.get_kpis()
 

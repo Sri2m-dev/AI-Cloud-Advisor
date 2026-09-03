@@ -50,6 +50,12 @@ class ExecutiveWorkspaceCompositionService:
     """Shapes existing certified outputs for the frozen Executive Experience."""
 
     @staticmethod
+    def get_canonical_optimization(context, repository=None):
+        from services.canonical_optimization_service import CanonicalOptimizationService
+
+        return CanonicalOptimizationService(repository).executive_summary(context)
+
+    @staticmethod
     def get_snapshot(
         key: str,
         context: AuthenticatedTenantContext,

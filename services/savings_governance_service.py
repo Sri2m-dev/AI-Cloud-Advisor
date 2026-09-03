@@ -49,6 +49,13 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 class SavingsGovernanceService:
     @staticmethod
+    def get_canonical_authority(context, repository=None):
+        """Production authority; deliberately has no legacy or Demo fallback."""
+        from services.canonical_optimization_service import CanonicalOptimizationService
+
+        return CanonicalOptimizationService(repository).savings_governance(context)
+
+    @staticmethod
     def _fallback_pipeline() -> list[dict[str, Any]]:
         return [
             {
