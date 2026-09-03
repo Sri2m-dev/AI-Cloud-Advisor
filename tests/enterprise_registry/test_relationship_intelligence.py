@@ -149,6 +149,48 @@ def test_directional_queries_multihop_dependencies_and_impact_narrative():
     assert "1 business service(s)" in impact.narrative
 
 
+def test_confirmed_relationships_are_authoritative_and_candidates_are_hidden():
+    account, application, service = _entities()
+    candidate_edge = _edge(
+        "candidate-1",
+        "supports",
+        service,
+        application,
+        evidence=("manual:guess",),
+    )
+    candidate_edge.decision_state = "candidate"
+    intelligence = RelationshipIntelligenceService(
+        CTX,
+        role="auditor",
+        entities=(account, application, service),
+        relationships=(
+            _edge("1", "runs_on", application, account),
+            _edge("2", "supports", service, application),
+            candidate_edge,
+        ),
+    )
+
+    authoritative = intelligence.get_relationships(service.canonical_id)
+    assert [row.id for row in authoritative] == ["2"]
+    assert not any(row.id == "candidate-1" for row in authoritative)
+
+
+def test_relationship_queries_use_half_open_effective_intervals():
+    account, application, service = _entities()
+    jan = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    jul = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    first = _edge("owner-x", "owned_by", application, account)
+    first.effective_from, first.effective_to = jan, jul
+    second = _edge("owner-y", "owned_by", application, service)
+    second.effective_from = jul
+    intelligence = RelationshipIntelligenceService(
+        CTX, role="auditor", entities=(account, application, service), relationships=(first, second)
+    )
+
+    assert [row.id for row in intelligence.get_relationships(application.canonical_id, effective_at=jan)] == ["owner-x"]
+    assert [row.id for row in intelligence.get_relationships(application.canonical_id, effective_at=jul)] == ["owner-y"]
+
+
 def test_search_and_performance_targets():
     intelligence = _service()
     account = _entities()[0]

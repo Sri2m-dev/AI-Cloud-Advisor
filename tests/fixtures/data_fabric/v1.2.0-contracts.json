@@ -160,6 +160,110 @@
           },
           "name": "ownership",
           "type": "EntityOwnership | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "canonical_name",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "display_name",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": "active"
+          },
+          "name": "lifecycle_status",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": "unclassified"
+          },
+          "name": "classification_status",
+          "type": "str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "ownership_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "business_context_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "financial_context_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "health_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "risk_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "lineage_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "provenance_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "valid_from",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "valid_to",
+          "type": "datetime | NoneType"
         }
       ],
       "frozen": false,
@@ -303,6 +407,102 @@
           },
           "name": "quality",
           "type": "EntityQuality | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "name": "evidence",
+          "type": "tuple[str, Ellipsis]"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "discovery_timestamp",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "last_validation",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "lineage_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "provenance_reference",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": "confirmed"
+          },
+          "name": "decision_state",
+          "type": "RelationshipDecisionState | str"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "effective_from",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "effective_to",
+          "type": "datetime | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "actor",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "actor_role",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "decision_reason",
+          "type": "str | NoneType"
+        },
+        {
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "name": "superseded_by",
+          "type": "str | NoneType"
         }
       ],
       "frozen": false,
@@ -714,7 +914,28 @@
         "recommendation",
         "approval",
         "policy",
-        "evidence"
+        "evidence",
+        "organization",
+        "business_unit",
+        "portfolio",
+        "product",
+        "platform",
+        "cloud_account",
+        "cloud_subscription",
+        "cloud_project",
+        "compute_resource",
+        "database",
+        "storage",
+        "network",
+        "kubernetes_cluster",
+        "ai_platform",
+        "saas_product",
+        "license",
+        "user",
+        "team",
+        "spend_source",
+        "budget",
+        "allocation_target"
       ]
     },
     "EntityVersion": {
@@ -787,6 +1008,19 @@
       "module": "data_fabric.contracts.versioning",
       "slots": true
     },
+    "RelationshipDecisionState": {
+      "kind": "enum",
+      "module": "data_fabric.contracts.enums",
+      "values": [
+        "candidate",
+        "under_review",
+        "confirmed",
+        "rejected",
+        "revision_required",
+        "superseded",
+        "inactive"
+      ]
+    },
     "RelationshipType": {
       "kind": "enum",
       "module": "data_fabric.contracts.enums",
@@ -802,7 +1036,28 @@
         "governs",
         "approves",
         "evidences",
-        "associated_with"
+        "associated_with",
+        "owns",
+        "implemented_by",
+        "belongs_to",
+        "produces",
+        "hosted_on",
+        "communicates_with",
+        "secured_by",
+        "monitored_by",
+        "consumes",
+        "supports",
+        "part_of",
+        "provides",
+        "managed_by",
+        "funded_by",
+        "allocated_to",
+        "backed_up_by",
+        "protected_by",
+        "integrates_with",
+        "charged_to",
+        "attributed_to",
+        "affects"
       ]
     }
   },
@@ -816,6 +1071,7 @@
     "EntityQuality",
     "EntityVersion",
     "EntityType",
+    "RelationshipDecisionState",
     "RelationshipType"
   ],
   "format_version": 1

@@ -123,6 +123,16 @@ class SupabaseRelationshipRepository(RelationshipRepository):
             "confidence_score": ratio_to_100(payload.get("confidence_score")),
             "quality_score": ratio_to_100(payload.get("quality_score")),
             "metadata": plain_mapping(payload.get("metadata", {})),
+            "evidence": list(payload.get("evidence") or ()),
+            "lineage": plain_mapping(payload.get("lineage") or {}),
+            "provenance": plain_mapping(payload.get("provenance") or {}),
+            "decision_state": payload.get("decision_state", "confirmed"),
+            "effective_from": _iso_value(payload.get("effective_from")),
+            "effective_to": _iso_value(payload.get("effective_to")),
+            "actor": payload.get("actor"),
+            "actor_role": payload.get("actor_role"),
+            "decision_reason": payload.get("decision_reason"),
+            "superseded_by": payload.get("superseded_by"),
             "active": record.active,
             "revision": record.revision,
             "version": int(payload.get("version", 1)),
@@ -148,6 +158,16 @@ class SupabaseRelationshipRepository(RelationshipRepository):
             "confidence_score": score_to_ratio(row.get("confidence_score")),
             "quality_score": score_to_ratio(row.get("quality_score")),
             "metadata": plain_mapping(row.get("metadata", {})),
+            "evidence": tuple(row.get("evidence") or ()),
+            "lineage": plain_mapping(row.get("lineage") or {}) or None,
+            "provenance": plain_mapping(row.get("provenance") or {}) or None,
+            "decision_state": row.get("decision_state", "confirmed"),
+            "effective_from": dt(row.get("effective_from")),
+            "effective_to": dt(row.get("effective_to")),
+            "actor": row.get("actor"),
+            "actor_role": row.get("actor_role"),
+            "decision_reason": row.get("decision_reason"),
+            "superseded_by": row.get("superseded_by"),
             "version": row.get("version", 1),
             "created_at": dt(row["created_at"]),
             "updated_at": dt(row["updated_at"]),
@@ -174,3 +194,9 @@ class SupabaseRelationshipRepository(RelationshipRepository):
             deactivated_at=dt(row.get("deactivated_at")),
             deactivated_by=row.get("deactivated_by"),
         )
+
+
+def _iso_value(value: Any) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    return iso(value)

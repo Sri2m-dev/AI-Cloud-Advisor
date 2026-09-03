@@ -12,13 +12,14 @@ from data_fabric.contracts import (
     EntityType,
     RelationshipType,
 )
-from data_fabric.foundation import TenantContext
+from data_fabric.foundation import DataFabricTenantBoundaryError, TenantContext
 from data_fabric.identity import (
     IdentityResolver,
     MatchCandidate,
     MatchDecision,
     MatchResult,
 )
+from data_fabric.identity.matching import normalize_name
 from data_fabric.quality import DataQualityEvaluator, QualityAssessment
 from data_fabric.registry import (
     EntityNotFoundError,
@@ -169,6 +170,25 @@ class EnterpriseMetadataRegistryService:
         """Resolve canonical, source, alias, duplicate, and no-match identities."""
 
         self.context.assert_record_matches(candidate, "identity candidate")
+        resolver_entities = getattr(self.identities, "_entities", ())
+        for entity in tuple(resolver_entities):
+            if entity.organization_id != self.context.organization_id:
+                continue
+            if entity.tenant_id == self.context.tenant_id:
+                continue
+            same_source = (
+                candidate.source_system == entity.source_system
+                and candidate.source_identifier == entity.source_identifier
+            )
+            same_name = bool(
+                candidate.name
+                and entity.name
+                and normalize_name(candidate.name) == normalize_name(entity.name)
+            )
+            if same_source or same_name:
+                raise DataFabricTenantBoundaryError(
+                    "identity candidate crosses tenant boundary"
+                )
         result = self.identities.detect_duplicates(candidate)
         for entity in result.matched_entities:
             self.context.assert_record_matches(entity, "identity match")

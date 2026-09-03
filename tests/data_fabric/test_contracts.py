@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -93,6 +93,32 @@ def test_enterprise_relationship_accepts_string_enum() -> None:
     assert relationship.relationship_type is RelationshipType.RUNS_ON
     assert relationship.source_entity_id == "app-1"
     assert relationship.target_entity_id == "resource-1"
+
+
+def test_enterprise_relationship_keeps_governance_state_and_effective_window() -> None:
+    now = datetime.now(timezone.utc)
+    relationship = EnterpriseRelationship(
+        id="rel-2",
+        relationship_type="charged_to",
+        source_entity_id="resource-1",
+        target_entity_id="cost-center-1",
+        organization_id="org-1",
+        tenant_id="tenant-1",
+        decision_state="candidate",
+        effective_from=now,
+        effective_to=now + timedelta(days=1),
+        actor="analyst",
+        actor_role="finance",
+        decision_reason="pending review",
+        superseded_by="rel-9",
+    )
+
+    assert relationship.relationship_type is RelationshipType.CHARGED_TO
+    assert relationship.decision_state.value == "candidate"
+    assert relationship.actor == "analyst"
+    assert relationship.effective_from == now
+    assert relationship.effective_to == now + timedelta(days=1)
+    assert relationship.superseded_by == "rel-9"
 
 
 def test_nested_contracts_can_attach_to_entity() -> None:

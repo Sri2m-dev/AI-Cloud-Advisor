@@ -9,7 +9,7 @@ import pytest
 
 from data_fabric.adapters.supabase import DataFabricDatabaseConfig, SupabaseDataFabricClient, SupabaseRelationshipRepository
 from data_fabric.adapters.supabase.exceptions import SupabaseAdapterConflictError, SupabaseAdapterOperationError
-from data_fabric.contracts import EnterpriseRelationship, RelationshipType
+from data_fabric.contracts import EnterpriseRelationship, RelationshipDecisionState, RelationshipType
 from data_fabric.foundation import TenantContext
 from tests.data_fabric.supabase_fake import FakeRawSupabaseClient, tenant_filters_seen
 
@@ -36,6 +36,14 @@ def make_relationship(record_id: str = "11111111-1111-4111-8111-111111111111") -
         confidence_score=0.8,
         quality_score=0.9,
         metadata={"criticality": "high"},
+        evidence=("cmdb:edge-1",),
+        decision_state=RelationshipDecisionState.UNDER_REVIEW,
+        effective_from=now,
+        effective_to=datetime(2027, 1, 1, tzinfo=timezone.utc),
+        actor="steward-1",
+        actor_role="client_admin",
+        decision_reason="CMDB evidence reviewed",
+        superseded_by="44444444-4444-4444-8444-444444444444",
     )
 
 
@@ -49,6 +57,15 @@ def test_add_get_and_lookup_relationships_are_tenant_scoped() -> None:
     assert repository.find_by_source_entity(tenant, "22222222-2222-4222-8222-222222222222").total_count == 1
     assert repository.find_by_target_entity(tenant, "33333333-3333-4333-8333-333333333333").total_count == 1
     assert tenant_filters_seen(raw, "data_fabric.enterprise_relationships")
+    restored = repository.mapper.record_to_domain(repository.get(tenant, created.record_id))
+    assert restored.decision_state is RelationshipDecisionState.UNDER_REVIEW
+    assert restored.effective_from == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert restored.effective_to == datetime(2027, 1, 1, tzinfo=timezone.utc)
+    assert restored.evidence == ("cmdb:edge-1",)
+    assert restored.actor == "steward-1"
+    assert restored.actor_role == "client_admin"
+    assert restored.decision_reason == "CMDB evidence reviewed"
+    assert restored.superseded_by == "44444444-4444-4444-8444-444444444444"
 
 
 def test_update_uses_rpc_revision_check_and_stale_revision_conflicts() -> None:

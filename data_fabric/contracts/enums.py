@@ -48,6 +48,18 @@ class EntityType(str, Enum):
     ALLOCATION_TARGET = "allocation_target"
 
 
+class RelationshipDecisionState(str, Enum):
+    """Governance lifecycle for enterprise relationship authority."""
+
+    CANDIDATE = "candidate"
+    UNDER_REVIEW = "under_review"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    REVISION_REQUIRED = "revision_required"
+    SUPERSEDED = "superseded"
+    INACTIVE = "inactive"
+
+
 class RelationshipType(str, Enum):
     """Provider-neutral canonical relationship types."""
 
@@ -81,3 +93,6 @@ class RelationshipType(str, Enum):
     BACKED_UP_BY = "backed_up_by"
     PROTECTED_BY = "protected_by"
     INTEGRATES_WITH = "integrates_with"
+    CHARGED_TO = "charged_to"
+    ATTRIBUTED_TO = "attributed_to"
+    AFFECTS = "affects"

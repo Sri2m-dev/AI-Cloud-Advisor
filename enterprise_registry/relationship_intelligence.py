@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 
-from data_fabric.contracts import EnterpriseEntity, EnterpriseRelationship
+from data_fabric.contracts import (
+    EnterpriseEntity,
+    EnterpriseRelationship,
+    RelationshipDecisionState,
+)
 from data_fabric.foundation import TenantContext
 
 
@@ -35,6 +40,17 @@ class ImpactSummary:
 
 
 class RelationshipIntelligenceService:
+    @staticmethod
+    def _is_authoritative(
+        relationship: EnterpriseRelationship, effective_at: datetime | None = None
+    ) -> bool:
+        if relationship.decision_state is not RelationshipDecisionState.CONFIRMED:
+            return False
+        moment = effective_at or datetime.now(timezone.utc)
+        return (relationship.effective_from is None or relationship.effective_from <= moment) and (
+            relationship.effective_to is None or moment < relationship.effective_to
+        )
+
     def __init__(self, context: TenantContext, *, role: str, entities, relationships) -> None:
         if role not in {
             "super_admin",
@@ -82,13 +98,15 @@ class RelationshipIntelligenceService:
         *,
         direction: RelationshipDirection | str = RelationshipDirection.BOTH,
         relationship_type: str | None = None,
+        effective_at: datetime | None = None,
     ):
         entity = self._canonical[canonical_id]
         direction = RelationshipDirection(direction)
         return tuple(
             relationship
             for relationship in self._relationships
-            if (
+            if self._is_authoritative(relationship, effective_at)
+            and (
                 relationship_type is None
                 or relationship.relationship_type.value == relationship_type
             )
@@ -107,6 +125,7 @@ class RelationshipIntelligenceService:
         max_hops: int | None = 3,
         direction: RelationshipDirection | str = RelationshipDirection.BOTH,
         relationship_types: set[str] | None = None,
+        effective_at: datetime | None = None,
     ) -> tuple[RelationshipPath, ...]:
         root = self._canonical[canonical_id]
         direction = RelationshipDirection(direction)
@@ -118,7 +137,9 @@ class RelationshipIntelligenceService:
             current, entities, relationships = queue.popleft()
             if len(relationships) >= limit:
                 continue
-            for edge, next_id in self._neighbors(current.id, direction, relationship_types):
+            for edge, next_id in self._neighbors(
+                current.id, direction, relationship_types, effective_at
+            ):
                 if next_id in seen or next_id not in self._entities:
                     continue
                 seen.add(next_id)
@@ -170,8 +191,10 @@ class RelationshipIntelligenceService:
     def get_blast_radius(self, canonical_id: str, max_hops: int | None = None):
         return self.get_impact(canonical_id, max_hops=max_hops)
 
-    def _neighbors(self, entity_id, direction, relationship_types):
+    def _neighbors(self, entity_id, direction, relationship_types, effective_at=None):
         for edge in self._relationships:
+            if not self._is_authoritative(edge, effective_at):
+                continue
             if relationship_types and edge.relationship_type.value not in relationship_types:
                 continue
             if direction in {RelationshipDirection.OUTBOUND, RelationshipDirection.BOTH}:

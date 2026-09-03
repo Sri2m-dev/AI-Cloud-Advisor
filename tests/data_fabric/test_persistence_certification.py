@@ -54,6 +54,7 @@ EXPECTED_MIGRATIONS = [
     "0018_create_atomic_relationship_write_rpc.sql",
     "0019_create_stewardship_persistence.sql",
     "0020_create_stewardship_rpcs.sql",
+    "0021_extend_relationship_authority.sql",
 ]
 
 TABLE_MIGRATIONS = {
@@ -99,7 +100,7 @@ def test_expected_adapter_classes_import_and_match_contracts():
     assert hasattr(SupabaseAtomicWriteExecutor, "execute_relationship_write")
 
 
-def test_migration_sequence_complete_0001_through_0020():
+def test_migration_sequence_complete_0001_through_0021():
     assert sorted(path.name for path in MIGRATIONS.glob("*.sql")) == EXPECTED_MIGRATIONS
 
 

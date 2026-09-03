@@ -14,7 +14,12 @@ class MatchDecision(str, Enum):
     """Resolution outcome for an identity match attempt."""
 
     MATCH = "match"
+    MATCHED = "matched"
     DUPLICATE = "duplicate"
+    CANDIDATE = "candidate"
+    AMBIGUOUS = "ambiguous"
+    UNRESOLVED = "unresolved"
+    REJECTED = "rejected"
     NO_MATCH = "no_match"
 
 

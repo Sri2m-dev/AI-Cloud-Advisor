@@ -38,6 +38,19 @@ class InMemoryIdentityResolver(IdentityResolver):
 
     def resolve(self, candidate: MatchCandidate) -> MatchResult:
         self._validate_candidate(candidate)
+        if candidate.organization_id and candidate.tenant_id is not None:
+            same_scope = any(
+                entity.organization_id == candidate.organization_id
+                and entity.tenant_id == candidate.tenant_id
+                for entity in self._entities
+            )
+            if not same_scope:
+                return MatchResult(
+                    decision=MatchDecision.NO_MATCH,
+                    candidate=candidate,
+                    confidence_score=0.0,
+                    match_reason="cross_tenant_rejected",
+                )
         matches = self._rank_matches(candidate)
         if not matches:
             return MatchResult(
@@ -60,8 +73,9 @@ class InMemoryIdentityResolver(IdentityResolver):
             )
 
         matched_entity = self._copy_entity(matches[0][2])
+        decision = MatchDecision.MATCH if top_reason not in {"normalized_name"} else MatchDecision.CANDIDATE
         return MatchResult(
-            decision=MatchDecision.MATCH,
+            decision=decision,
             candidate=candidate,
             confidence_score=top_score,
             match_reason=top_reason,
@@ -93,6 +107,8 @@ class InMemoryIdentityResolver(IdentityResolver):
     ) -> list[tuple[float, str, EnterpriseEntity]]:
         matches = []
         for entity in self._entities:
+            if candidate.tenant_id is not None and candidate.tenant_id != entity.tenant_id:
+                continue
             score, reason = score_match(candidate, entity)
             if score > 0:
                 matches.append((score, reason, entity))

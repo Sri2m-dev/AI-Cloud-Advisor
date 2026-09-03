@@ -69,14 +69,15 @@ def test_resolver_matches_source_identity() -> None:
     assert result.match_reason == "source_identity"
 
 
-def test_resolver_matches_normalized_name() -> None:
+def test_resolver_treats_normalized_name_as_candidate_not_authoritative() -> None:
     resolver = InMemoryIdentityResolver([make_entity()])
 
     result = resolver.resolve(make_candidate(name="checkout   service"))
 
-    assert result.decision is MatchDecision.MATCH
+    assert result.decision is MatchDecision.CANDIDATE
     assert result.confidence_score == 0.86
     assert result.match_reason == "normalized_name"
+    assert result.matched_entity is not None
 
 
 def test_resolver_matches_aliases() -> None:
@@ -146,6 +147,20 @@ def test_resolver_scopes_matches_by_organization() -> None:
     )
 
     assert result.decision is MatchDecision.NO_MATCH
+
+
+def test_resolver_rejects_cross_tenant_candidates_before_scoring() -> None:
+    resolver = InMemoryIdentityResolver([make_entity()])
+
+    result = resolver.resolve(
+        make_candidate(
+            name="Checkout Service",
+            tenant_id="tenant-2",
+        )
+    )
+
+    assert result.decision is MatchDecision.NO_MATCH
+    assert result.matched_entity is None
 
 
 def test_resolver_validates_candidates_and_entities() -> None:

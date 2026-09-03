@@ -86,6 +86,10 @@ def build_snapshot() -> dict[str, Any]:
 
 
 def compare_snapshots(expected: Any, actual: Any, path: str = "$") -> list[str]:
+    # JSON fixtures represent tuple defaults as arrays; contract inspection may
+    # reconstruct the same immutable default as a tuple.
+    if isinstance(expected, list) and isinstance(actual, tuple):
+        actual = list(actual)
     """Return deterministic, human-readable differences."""
     if type(expected) is not type(actual):
         return [f"{path}: expected {type(expected).__name__}, got {type(actual).__name__}"]

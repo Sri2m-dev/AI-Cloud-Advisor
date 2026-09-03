@@ -67,4 +67,4 @@ def test_command_line_check_passes_against_committed_fixture() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "10 contracts match v1.2.0-data-fabric" in result.stdout
+    assert "11 contracts match v1.2.0-data-fabric" in result.stdout

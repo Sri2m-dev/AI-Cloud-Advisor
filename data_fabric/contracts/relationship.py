@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from data_fabric.contracts._validation import normalize_enum, validate_score
-from data_fabric.contracts.enums import RelationshipType
+from data_fabric.contracts.enums import RelationshipDecisionState, RelationshipType
 from data_fabric.contracts.lineage import EntityLineage
 from data_fabric.contracts.provenance import EntityProvenance
 from data_fabric.contracts.quality import EntityQuality
@@ -40,6 +40,13 @@ class EnterpriseRelationship:
     last_validation: datetime | None = None
     lineage_reference: str | None = None
     provenance_reference: str | None = None
+    decision_state: RelationshipDecisionState | str = RelationshipDecisionState.CONFIRMED
+    effective_from: datetime | None = None
+    effective_to: datetime | None = None
+    actor: str | None = None
+    actor_role: str | None = None
+    decision_reason: str | None = None
+    superseded_by: str | None = None
 
     def __post_init__(self) -> None:
         self.relationship_type = normalize_enum(
@@ -47,6 +54,14 @@ class EnterpriseRelationship:
             self.relationship_type,
             "relationship_type",
         )
+        self.decision_state = normalize_enum(
+            RelationshipDecisionState,
+            self.decision_state,
+            "decision_state",
+        )
         self.confidence_score = validate_score(self.confidence_score, "confidence_score")
         self.quality_score = validate_score(self.quality_score, "quality_score")
         self.evidence = tuple(str(value).strip() for value in self.evidence if str(value).strip())
+        if self.effective_from is not None and self.effective_to is not None:
+            if self.effective_to <= self.effective_from:
+                raise ValueError("effective_to must be after effective_from")

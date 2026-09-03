@@ -94,6 +94,9 @@ class RelationshipPersistenceMapper(PersistenceMapper[EnterpriseRelationship]):
         payload = dict(record.payload)
         payload["created_at"] = _as_datetime(payload["created_at"])
         payload["updated_at"] = _as_datetime(payload["updated_at"])
+        for field in ("effective_from", "effective_to", "discovery_timestamp", "last_validation"):
+            if payload.get(field) is not None:
+                payload[field] = _as_datetime(payload[field])
         return EnterpriseRelationship(**_thaw(payload))
 
 

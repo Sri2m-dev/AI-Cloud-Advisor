@@ -1,7 +1,7 @@
 """Canonical Enterprise Data Fabric contracts."""
 
 from data_fabric.contracts.entity import EnterpriseEntity
-from data_fabric.contracts.enums import EntityType, RelationshipType
+from data_fabric.contracts.enums import EntityType, RelationshipDecisionState, RelationshipType
 from data_fabric.contracts.identity import EntityIdentity
 from data_fabric.contracts.lineage import EntityLineage
 from data_fabric.contracts.ownership import EntityOwnership
@@ -20,5 +20,6 @@ __all__ = [
     "EntityQuality",
     "EntityVersion",
     "EntityType",
+    "RelationshipDecisionState",
     "RelationshipType",
 ]
