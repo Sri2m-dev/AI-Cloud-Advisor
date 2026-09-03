@@ -77,6 +77,7 @@ def test_migrations_are_explicit_and_non_destructive() -> None:
         "0019_create_stewardship_persistence.sql",
         "0020_create_stewardship_rpcs.sql",
         "0021_extend_relationship_authority.sql",
+        "0022_create_source_fact_authority.sql",
     ]
 
     combined = "\n".join(path.read_text().lower() for path in MIGRATION_ROOT.glob("*.sql"))
