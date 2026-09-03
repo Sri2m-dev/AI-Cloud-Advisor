@@ -191,13 +191,13 @@ def test_kill_switch_suppresses_prior_result_but_preserves_governance_and_runs()
     assert semantic.confirmation_service.get_effective_mapping(column, actor=actor)
 
 
-def test_real_workbook_uses_184_detail_rows_but_cost_stays_blocked_without_currency_authority():
-    path = Path("temp_uploads/CUR Jan 2026.xlsx")
+def test_synthetic_workbook_cost_stays_blocked_without_currency_authority():
+    path = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
     if not path.exists():
         pytest.skip("certified local workbook is not present")
     admission = _admission(name="real-act005", content=path.read_bytes())
     service, _, semantic, *_items, actor, _audit = _measurement(admission)
-    _confirm(semantic, admission, actor, "Price Per Service (USD)", "financial.cost.total")
+    _confirm(semantic, admission, actor, "Extended Amount (USD)", "financial.cost.total")
     primary = next(item for item in admission.regions if item.region_kind == "PRIMARY_DETAIL")
     planning, result = service.execute(
         admission,
@@ -205,7 +205,7 @@ def test_real_workbook_uses_184_detail_rows_but_cost_stays_blocked_without_curre
         intent_type=AnalyticalIntentType.TOTAL_MEASURE,
         measure_concept_id="financial.cost.total",
     )
-    assert primary.detail_record_count == 184 and primary.end_row < 190
+    assert primary.detail_record_count == 3 and primary.end_row < 10
     assert planning.plan.planning_status in {PlanningStatus.BLOCKED, PlanningStatus.REJECTED}
     assert result is None
     assert "861830" not in repr(planning)

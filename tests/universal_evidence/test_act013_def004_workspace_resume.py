@@ -1,7 +1,7 @@
 """ACT013-DEF-004B durable, authorized governed-workspace resume."""
 
-from pathlib import Path
 import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -18,7 +18,7 @@ from universal_evidence.production_workflow import (
 )
 from universal_evidence.security import WorkspaceAuthorizationContext
 
-WORKBOOK = Path("temp_uploads/CUR Jan 2026.xlsx")
+WORKBOOK = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
 PROFILE = "AWS billing/CUR-derived CSV"
 
 

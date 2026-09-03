@@ -45,6 +45,7 @@ from shared.evidence_context import (  # noqa: E402
 )
 from shared.session import init_session  # noqa: E402
 from shared.styles import configure_page  # noqa: E402
+from universal_evidence.financial.ui import render_financial_governance  # noqa: E402
 from universal_evidence.persistence import LifecyclePersistenceError  # noqa: E402
 from universal_evidence.pilot import (  # noqa: E402
     PilotAnalysisContext,
@@ -190,6 +191,12 @@ def _upload_pue_pilot_model(admission):
     return get_pilot_service().experience_upload(admission)
 
 
+def _financial_context():
+    if not str(os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB") or "").strip():
+        return None
+    return authenticated_tenant_context(st.session_state)
+
+
 def _render_upload_pue(admission):
     records, fields = evidence_counts(admission)
     st.markdown("### Evidence overview")
@@ -203,6 +210,13 @@ def _render_upload_pue(admission):
     render_semantic_governance(st, admission)
     render_governed_normalization(st, admission)
     render_governed_measurement(st, admission)
+    render_financial_governance(
+        st,
+        admission,
+        context=_financial_context(),
+        actor_id=str(st.session_state.get("user_email") or "unknown"),
+        actor_role=role,
+    )
     _render_enterprise_workflow(admission)
 
 
@@ -896,6 +910,13 @@ if prospect_result and selected_path == "upload":
             render_semantic_governance(st, upload_admission)
             render_governed_normalization(st, upload_admission)
             render_governed_measurement(st, upload_admission)
+            render_financial_governance(
+                st,
+                upload_admission,
+                context=_financial_context(),
+                actor_id=str(st.session_state.get("user_email") or "unknown"),
+                actor_role=role,
+            )
             _render_enterprise_workflow(upload_admission)
         st.stop()
     _step_header(
@@ -932,6 +953,13 @@ if prospect_result and selected_path == "upload":
         render_semantic_governance(st, upload_admission)
         render_governed_normalization(st, upload_admission)
         render_governed_measurement(st, upload_admission)
+        render_financial_governance(
+            st,
+            upload_admission,
+            context=_financial_context(),
+            actor_id=str(st.session_state.get("user_email") or "unknown"),
+            actor_role=role,
+        )
         _render_enterprise_workflow(upload_admission)
     st.page_link(
         "pages/prospect_data_intake.py",

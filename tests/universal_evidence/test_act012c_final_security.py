@@ -337,21 +337,21 @@ def test_sqlite_write_lock_fails_closed_then_retry_succeeds(tmp_path):
     assert repository.get("authority", "locked", scope).state == "ACTIVE"
 
 
-def test_real_cur_consolidated_adversarial_journey_blocks_money_authority():
-    workbook = Path("temp_uploads/CUR Jan 2026.xlsx")
+def test_synthetic_cur_consolidated_adversarial_journey_blocks_money_authority():
+    workbook = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
     admission = _admission(name="act012c-real-cur", content=workbook.read_bytes())
     measurement, normalization, semantic, activation, admin, _scope, actor, _audit = _measurement(
         admission
     )
     primary = next(item for item in admission.regions if item.region_kind == "PRIMARY_DETAIL")
-    assert primary.detail_record_count == 184
-    assert len(primary.original_headers) == 10
-    assert primary.end_row < 190
+    assert primary.detail_record_count == 3
+    assert len(primary.original_headers) == 7
+    assert primary.end_row < 10
     _confirm(
         semantic,
         admission,
         actor,
-        "Price Per Service (USD)",
+        "Extended Amount (USD)",
         "financial.cost.total",
     )
     planning, result = measurement.execute(

@@ -355,8 +355,8 @@ def test_production_control_guard_and_authenticated_actor_requirement(monkeypatc
     assert actor.actor_type is ActorType.HUMAN
 
 
-def test_real_cur_workbook_semantics_are_candidates_not_currency_or_total_authority():
-    content = open("temp_uploads/CUR Jan 2026.xlsx", "rb").read()
+def test_synthetic_cur_workbook_semantics_are_candidates_not_currency_or_total_authority():
+    content = open("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx", "rb").read()
     admission = admit_uploaded_evidence(
         _tenant("real-cur"), filename="CUR Jan 2026.xlsx", content=content, now=NOW
     )
@@ -366,9 +366,9 @@ def test_real_cur_workbook_semantics_are_candidates_not_currency_or_total_author
     assert {
         "Service",
         "Region",
-        "Price Per Service (USD)",
+        "Extended Amount (USD)",
     } <= headers
-    price = _mapping(model, "Price Per Service (USD)")
+    price = _mapping(model, "Extended Amount (USD)")
     assert price.status is SemanticMappingStatus.CONFIRMATION_REQUIRED
     assert price.effective_concept_id is None
     assert "861828" not in repr(model)

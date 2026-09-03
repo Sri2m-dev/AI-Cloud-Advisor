@@ -16,7 +16,7 @@ from universal_evidence.pilot.runtime import (
 )
 from universal_evidence.production_workflow import activate_production_workflow
 
-WORKBOOK = Path("temp_uploads/CUR Jan 2026.xlsx")
+WORKBOOK = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
 
 
 @dataclass
@@ -77,7 +77,7 @@ def _govern_cur(admission):
     actor = _actor()
     service, service_concept = _candidate(semantic, admission, "Service")
     region, region_concept = _candidate(semantic, admission, "Region")
-    subservice, subservice_concept = _candidate(semantic, admission, "Sub-Service/Type")
+    subservice, subservice_concept = _candidate(semantic, admission, "Sub-Service")
     assert service_concept == "technology.service"
     assert region_concept == "cloud.region"
     semantic.confirm(admission, service.source_column_reference, service_concept, actor=actor)
@@ -135,7 +135,7 @@ def test_governance_reconstructs_after_logout_persona_switch_and_restart(monkeyp
     assert "COUNT" in readiness_after.available_operations
     assert "SUM" not in readiness_after.available_operations
     assert not readiness_after.currency_ready
-    for header in ("Service", "Region", "Sub-Service/Type"):
+    for header in ("Service", "Region", "Sub-Service"):
         column = _column(semantic_after, reconstructed, header)
         assert (
             semantic_after.confirmation_service.get_decision_history(column, actor=actor).decisions

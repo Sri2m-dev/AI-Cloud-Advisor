@@ -75,6 +75,16 @@ class EnterpriseSpendService:
         start, end = period or (None, None)
         return self._repository.get_spend_by_service(context, start, end)
 
+    def get_spend_by_region(
+        self,
+        context: AuthenticatedTenantContext,
+        period: tuple[date | None, date | None] | None = None,
+    ):
+        """Return canonical regional spend when the selected repository supports it."""
+        start, end = period or (None, None)
+        method = getattr(self._repository, "get_spend_by_region", None)
+        return method(context, start, end) if method else ()
+
     def get_unknown_account_posture(
         self,
         context: AuthenticatedTenantContext,

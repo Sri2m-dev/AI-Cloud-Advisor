@@ -4,4 +4,10 @@
 
 gunicorn==22.0.0
 sentry-sdk==2.5.0
-# Add any other production-only dependencies here
+google-cloud-bigquery>=3.25,<4
+google-cloud-storage==3.9.0
+networkx>=3.4,<4
+psycopg2-binary==2.9.11
+PyMuPDF==1.26.4
+scikit-learn==1.8.0
+stripe==12.5.1

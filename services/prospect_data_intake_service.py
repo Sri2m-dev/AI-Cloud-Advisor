@@ -152,9 +152,7 @@ def _read_encrypted(path: Path, cipher: Fernet) -> bytes:
         raise ProspectIntakeError("encrypted prospect artifact cannot be read") from exc
 
 
-def _tenant_cipher(
-    tenant_id: str, *, root: Path, key: str | bytes | None = None
-) -> Fernet:
+def _tenant_cipher(tenant_id: str, *, root: Path, key: str | bytes | None = None) -> Fernet:
     master = _fernet(key)
     try:
         tenant_key = master.decrypt((_tenant_dir(tenant_id, root) / "key.enc").read_bytes())
@@ -225,9 +223,7 @@ def create_prospect_tenant(
     cipher = Fernet(tenant_key)
     (tenant_path / "key.enc").write_bytes(master_cipher.encrypt(tenant_key))
     manifest = {**asdict(tenant), "prospect_name": prospect_name.strip()}
-    _write_encrypted(
-        tenant_path / "manifest.enc", json.dumps(manifest).encode("utf-8"), cipher
-    )
+    _write_encrypted(tenant_path / "manifest.enc", json.dumps(manifest).encode("utf-8"), cipher)
     _audit(
         tenant,
         "PROSPECT_TENANT_CREATED",
@@ -257,7 +253,17 @@ def scan_upload(filename: str, content: bytes) -> dict[str, Any]:
                 if total > MAX_UNCOMPRESSED_BYTES:
                     raise ProspectIntakeError("spreadsheet expands beyond the safety limit")
                 names = {item.filename.lower() for item in archive.infolist()}
-                if any("vbaproject" in name or name.endswith(".bin") for name in names):
+                safe_binary_metadata = ("xl/printersettings/", "xl/customproperty")
+                unsafe_binary = any(
+                    name.endswith(".bin") and not name.startswith(safe_binary_metadata)
+                    for name in names
+                )
+                active_content = any(
+                    marker in name
+                    for name in names
+                    for marker in ("vbaproject", "activex", "embeddings/")
+                )
+                if active_content or unsafe_binary:
                     raise ProspectIntakeError("active or embedded spreadsheet content is forbidden")
         except zipfile.BadZipFile as exc:
             raise ProspectIntakeError("invalid XLSX container") from exc
@@ -329,9 +335,7 @@ def normalize_upload(profile: str, filename: str, content: bytes) -> pd.DataFram
     if canonical["cost"].isna().all() or (canonical["cost"].dropna() < 0).any():
         raise ProspectIntakeError("cost values must contain non-negative numeric evidence")
     canonical["cost"] = canonical["cost"].fillna(0.0)
-    canonical["potential_savings"] = pd.to_numeric(
-        canonical["potential_savings"], errors="coerce"
-    )
+    canonical["potential_savings"] = pd.to_numeric(canonical["potential_savings"], errors="coerce")
     canonical["currency"] = canonical["currency"].apply(normalize_currency)
     canonical["provider"] = canonical["provider"].fillna("UNKNOWN").astype(str)
     canonical["service"] = canonical["service"].fillna("UNKNOWN").astype(str)
@@ -344,8 +348,8 @@ def _analyze(tenant: ProspectTenant, frame: pd.DataFrame) -> ProspectAnalysis:
     detected_currencies = tuple(sorted(set(frame["currency"].dropna())))
     mixed_currency = len(detected_currencies) > 1
     currency = detected_currencies[0] if len(detected_currencies) == 1 else None
-    currency_source = "MIXED_EVIDENCE" if mixed_currency else (
-        "EVIDENCE" if currency else "UNRESOLVED"
+    currency_source = (
+        "MIXED_EVIDENCE" if mixed_currency else ("EVIDENCE" if currency else "UNRESOLVED")
     )
     provider_text = frame["provider"].str.lower()
     profile_text = frame["source_profile"].str.lower()
@@ -359,9 +363,9 @@ def _analyze(tenant: ProspectTenant, frame: pd.DataFrame) -> ProspectAnalysis:
     explicit = float(frame["potential_savings"].dropna().clip(lower=0).sum())
     license_qty = pd.to_numeric(frame["license_quantity"], errors="coerce")
     used_qty = pd.to_numeric(frame["used_quantity"], errors="coerce")
-    unused_ratio = (
-        (license_qty - used_qty).clip(lower=0) / license_qty.replace(0, pd.NA)
-    ).fillna(0)
+    unused_ratio = ((license_qty - used_qty).clip(lower=0) / license_qty.replace(0, pd.NA)).fillna(
+        0
+    )
     license_opportunity = float((frame.loc[saas_mask, "cost"] * unused_ratio[saas_mask]).sum())
     identified = min(total, explicit + license_opportunity)
     qualified = identified if evidence_coverage >= 70 else 0.0
@@ -380,7 +384,9 @@ def _analyze(tenant: ProspectTenant, frame: pd.DataFrame) -> ProspectAnalysis:
         currency_confirmed_at=None,
         cloud_spend=None if mixed_currency else float(frame.loc[cloud_mask, "cost"].sum()),
         saas_spend=None if mixed_currency else float(frame.loc[saas_mask, "cost"].sum()),
-        other_spend=None if mixed_currency else float(frame.loc[~(cloud_mask | saas_mask), "cost"].sum()),
+        other_spend=None
+        if mixed_currency
+        else float(frame.loc[~(cloud_mask | saas_mask), "cost"].sum()),
         unclassified_spend=None if mixed_currency else unclassified,
         evidence_coverage=evidence_coverage,
         confidence=confidence,
@@ -485,9 +491,7 @@ def load_governed_upload(
     """Load one encrypted governed source after a separately authorized locator lookup."""
     cipher = _tenant_cipher(tenant_id, root=root, key=key)
     tenant_path = _tenant_dir(tenant_id, root)
-    manifest = json.loads(
-        _read_encrypted(tenant_path / "manifest.enc", cipher).decode("utf-8")
-    )
+    manifest = json.loads(_read_encrypted(tenant_path / "manifest.enc", cipher).decode("utf-8"))
     metadata = json.loads(
         _read_encrypted(tenant_path / "governed_upload.enc", cipher).decode("utf-8")
     )
@@ -513,9 +517,7 @@ def load_analysis(
     payload.setdefault("currency_resolution_required", legacy_currency is None)
     payload.setdefault("currency_confirmed_by", None)
     payload.setdefault("currency_confirmed_at", None)
-    payload.setdefault(
-        "detected_currencies", (legacy_currency,) if legacy_currency else ()
-    )
+    payload.setdefault("detected_currencies", (legacy_currency,) if legacy_currency else ())
     payload["detected_currencies"] = tuple(payload.get("detected_currencies", ()))
     return ProspectAnalysis(**payload)
 
@@ -550,7 +552,9 @@ def confirm_analysis_currency(
     cipher = _tenant_cipher(tenant.tenant_id, root=root, key=key)
     stored = load_analysis(tenant.tenant_id, root=root, key=key)
     if stored.analysis_timestamp != analysis.analysis_timestamp:
-        raise ProspectIntakeError("currency confirmation is not associated with the current analysis")
+        raise ProspectIntakeError(
+            "currency confirmation is not associated with the current analysis"
+        )
     confirmed_at = _utc_now().isoformat()
     resolved = ProspectAnalysis(
         **{

@@ -56,13 +56,15 @@ def test_empty_reconciliation_state_renders_without_authority_or_controls():
     ]
 
 
-def test_real_cur_zero_governance_route_renders_through_reconciliation(monkeypatch, tmp_path):
-    """DEF-003: exercise the complete valid 184/10 post-admission empty state."""
+def test_synthetic_cur_zero_governance_route_renders_through_reconciliation(
+    monkeypatch, tmp_path
+):
+    """DEF-003: exercise a complete valid synthetic post-admission empty state."""
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
     monkeypatch.setenv("PUE_PILOT_DEV_MODE", "false")
     monkeypatch.setenv("NEXORA_PROSPECT_DATA_ROOT", str(tmp_path / "prospect"))
-    workbook = Path("temp_uploads/CUR Jan 2026.xlsx")
+    workbook = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
     tenant = ProspectTenant(
         "prospect-act013-def003",
         "audit-act013-def003",
@@ -99,8 +101,8 @@ def test_real_cur_zero_governance_route_renders_through_reconciliation(monkeypat
 
     assert not app.exception
     metrics = {(item.label, str(item.value)) for item in app.metric}
-    assert ("Detail records", "184") in metrics
-    assert ("Fields discovered", "10") in metrics
+    assert ("Detail records", "3") in metrics
+    assert ("Fields discovered", "7") in metrics
     rendered = str(app.main) + "\n" + "\n".join(
         str(item.value)
         for element_type in (
@@ -133,7 +135,7 @@ def test_active_workspace_can_return_to_source_selection_without_mutation(monkey
     monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
     monkeypatch.setenv("PUE_PILOT_DEV_MODE", "false")
     monkeypatch.setenv("NEXORA_PROSPECT_DATA_ROOT", str(tmp_path / "prospect"))
-    workbook = Path("temp_uploads/CUR Jan 2026.xlsx")
+    workbook = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
     admission = admit_uploaded_evidence(
         ProspectTenant(
             "prospect-act013-def005",

@@ -6,20 +6,18 @@ Nexora connects executive and CIO workspaces, business architecture, financial
 intelligence, governance, Universal Connectors, and a canonical Enterprise Data Fabric into
 an evidence-backed environment for enterprise technology decisions.
 
-## Current release-candidate baseline
+## Current release candidate
 
 ```text
-Program: Nexora v2.0 GA Completion
-Branch: feature/p4-3-enterprise-intelligence-layer
-Certified through: Executive Experience v2.1; GA hardening in progress
-Target release: Nexora v2.0
+Release: Nexora 2.0.0
+Authoritative version: nexora_release.py
+Certified through: ACT-013 / ACT-C13
 Application entry point: app_main.py
 Python: 3.11
 ```
 
-The P1-P5.2 platform baseline is accepted and frozen. GA work is limited to product
-completion, certified data, decision visualization, reporting, customer readiness,
-deployment, and release certification. See `docs/ga/NEXORA_V2_GA_GUIDE.md`.
+Release-facing guidance is consolidated in
+`docs/release/REL_001_RELEASE_CANDIDATE.md`. ACT/PUE documents remain engineering history.
 
 ## Architecture
 
@@ -64,14 +62,17 @@ python -m pytest --collect-only -q
 python -m pytest -q
 ```
 
-Most recent local certified results before the GA candidate is finalized:
+ACT-013 frozen certification:
 
-- Full suite: 1,031 passed, 2 expected opt-in skips, 0 failed.
-- Active-source compilation: 1,279 Python files passed.
+- Full suite: 1,696 passed, 2 expected opt-in skips, 0 failed.
+- ACT-C13: Integrated Production Journey Certified.
 
 Exact commands and scope are recorded in `docs/RELEASE_REPRODUCTION.md`, `docs/REPOSITORY_HEALTH_PHASE1.md`, `docs/CI_CERTIFICATION.md`, and `docs/P3_SUPABASE_LIVE_VALIDATION_CHECKPOINT.md`.
 
 ## Release boundary
+
+REL-001 supersedes the historical paragraph below for this candidate: release `2.0.0` must
+complete REL-002 fresh-clone/deployment certification before any merge or tag decision.
 
 The release candidate must pass documentation review and subsequent merge preparation before governance can authorize merge. If approved, merge the feature branch into `main`, verify the reviewed merge commit, and tag that merge commit—not a feature-branch commit—as `v1.2.0-data-fabric`.
 

@@ -186,8 +186,8 @@ def test_controlled_production_materialization_reconciliation_and_ask_share_trac
     assert len(replay.entities) == len(first.entities)
 
 
-def test_real_cur_admission_and_measurement_emit_safe_non_error_trace(tmp_path):
-    workbook = Path("temp_uploads/CUR Jan 2026.xlsx")
+def test_synthetic_cur_admission_and_measurement_emit_safe_non_error_trace(tmp_path):
+    workbook = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
     operations = _operations(tmp_path)
     context = _context(correlation_id="NX-COR-ACT011B-CUR")
     tenant = ProspectTenant(
@@ -208,7 +208,7 @@ def test_real_cur_admission_and_measurement_emit_safe_non_error_trace(tmp_path):
     for service in (semantic, normalization, measurement):
         service.operations = operations
         service.operation_context = context
-    _confirm(semantic, admission, actor, "Price Per Service (USD)", "financial.cost.total")
+    _confirm(semantic, admission, actor, "Extended Amount (USD)", "financial.cost.total")
     planning, result = measurement.execute(
         admission,
         actor=actor,
@@ -219,8 +219,8 @@ def test_real_cur_admission_and_measurement_emit_safe_non_error_trace(tmp_path):
     admitted = next(
         item for item in events if item.event_type is GovernedEventType.EVIDENCE_ADMITTED
     )
-    assert admitted.attributes["detail_records"] == 184
-    assert admitted.attributes["fields"] == 10
+    assert admitted.attributes["detail_records"] == 3
+    assert admitted.attributes["fields"] == 7
     assert result is None and planning.plan.planning_status.value in {"BLOCKED", "REJECTED"}
     block = next(item for item in events if item.event_type is GovernedEventType.CAPABILITY_BLOCKED)
     assert block.reason_code.value == "MISSING_GOVERNED_CURRENCY"
@@ -229,8 +229,8 @@ def test_real_cur_admission_and_measurement_emit_safe_non_error_trace(tmp_path):
     assert "861830" not in str([item.payload() for item in events])
 
 
-def test_real_governance_mutation_fails_before_change_when_audit_is_unavailable(tmp_path):
-    workbook = Path("temp_uploads/CUR Jan 2026.xlsx")
+def test_synthetic_governance_mutation_fails_before_change_when_audit_is_unavailable(tmp_path):
+    workbook = Path("tests/fixtures/cmp_p1/fixture_a_cloud_cost.xlsx")
     tenant = ProspectTenant(
         "prospect-cur",
         "audit-cur",
@@ -254,7 +254,7 @@ def test_real_governance_mutation_fails_before_change_when_audit_is_unavailable(
     column = next(
         item
         for item in semantic.discovery(admission).columns
-        if item.original_header == "Price Per Service (USD)"
+        if item.original_header == "Extended Amount (USD)"
     )
     before = semantic.confirmation_service.get_decision_history(column, actor=actor).decisions
     with pytest.raises(LifecyclePersistenceError):

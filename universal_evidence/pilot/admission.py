@@ -186,9 +186,9 @@ def _admit_uploaded_evidence(
     )
 
 
-def admitted_source_rows(admission: EvidencePilotAdmission):
+def admitted_source_rows(admission: EvidencePilotAdmission, *, data_only: bool = False):
     """Read the immutable admitted source without consulting another tenant or upload."""
-    return _source_rows(admission.original_filename, admission.source_content)
+    return _source_rows(admission.original_filename, admission.source_content, data_only=data_only)
 
 
 def discover_structural_regions(profile, *, filename, content):
@@ -264,11 +264,11 @@ def _detail_end(rows: list[list[Any]], header_row: int, region_end: int):
     return region_end
 
 
-def _source_rows(filename, content):
+def _source_rows(filename, content, *, data_only: bool = False):
     if Path(filename).suffix.lower() == ".csv":
         text = content.decode("utf-8-sig", errors="replace")
         return [[list(row) for row in csv.reader(io.StringIO(text))]]
-    workbook = load_workbook(io.BytesIO(content), read_only=False, data_only=False)
+    workbook = load_workbook(io.BytesIO(content), read_only=False, data_only=data_only)
     try:
         return [
             [list(row) for row in worksheet.iter_rows(values_only=True)]

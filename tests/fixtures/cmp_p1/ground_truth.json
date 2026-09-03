@@ -1,0 +1,93 @@
+{
+  "fixture_a_cloud_cost.xlsx": {
+    "blocked": [],
+    "confirmation": [
+      "domain",
+      "measure"
+    ],
+    "currency": "USD",
+    "domain": "CLOUD_BILLING",
+    "measure": "EXTENDED_AMOUNT",
+    "provider": "AWS",
+    "region": {
+      "test-east-1": "25.00",
+      "test-west-2": "40.00"
+    },
+    "service": {
+      "svc-fictional-compute": "40.00",
+      "svc-fictional-storage": "25.00"
+    },
+    "total": "65.00"
+  },
+  "fixture_b_unfamiliar_headers.xlsx": {
+    "blocked": [],
+    "confirmation": [
+      "domain",
+      "measure"
+    ],
+    "currency": "USD",
+    "domain": "CLOUD_BILLING",
+    "measure": "EXTENDED_AMOUNT",
+    "provider": "AWS",
+    "region": {
+      "test-east-1": "25.00",
+      "test-west-2": "40.00"
+    },
+    "service": {
+      "svc-fictional-compute": "40.00",
+      "svc-fictional-storage": "25.00"
+    },
+    "total": "65.00"
+  },
+  "fixture_c_ambiguous.xlsx": {
+    "blocked": [
+      "domain",
+      "measure",
+      "currency"
+    ],
+    "confirmation": [
+      "domain",
+      "measure",
+      "currency"
+    ],
+    "domain": "UNKNOWN",
+    "provider": "UNKNOWN",
+    "total": null
+  },
+  "fixture_d_mixed_currency.xlsx": {
+    "blocked": [
+      "mixed_currency"
+    ],
+    "confirmation": [],
+    "domain": "CLOUD_BILLING",
+    "provider": "AWS",
+    "total": null
+  },
+  "fixture_e_inventory.xlsx": {
+    "blocked": [
+      "financial_activation"
+    ],
+    "confirmation": [],
+    "domain": "TECHNOLOGY_INVENTORY",
+    "provider": "UNKNOWN",
+    "total": null
+  },
+  "fixture_f_temporal_billing.xlsx": {
+    "blocked": [],
+    "confirmation": [
+      "domain",
+      "measure",
+      "currency"
+    ],
+    "currency": "HUMAN_CONFIRMATION_REQUIRED",
+    "domain": "CLOUD_BILLING",
+    "measure": "EXTENDED_AMOUNT",
+    "provider": "UNKNOWN",
+    "region": {},
+    "service": {
+      "svc-fictional-compute": "36.00",
+      "svc-fictional-storage": "18.00"
+    },
+    "total": "54.00"
+  }
+}

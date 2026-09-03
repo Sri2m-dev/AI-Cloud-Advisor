@@ -6,6 +6,8 @@
 .streamlit/credential.key
 *.key
 *.pem
+*.db
+*.sqlite*
 
 # Python
 .venv/
@@ -21,6 +23,7 @@ __pycache__/
 
 # Logs and generated runtime files
 *.log
+*.out
 logs/
 sync_logs/
 telemetry/
@@ -46,3 +49,4 @@ data/business_digital_twins.json
 data/technology_digital_twins.json
 .streamlit/cache/
 .tmp/
+temp_uploads/

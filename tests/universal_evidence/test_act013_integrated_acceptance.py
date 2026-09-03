@@ -4,7 +4,7 @@ from tests.universal_evidence.test_act012c_final_security import (
     test_controlled_enterprise_consolidated_scoped_ask_journey as _enterprise_journey,
 )
 from tests.universal_evidence.test_act012c_final_security import (
-    test_real_cur_consolidated_adversarial_journey_blocks_money_authority as _cur_journey,
+    test_synthetic_cur_consolidated_adversarial_journey_blocks_money_authority as _cur_journey,
 )
 from tests.universal_evidence.test_pue_integrated_restart import (
     test_activation_kill_switch_and_scoped_purge_survive_restart as _policy_restart,

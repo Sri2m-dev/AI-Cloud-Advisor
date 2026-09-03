@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## Unreleased - Nexora v2.0 GA candidate
+## 2.0.0 - Release candidate
 
 ### Added
 - Certified Executive Experience composition with decision storytelling.
@@ -16,6 +16,8 @@
 - Tenant scoping now applies to every backend report data read and report-history record.
 
 ### Validation
+- ACT-013 passed end-to-end production acceptance and ACT-C13 certified the integrated
+  production journey.
 - Local GA certification: 1,031 passed, 2 skipped; 1,279 active Python files compiled;
   connector imports, Docker Compose validation, critical Ruff checks, and nine performance
   workloads passed. Both hosted CI workflows passed on implementation candidate
