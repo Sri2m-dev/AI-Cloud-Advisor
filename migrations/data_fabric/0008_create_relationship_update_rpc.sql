@@ -27,7 +27,10 @@ as $$
         active = coalesce((p_relationship->>'active')::boolean, true),
         revision = revision + 1,
         version = coalesce((p_relationship->>'version')::integer, version),
-        updated_at = (p_relationship->>'updated_at')::timestamptz,
+        updated_at = greatest(
+            created_at,
+            coalesce((p_relationship->>'updated_at')::timestamptz, created_at)
+        ),
         deactivated_at = nullif(p_relationship->>'deactivated_at', '')::timestamptz,
         deactivated_by = p_relationship->>'deactivated_by',
         updated_by = p_relationship->>'updated_by',

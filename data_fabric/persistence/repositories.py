@@ -71,7 +71,7 @@ class InMemoryMutableRepository(EntityRepository):
             record,
             revision=current.revision + 1,
             concurrency_token=None,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=max(current.created_at, datetime.now(timezone.utc)),
         )
         stored = _copy_record(updated)
         self._records[key] = stored

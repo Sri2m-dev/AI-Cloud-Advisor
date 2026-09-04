@@ -154,6 +154,24 @@ class CanonicalFinancialRepository:
     def get_spend_by_region(self, context, period_start=None, period_end=None):
         return self._breakdown(context, "region")
 
+    def get_financial_evidence(self, context):
+        return tuple(
+            {
+                "observation_id": row["observation_id"],
+                "source_id": row["source_id"],
+                "file_id": row["file_id"],
+                "sheet_id": row["sheet_id"],
+                "row_number": row["row_number"],
+                "field": row["field"],
+                "currency": row["currency"],
+                "currency_authority": row["currency_authority"],
+                "semantic_decision": row["semantic_decision"],
+                "evidence_reference": row["file_id"],
+                "dimensions": json.loads(row["dimensions"]),
+            }
+            for row in self._filtered(context)
+        )
+
     def get_account_posture(self, context, period_start=None, period_end=None):
         return ()
 

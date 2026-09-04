@@ -100,7 +100,10 @@ begin
             coalesce((v_relationship ->> 'revision')::integer, 1),
             coalesce((v_payload ->> 'version')::integer, 1),
             coalesce(nullif(v_relationship ->> 'created_at','')::timestamptz, now()),
-            coalesce(nullif(v_relationship ->> 'updated_at','')::timestamptz, now()),
+            greatest(
+                coalesce(nullif(v_relationship ->> 'created_at','')::timestamptz, now()),
+                coalesce(nullif(v_relationship ->> 'updated_at','')::timestamptz, now())
+            ),
             null,
             null,
             v_relationship ->> 'created_by',
@@ -121,7 +124,10 @@ begin
             active = coalesce((v_relationship ->> 'active')::boolean, active),
             revision = revision + 1,
             version = version + 1,
-            updated_at = coalesce(nullif(v_relationship ->> 'updated_at','')::timestamptz, now()),
+            updated_at = greatest(
+                updated_at,
+                coalesce(nullif(v_relationship ->> 'updated_at','')::timestamptz, now())
+            ),
             updated_by = coalesce(v_relationship ->> 'updated_by', v_actor),
             schema_version = coalesce((v_relationship ->> 'schema_version')::integer, schema_version)
         where id = v_relationship_id and organization_id = v_org and tenant_id = v_tenant and revision = v_expected_revision
@@ -133,7 +139,7 @@ begin
         update data_fabric.enterprise_relationships
         set active = false,
             revision = revision + 1,
-            updated_at = now(),
+            updated_at = greatest(updated_at, now()),
             updated_by = coalesce(v_relationship ->> 'updated_by', v_actor),
             deactivated_at = coalesce(nullif(v_relationship ->> 'deactivated_at','')::timestamptz, now()),
             deactivated_by = coalesce(v_relationship ->> 'deactivated_by', v_actor)

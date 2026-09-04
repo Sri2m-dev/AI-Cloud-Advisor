@@ -38,14 +38,17 @@ def _fetch_one(table_name: str, context: AuthenticatedTenantContext) -> dict[str
 
 
 def _numeric_total(df: pd.DataFrame, columns: list[str]) -> float:
+    if df.empty:
+        return None
     for column in columns:
         if column in df.columns:
             return float(pd.to_numeric(df[column], errors="coerce").fillna(0).sum())
-    return 0.0
+    return None
 
 
 def _spend_value(row: dict[str, Any], new_key: str, old_key: str) -> float:
-    return _safe_float(row.get(new_key, row.get(old_key, 0)))
+    value = row.get(new_key, row.get(old_key))
+    return _safe_float(value) if value is not None else None
 
 
 class EnterpriseSpendCertificationService:
@@ -63,6 +66,8 @@ class EnterpriseSpendCertificationService:
 
     @staticmethod
     def format_compact_currency(value: Any) -> str:
+        if value is None:
+            return "UNKNOWN"
         value = _safe_float(value)
         abs_value = abs(value)
         if abs_value >= 1_000_000:
@@ -84,11 +89,19 @@ class EnterpriseSpendCertificationService:
         recommendations_df = pd.DataFrame(_fetch_rows("recommendations", context))
 
         # Legacy cloud is deliberately ignored to prevent double counting.
-        cloud_cost = float(posture.cloud_spend)
+        spend_available = bool(posture.source_rows or posture.persisted_facts or breakdown)
+        cloud_cost = float(posture.cloud_spend) if spend_available else None
         saas_cost = _spend_value(breakdown, "saas_spend", "saas_cost")
         msp_cost = _spend_value(breakdown, "msp_spend", "msp_cost")
         license_cost = _spend_value(breakdown, "license_spend", "license_cost")
-        total_spend = cloud_cost + saas_cost + msp_cost + license_cost
+        supplemental_costs = [
+            value for value in (saas_cost, msp_cost, license_cost) if value is not None
+        ]
+        total_spend = (
+            cloud_cost + sum(supplemental_costs)
+            if cloud_cost is not None
+            else sum(supplemental_costs) if supplemental_costs else None
+        )
 
         forecast_total = _numeric_total(
             forecast_df,
@@ -96,11 +109,15 @@ class EnterpriseSpendCertificationService:
         )
         budget_total = _numeric_total(budget_df, ["budget", "budget_amount", "planned_cost"])
         actual_total = _numeric_total(budget_df, ["actual", "actual_cost", "total_cost", "cost"])
-        budget_variance = budget_total - actual_total
-        current_run_rate = actual_total or total_spend
+        budget_variance = (
+            budget_total - actual_total
+            if budget_total is not None and actual_total is not None
+            else None
+        )
+        current_run_rate = actual_total if actual_total is not None else total_spend
 
-        savings_realized = 0.0
-        savings_opportunity = 0.0
+        savings_realized = None
+        savings_opportunity = None
         if not recommendations_df.empty and "estimated_savings" in recommendations_df.columns:
             statuses = (
                 recommendations_df.get("status", pd.Series(dtype="object"))
@@ -115,7 +132,7 @@ class EnterpriseSpendCertificationService:
             savings_realized = float(savings[implemented].sum())
             savings_opportunity = float(savings[~implemented].sum())
 
-        forecast_growth = 0.0
+        forecast_growth = None
         if not forecast_df.empty:
             growth_column = next(
                 (
@@ -128,11 +145,14 @@ class EnterpriseSpendCertificationService:
             if growth_column:
                 forecast_growth = float(
                     pd.to_numeric(forecast_df[growth_column], errors="coerce").dropna().mean()
-                    or 0.0
+                    if not pd.isna(
+                        pd.to_numeric(forecast_df[growth_column], errors="coerce").dropna().mean()
+                    )
+                    else None
                 )
 
         source_availability = {
-            "spend": bool(posture.source_rows or posture.persisted_facts or breakdown),
+            "spend": spend_available,
             "budget": not budget_df.empty,
             "forecast": not forecast_df.empty,
             "recommendations": not recommendations_df.empty,
@@ -142,17 +162,21 @@ class EnterpriseSpendCertificationService:
 
         spend_mix_df = pd.DataFrame(
             [
-                {"category": "Cloud", "cost": cloud_cost},
-                {"category": "SaaS", "cost": saas_cost},
-                {"category": "Managed Services", "cost": msp_cost},
-                {"category": "Licenses", "cost": license_cost},
+                {"category": category, "cost": value}
+                for category, value in (
+                    ("Cloud", cloud_cost),
+                    ("SaaS", saas_cost),
+                    ("Managed Services", msp_cost),
+                    ("Licenses", license_cost),
+                )
+                if value is not None
             ]
         )
         risk_summary_df = pd.DataFrame(columns=["Risk Area", "Amount"])
 
         financial_model = {
             "enterprise_total": posture.total_ingested_spend
-            + Decimal(str(saas_cost + msp_cost + license_cost)),
+            + Decimal(str(sum(supplemental_costs))),
             "allocated_spend": posture.allocated_spend,
             "unallocated_spend": posture.unallocated_resolved_spend,
             "quarantined_spend": posture.quarantined_spend,
@@ -183,10 +207,10 @@ class EnterpriseSpendCertificationService:
             "savings_realized": savings_realized,
             "savings_opportunity": savings_opportunity,
             "forecast_growth": forecast_growth,
-            "cloud_optimization_opportunity": 0.0,
-            "saas_waste": 0.0,
-            "license_waste": 0.0,
-            "contract_renewals_at_risk": 0.0,
+            "cloud_optimization_opportunity": None,
+            "saas_waste": None,
+            "license_waste": None,
+            "contract_renewals_at_risk": None,
             "source_availability": source_availability,
         }
 

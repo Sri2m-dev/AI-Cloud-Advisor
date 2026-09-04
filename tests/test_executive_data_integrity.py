@@ -1,6 +1,16 @@
 from services.enterprise_spend_certification_service import (
     EnterpriseSpendCertificationService,
+    _numeric_total,
+    _spend_value,
 )
+import pandas as pd
+
+
+def test_missing_and_governed_zero_values_remain_distinguishable() -> None:
+    assert _numeric_total(pd.DataFrame(), ["saas_cost"]) is None
+    assert _numeric_total(pd.DataFrame({"saas_cost": [0.0]}), ["saas_cost"]) == 0.0
+    assert _spend_value({}, "saas_spend", "saas_cost") is None
+    assert _spend_value({"saas_cost": 0.0}, "saas_spend", "saas_cost") == 0.0
 
 
 def test_enterprise_spend_summary_does_not_present_missing_sources_as_zero() -> None:

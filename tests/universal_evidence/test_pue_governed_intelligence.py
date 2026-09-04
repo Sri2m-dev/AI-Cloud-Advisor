@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from data_fabric.contracts import EnterpriseRelationship, EntityType, RelationshipType
 from data_fabric.foundation import TenantContext
@@ -198,3 +199,69 @@ def test_missing_governed_currency_blocks_ask_without_a_number():
     assert response.state is AskState.BLOCKED
     assert response.execution is None
     assert "861830" not in response.answer
+
+
+class _CanonicalFinancialService:
+    def __init__(self, *, currency="USD"):
+        self.currency = currency
+
+    def get_financial_posture(self, context):
+        return {
+            "currency": self.currency,
+            "source_rows": 3,
+            "total_ingested_spend": Decimal("150"),
+        }
+
+    def get_spend_by_service(self, context):
+        return (
+            {"service": "Storage", "amount": Decimal("50"), "observation_ids": ("obs-2",)},
+            {"service": "Compute", "amount": Decimal("100"), "observation_ids": ("obs-1",)},
+        )
+
+    def get_spend_by_region(self, context):
+        return (
+            {"region": "west", "amount": Decimal("40"), "observation_ids": ("obs-2",)},
+            {"region": "east", "amount": Decimal("110"), "observation_ids": ("obs-1", "obs-3")},
+        )
+
+    def get_financial_evidence(self, context):
+        return (
+            {"observation_id": "obs-1", "file_id": "real.xlsx", "dimensions": {"service": "Compute"}},
+            {"observation_id": "obs-2", "file_id": "real.xlsx", "dimensions": {"service": "Storage"}},
+            {"observation_id": "obs-3", "file_id": "real.xlsx", "dimensions": {"service": "Compute"}},
+        )
+
+
+def test_canonical_financial_ask_uses_scoped_authority_and_ranks_groups():
+    service = GovernedAskNexoraService(
+        financial_service=_CanonicalFinancialService(),
+        financial_context=SCOPE,
+    )
+
+    total = service.ask("What is our total spend?", scope=SCOPE)
+    top = service.ask("What are our top services by spend?", scope=SCOPE)
+    region = service.ask("Break down spend by region.", scope=SCOPE)
+
+    assert total.state is AskState.SUPPORTED
+    assert "150 USD" in total.answer
+    assert total.provenance[0]["observation_count"] == 3
+    assert top.state is AskState.SUPPORTED
+    assert top.answer.index("Compute") < top.answer.index("Storage")
+    assert region.state is AskState.SUPPORTED
+    assert region.answer.index("east") < region.answer.index("west")
+    assert len(total.citations) == 3
+
+
+def test_canonical_financial_ask_rejects_foreign_scope_and_unresolved_currency():
+    foreign = GovernedAskNexoraService(
+        financial_service=_CanonicalFinancialService(),
+        financial_context=TenantContext("other-org", "other-tenant"),
+    ).ask("What is our total spend?", scope=SCOPE)
+    unresolved = GovernedAskNexoraService(
+        financial_service=_CanonicalFinancialService(currency=None),
+        financial_context=SCOPE,
+    ).ask("What is our total spend?", scope=SCOPE)
+
+    assert foreign.state is AskState.BLOCKED
+    assert unresolved.state is AskState.BLOCKED
+    assert "150" not in unresolved.answer

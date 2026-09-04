@@ -42,6 +42,24 @@ class GovernedAskResponse:
     reason: str | None = None
 
 
+class FinancialQueryError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialQueryResult:
+    operation: str
+    amount: Any | None
+    groups: tuple[dict[str, Any], ...]
+    currency: str | None
+    currency_authority: str | None
+    observation_count: int
+    scope: Any
+    evidence_references: tuple[str, ...]
+    source_references: tuple[str, ...] = ()
+    unresolved: tuple[str, ...] = ()
+
+
 class GovernedAskNexoraService:
     """Answer only from PUE-008/PUE-007/ACT-005 or canonical graph evidence."""
 
@@ -49,6 +67,8 @@ class GovernedAskNexoraService:
         self,
         *,
         measurement_service=None,
+        financial_service=None,
+        financial_context=None,
         registry=None,
         graph=None,
         bindings: Iterable[Any] = (),
@@ -59,6 +79,8 @@ class GovernedAskNexoraService:
         operation_context=None,
     ) -> None:
         self.measurement_service = measurement_service
+        self.financial_service = financial_service
+        self.financial_context = financial_context
         self.registry = registry
         self.graph = graph
         self.bindings = tuple(bindings)
@@ -207,6 +229,8 @@ class GovernedAskNexoraService:
                 "unsupported",
                 "UNSUPPORTED / NOT AUTHORIZED. No governed capability supports this request.",
             )
+        if self._is_financial(text):
+            return self._financial(text, scope)
         if self._is_measurement(text):
             return self._measurement(text, scope, admission, actor, actor_id)
         if self.registry is None or self.graph is None:
@@ -217,6 +241,176 @@ class GovernedAskNexoraService:
                 "I do not have enough governed evidence to answer that yet.",
             )
         return self._enterprise(text, scope, source_bindings)
+
+    def _financial(self, text, scope):
+        if self.financial_service is None or self.financial_context is None:
+            return self._finish(
+                AskState.INSUFFICIENT,
+                text,
+                "financial",
+                "I do not have enough governed financial evidence to answer that yet.",
+            )
+        if (
+            self.financial_context.organization_id != scope.organization_id
+            or self.financial_context.tenant_id != scope.tenant_id
+        ):
+            return self._finish(
+                AskState.BLOCKED,
+                text,
+                "financial",
+                "The requested financial authority is outside the active scope.",
+            )
+        try:
+            result = self._financial_query(text, scope)
+        except (FinancialQueryError, ValueError, TypeError) as exc:
+            return self._finish(AskState.BLOCKED, text, "financial", str(exc))
+        if result.operation in {"TOTAL_SPEND", "SPEND_BY_SERVICE", "SPEND_BY_REGION"} and (
+            result.currency is None or result.currency_authority is None
+        ):
+            return self._finish(
+                AskState.BLOCKED,
+                text,
+                "financial",
+                "Governed currency evidence is required before answering this question.",
+            )
+        if result.operation == "EVIDENCE":
+            answer = (
+                f"The result is supported by {result.observation_count} canonical financial "
+                "observations under governed financial authority."
+            )
+        elif result.operation == "SOURCE":
+            answer = f"The information was supplied by: {', '.join(result.source_references)}."
+        elif result.operation == "UNRESOLVED":
+            answer = (
+                "Known unresolved information: "
+                + (", ".join(result.unresolved) if result.unresolved else "none")
+                + "."
+            )
+        elif result.operation == "TOTAL_SPEND":
+            answer = f"Governed total spend: {result.amount} {result.currency}."
+        else:
+            groups = ", ".join(
+                f"{item['label']}: {item['amount']} {result.currency}"
+                for item in result.groups
+            )
+            dimension = result.operation.removeprefix("SPEND_BY_").casefold()
+            answer = f"Governed spend by {dimension}: {groups}."
+        return self._finish(
+            AskState.SUPPORTED,
+            text,
+            "financial",
+            answer,
+            citations=tuple(
+                {"type": "canonical_financial_observation", "reference": reference}
+                for reference in result.evidence_references
+            ),
+            provenance=(
+                {
+                    "scope": result.scope,
+                    "operation": result.operation,
+                    "currency": result.currency,
+                    "currency_authority": result.currency_authority,
+                    "observation_count": result.observation_count,
+                    "evidence_references": result.evidence_references,
+                    "source_references": result.source_references,
+                    "unresolved": result.unresolved,
+                },
+            ),
+        )
+
+    def _financial_query(self, text, scope):
+        service = self.financial_service
+        context = self.financial_context
+        posture = service.get_financial_posture(context)
+        currency = getattr(posture, "currency", None)
+        amount = getattr(posture, "cloud_spend", None)
+        has_data = getattr(posture, "has_data", False)
+        if isinstance(posture, dict):
+            currency = posture.get("currency")
+            amount = posture.get("total_ingested_spend")
+            has_data = bool(posture.get("source_rows"))
+        if not has_data:
+            raise FinancialQueryError("No governed financial observations are available.")
+        evidence_method = getattr(service, "get_financial_evidence", None)
+        evidence = tuple(evidence_method(context)) if evidence_method else ()
+        if not evidence:
+            raise FinancialQueryError("No governed financial evidence metadata is available.")
+        operation = "TOTAL_SPEND"
+        rows = ()
+        lower = text.casefold()
+        if "source" in lower:
+            operation = "SOURCE"
+        elif "unresolved" in lower or "unknown" in lower:
+            operation = "UNRESOLVED"
+        elif "evidence" in lower or "provenance" in lower or "supports" in lower:
+            operation = "EVIDENCE"
+        elif "region" in lower:
+            operation = "SPEND_BY_REGION"
+            rows = service.get_spend_by_region(context)
+        elif "service" in lower:
+            operation = "SPEND_BY_SERVICE"
+            rows = service.get_spend_by_service(context)
+        references = tuple(
+            reference
+            for row in rows
+            for reference in row.get("observation_ids", ())
+        )
+        if operation == "TOTAL_SPEND":
+            references = tuple(
+                reference
+                for row in service.get_spend_by_service(context)
+                for reference in row.get("observation_ids", ())
+            )
+        evidence_references = tuple(
+            dict.fromkeys(item["observation_id"] for item in evidence)
+        )
+        source_references = tuple(
+            dict.fromkeys(
+                reference
+                for item in evidence
+                for reference in (
+                    f"source:{item.get('source_id')}" if item.get("source_id") else None,
+                    f"file:{item.get('file_id')}" if item.get("file_id") else None,
+                )
+                if reference
+            )
+        )
+        represented_dimensions = {
+            key
+            for item in evidence
+            for key in item.get("dimensions", {})
+        }
+        unresolved = tuple(
+            label
+            for key, label in (
+                ("application", "application context"),
+                ("business_service", "business service context"),
+                ("owner", "owner context"),
+                ("team", "team context"),
+                ("department", "department context"),
+                ("cost_center", "cost center context"),
+            )
+            if key not in represented_dimensions
+        )
+        groups = tuple(
+            {
+                "label": row.get("service", row.get("region", "UNKNOWN")),
+                "amount": row.get("amount"),
+            }
+            for row in sorted(rows, key=lambda item: item.get("amount", 0), reverse=True)
+        )
+        return FinancialQueryResult(
+            operation,
+            amount,
+            groups,
+            currency,
+            "CANONICAL_FINANCIAL_AUTHORITY",
+                len(evidence),
+            (scope.organization_id, scope.tenant_id),
+            evidence_references,
+            source_references,
+            unresolved,
+        )
 
     def _measurement(self, text, scope, admission, actor, actor_id):
         if self.measurement_service is None or admission is None or actor is None:
@@ -499,6 +693,21 @@ class GovernedAskNexoraService:
         return next(
             (candidate for candidate in candidates if candidate.casefold() not in ignored),
             "",
+        )
+
+    @staticmethod
+    def _is_financial(text):
+        lower = text.casefold()
+        return (
+            "spend" in lower
+            and any(term in lower for term in ("total", "service", "region", "breakdown", "top"))
+        ) or any(
+            term in lower
+            for term in (
+                "what evidence supports",
+                "which source supplied",
+                "what information is unresolved",
+            )
         )
 
     @staticmethod
