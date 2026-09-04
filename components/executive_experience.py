@@ -404,9 +404,7 @@ def _render_decision_analytics(snapshot: WorkspaceSnapshot) -> None:
     with st.expander("Accessible visual intelligence data"):
         for name in sorted(required):
             st.markdown(f"**{name.replace('_', ' ').title()}**")
-            st.dataframe(
-                pd.DataFrame(analytics[name]), hide_index=True, use_container_width=True
-            )
+            st.dataframe(pd.DataFrame(analytics[name]), hide_index=True, use_container_width=True)
 
 
 def _render_demo_executive_ai(snapshot: WorkspaceSnapshot) -> None:
@@ -484,20 +482,14 @@ def render_workspace(
             definition.question,
             breadcrumbs=("Executive Intelligence",),
             persona=(
-                None
-                if key == "ceo" and snapshot.synthetic
-                else role.replace("_", " ").title()
+                None if key == "ceo" and snapshot.synthetic else role.replace("_", " ").title()
             ),
             scope=(
                 "Synthetic demonstration"
                 if key == "ceo" and snapshot.synthetic
                 else f"Tenant {tenant_id}"
             ),
-            period=(
-                None
-                if key == "ceo" and snapshot.synthetic
-                else "Current governed checkpoint"
-            ),
+            period=(None if key == "ceo" and snapshot.synthetic else "Current governed checkpoint"),
         )
         if snapshot.synthetic:
             st.warning(
@@ -549,9 +541,7 @@ def render_workspace(
                 f"${savings.get('Verified realized', 0) / 1_000_000:.1f}M",
                 "Realized and verified",
             )
-            estate[3].metric(
-                "Decisions waiting", str(len(snapshot.decisions)), "Leadership action"
-            )
+            estate[3].metric("Decisions waiting", str(len(snapshot.decisions)), "Leadership action")
             st.markdown("### Today's most important decision")
             with st.container(border=True):
                 st.caption("GLOBAL DIGITAL CHECKOUT · REQUIRES EXECUTIVE REVIEW")
@@ -622,12 +612,15 @@ def render_workspace(
         # In that presentation ``cols`` is empty while the snapshot remains intact.
         for column, metric in zip(cols, snapshot.metrics):
             with column:
+                availability_label = metric.availability or (
+                    "AVAILABLE" if metric.available else "UNKNOWN"
+                )
                 render_kpi_card(
                     KpiView(
                         metric.title,
                         metric.value,
                         metric.meaning,
-                        metric.source,
+                        (f"{metric.source} · " f"{availability_label}"),
                         "Current checkpoint",
                         "Current" if metric.available else "UNKNOWN",
                         kind=kinds.get(metric.kind, KpiKind.EXECUTIVE),
@@ -668,9 +661,7 @@ def render_workspace(
                     st.markdown(f"**Recommended decision:** {journey['recommendation']}")
                     links = st.columns(3)
                     with links[0]:
-                        st.page_link(
-                            "pages/decision_intelligence.py", label="Review decision"
-                        )
+                        st.page_link("pages/decision_intelligence.py", label="Review decision")
                     with links[1]:
                         st.page_link(
                             "pages/twin_explorer.py",

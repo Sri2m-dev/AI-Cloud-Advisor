@@ -7,7 +7,6 @@ import pandas as pd
 
 from repositories.savings_governance_repository import SavingsGovernanceRepository
 
-
 LIFECYCLE_ORDER = ["Identified", "Approved", "Planned", "Implemented", "Verified", "Realized"]
 
 
@@ -92,7 +91,11 @@ class SavingsGovernanceService:
 
     @staticmethod
     def _status(row: dict[str, Any]) -> str:
-        status = _lower(_first_existing(row, "workflow_state", "status", "lifecycle_status", default="identified"))
+        status = _lower(
+            _first_existing(
+                row, "workflow_state", "status", "lifecycle_status", default="identified"
+            )
+        )
         mapping = {
             "new": "Identified",
             "open": "Identified",
@@ -142,7 +145,9 @@ class SavingsGovernanceService:
 
     @staticmethod
     def _domain(row: dict[str, Any]) -> str:
-        value = _normalize(_first_existing(row, "Domain", "domain", "category", "type", "service", default="Cloud"))
+        value = _normalize(
+            _first_existing(row, "Domain", "domain", "category", "type", "service", default="Cloud")
+        )
         value_l = value.lower()
         if "ai" in value_l:
             return "AI"
@@ -164,33 +169,53 @@ class SavingsGovernanceService:
             savings = SavingsGovernanceService._savings(row)
             if not savings:
                 continue
-            created = _first_existing(row, "created_at", "Created At", "date", "generated_at", default="")
+            created = _first_existing(
+                row, "created_at", "Created At", "date", "generated_at", default=""
+            )
             rows.append(
                 {
-                    "Recommendation": _normalize(_first_existing(row, "title", "Recommendation", "message", "description", default="Optimization opportunity")),
-                    "Owner": _normalize(_first_existing(row, "owner", "assigned_to", "Owner", default="Unassigned")),
+                    "Recommendation": _normalize(
+                        _first_existing(
+                            row,
+                            "title",
+                            "Recommendation",
+                            "message",
+                            "description",
+                            default="Optimization opportunity",
+                        )
+                    ),
+                    "Owner": _normalize(
+                        _first_existing(row, "owner", "assigned_to", "Owner", default="Unassigned")
+                    ),
                     "Domain": SavingsGovernanceService._domain(row),
-                    "Priority": _normalize(_first_existing(row, "priority", "impact", "Priority", default="Medium")).title(),
+                    "Priority": _normalize(
+                        _first_existing(row, "priority", "impact", "Priority", default="Medium")
+                    ).title(),
                     "Status": SavingsGovernanceService._status(row),
                     "Potential Savings": savings,
                     "Realized Savings": SavingsGovernanceService._realized(row),
                     "Created At": created,
                 }
             )
-        return rows or SavingsGovernanceService._fallback_pipeline()
+        # Empty production authority stays empty. Synthetic examples belong to Demo only.
+        return rows
 
     @staticmethod
     def get_kpis() -> dict[str, Any]:
         rows = SavingsGovernanceService.get_optimization_pipeline()
-        total_identified = sum(row["Potential Savings"] for row in rows) or 14500.0
-        approved = sum(row["Potential Savings"] for row in rows if row["Status"] in {"Approved", "Planned", "Implemented", "Verified", "Realized"})
-        implemented = sum(row["Potential Savings"] for row in rows if row["Status"] in {"Implemented", "Verified", "Realized"})
+        total_identified = sum(row["Potential Savings"] for row in rows)
+        approved = sum(
+            row["Potential Savings"]
+            for row in rows
+            if row["Status"] in {"Approved", "Planned", "Implemented", "Verified", "Realized"}
+        )
+        implemented = sum(
+            row["Potential Savings"]
+            for row in rows
+            if row["Status"] in {"Implemented", "Verified", "Realized"}
+        )
         realized = sum(row["Realized Savings"] for row in rows)
 
-        total_identified = max(total_identified, 14500.0)
-        approved = max(approved, 10000.0)
-        implemented = max(implemented, 7000.0)
-        realized = max(realized, 5000.0)
         pipeline_value = max(total_identified - realized, 0)
         implementation_rate = implemented / total_identified * 100 if total_identified else 0
         realization_rate = realized / total_identified * 100 if total_identified else 0
@@ -219,31 +244,24 @@ class SavingsGovernanceService:
     @staticmethod
     def get_savings_by_domain() -> list[dict[str, Any]]:
         rows = SavingsGovernanceService.get_optimization_pipeline()
-        totals = {"Cloud": 0.0, "SaaS": 0.0, "AI": 0.0, "Licensing": 0.0, "MSP": 0.0}
+        totals: dict[str, float] = {}
         for row in rows:
             domain = row["Domain"]
             if domain not in totals:
                 totals[domain] = 0.0
             totals[domain] += row["Potential Savings"]
-        if sum(totals.values()) < 14500:
-            totals = {"Cloud": 9000.0, "SaaS": 3500.0, "AI": 2000.0, "Licensing": 0.0, "MSP": 0.0}
         return [{"Domain": key, "Savings": value} for key, value in totals.items()]
 
     @staticmethod
     def get_savings_by_owner() -> list[dict[str, Any]]:
         totals: dict[str, float] = {}
         for row in SavingsGovernanceService.get_optimization_pipeline():
-            owner = row["Owner"] if row["Owner"] != "Unassigned" else {
-                "Cloud": "CloudOps",
-                "SaaS": "Finance",
-                "AI": "Engineering",
-                "Licensing": "Operations",
-                "MSP": "Operations",
-            }.get(row["Domain"], "Operations")
+            owner = row["Owner"]
             totals[owner] = totals.get(owner, 0.0) + row["Potential Savings"]
-        if sum(totals.values()) < 14500:
-            totals = {"CloudOps": 9000.0, "Finance": 3500.0, "Engineering": 2000.0, "Operations": 0.0}
-        return [{"Owner": key, "Savings": value} for key, value in sorted(totals.items(), key=lambda item: item[1], reverse=True)]
+        return [
+            {"Owner": key, "Savings": value}
+            for key, value in sorted(totals.items(), key=lambda item: item[1], reverse=True)
+        ]
 
     @staticmethod
     def get_implementation_backlog() -> list[dict[str, Any]]:
@@ -274,32 +292,34 @@ class SavingsGovernanceService:
             for row in trend:
                 rows.append(
                     {
-                        "Month": _normalize(_first_existing(row, "month", "period", "date", default="Current")),
+                        "Month": _normalize(
+                            _first_existing(row, "month", "period", "date", default="Current")
+                        ),
                         "Realized Savings": SavingsGovernanceService._realized(row),
                     }
                 )
             if any(row["Realized Savings"] for row in rows):
                 return rows
-        return [
-            {"Month": "Jan", "Realized Savings": 500},
-            {"Month": "Feb", "Realized Savings": 900},
-            {"Month": "Mar", "Realized Savings": 1400},
-            {"Month": "Apr", "Realized Savings": 2200},
-            {"Month": "May", "Realized Savings": 3600},
-            {"Month": "Jun", "Realized Savings": 5000},
-        ]
+        return []
 
     @staticmethod
     def get_executive_narrative() -> str:
         kpis = SavingsGovernanceService.get_kpis()
-        largest = max(SavingsGovernanceService.get_savings_by_owner(), key=lambda row: row["Savings"], default={"Owner": "CloudOps"})
+        if not SavingsGovernanceService.get_optimization_pipeline():
+            return "Optimization authority is UNKNOWN because no canonical opportunities exist."
+        largest = max(
+            SavingsGovernanceService.get_savings_by_owner(),
+            key=lambda row: row["Savings"],
+            default={"Owner": "UNKNOWN"},
+        )
         return (
-            f"Nexora has identified ${kpis['total_identified_savings'] / 1000:.1f}K in optimization opportunities. "
+            f"Nexora has identified ${kpis['total_identified_savings'] / 1000:.1f}K "
+            "in optimization opportunities. "
             f"${kpis['approved_savings'] / 1000:.0f}K has been approved. "
             f"${kpis['implemented_savings'] / 1000:.0f}K has been implemented. "
             f"${kpis['realized_savings'] / 1000:.0f}K has been verified and realized. "
             f"Current realization rate is {kpis['realization_rate']:.0f}%. "
-            f"The largest unrealized opportunity remains Cloud optimization under {largest['Owner']}."
+            f"The largest unrealized opportunity remains under {largest['Owner']}."
         )
 
     @staticmethod

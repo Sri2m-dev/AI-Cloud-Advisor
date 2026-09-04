@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from auth.authenticated_tenant import AuthenticatedTenantContext
+from enterprise_intelligence.models import AvailabilityState, IntelligenceResult
 from services.demo_tenant_service import DemoTenantError, load_demo_tenant
 from services.enterprise_spend_certification_service import EnterpriseSpendCertificationService
 from services.enterprise_spend_service import EnterpriseSpendService
@@ -17,6 +18,8 @@ class WorkspaceMetric:
     source: str
     available: bool
     kind: str
+    availability: str | None = None
+    fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,8 @@ class WorkspaceSnapshot:
     decisions: tuple[dict[str, Any], ...] = ()
     analytics: dict[str, tuple[dict[str, Any], ...]] | None = None
     journeys: tuple[dict[str, Any], ...] = ()
+    canonical_results: tuple[IntelligenceResult, ...] = ()
+    persona: str | None = None
 
 
 def _money(value: Any) -> str:
@@ -60,6 +65,9 @@ class ExecutiveWorkspaceCompositionService:
         key: str,
         context: AuthenticatedTenantContext,
         spend_service: EnterpriseSpendService,
+        *,
+        query_service=None,
+        role: str | None = None,
     ) -> WorkspaceSnapshot:
         try:
             return ExecutiveWorkspaceCompositionService._demo_snapshot(
@@ -68,11 +76,134 @@ class ExecutiveWorkspaceCompositionService:
         except DemoTenantError:
             pass
 
+        if query_service is not None:
+            return ExecutiveWorkspaceCompositionService._canonical_snapshot(
+                key, context, query_service, role=role
+            )
+
         try:
             dashboard = EnterpriseSpendCertificationService.get_dashboard(context, spend_service)
         except Exception:
             return ExecutiveWorkspaceCompositionService._unavailable_snapshot()
         return ExecutiveWorkspaceCompositionService._certified_snapshot(key, dashboard)
+
+    @staticmethod
+    def _canonical_snapshot(key, context, query_service, *, role=None):
+        spend = query_service.enterprise_spend_summary(context)
+        optimization = query_service.optimization_summary(context)
+        stages = optimization.metadata.get("stages", {})
+
+        def money_metric(title, value, result, meaning, kind="financial"):
+            available = value is not None and result.availability in {
+                AvailabilityState.AVAILABLE,
+                AvailabilityState.PARTIAL,
+            }
+            return WorkspaceMetric(
+                title,
+                _money(value) if available else result.availability.value,
+                meaning,
+                result.authority,
+                available,
+                kind,
+                result.availability.value,
+                result.fingerprint,
+            )
+
+        values = spend.metadata
+        metrics = [
+            money_metric(
+                "Total Technology Spend",
+                spend.value,
+                spend,
+                "Canonical P1 technology spend for the selected period.",
+            ),
+            money_metric(
+                "Cloud Spend",
+                values.get("cloud_spend"),
+                spend,
+                "Cloud spend reported by canonical P1 authority.",
+            ),
+            money_metric(
+                "Shared Spend",
+                values.get("shared_spend"),
+                spend,
+                "Spend deliberately retained as shared and unallocated.",
+            ),
+            money_metric(
+                "Unresolved Spend",
+                values.get("unresolved_spend"),
+                spend,
+                "Spend whose canonical context remains unresolved.",
+            ),
+        ]
+        for stage in ("potential", "approved", "planned", "implemented", "verified", "realized"):
+            rows = stages.get(stage)
+            if rows is None:
+                value, state = None, AvailabilityState.UNKNOWN
+            elif len(rows) == 1:
+                value, state = rows[0][1], optimization.availability
+            else:
+                value, state = None, AvailabilityState.CONFLICTED
+            stage_result = IntelligenceResult(
+                optimization.tenant_id,
+                optimization.organization_id,
+                optimization.scope,
+                f"{stage}_savings",
+                optimization.period,
+                state,
+                value,
+                rows[0][0] if rows and len(rows) == 1 else None,
+                contributing_opportunity_ids=optimization.contributing_opportunity_ids,
+                reason_codes=("MULTIPLE_CURRENCIES",) if rows and len(rows) > 1 else (),
+                fingerprint=optimization.fingerprint,
+                authority="P2",
+            )
+            metrics.append(
+                money_metric(
+                    f"{stage.title()} Savings",
+                    value,
+                    stage_result,
+                    f"Canonical P2 {stage} savings lifecycle value.",
+                    "decision",
+                )
+            )
+        visible = ExecutiveWorkspaceCompositionService._persona_metrics(metrics, role)
+        story = WorkspaceStory(
+            yesterday="Use an explicit comparable period to establish change.",
+            today=f"Technology spend is {visible[0].value} ({spend.availability.value}).",
+            risk="Data quality exceptions remain visible and are not converted to zero.",
+            recommendation="Review canonical opportunities and their governed evidence.",
+            outcome="Executive and Ask surfaces share the same result fingerprints.",
+            action=f"Open the authorized {key.replace('_', ' ')} drill-down.",
+            confidence=spend.availability.value,
+            evidence="Available" if spend.evidence_references else "UNKNOWN",
+        )
+        return WorkspaceSnapshot(
+            tuple(visible), story, canonical_results=(spend, optimization), persona=role
+        )
+
+    @staticmethod
+    def _persona_metrics(metrics, role):
+        """Personas change visibility/order only; never values or fingerprints."""
+        normalized = str(role or "").casefold().replace(" ", "_")
+        preferred = {
+            "ceo": ("Total Technology Spend", "Potential Savings", "Realized Savings"),
+            "cio": ("Total Technology Spend", "Cloud Spend", "Unresolved Spend"),
+            "cto": ("Cloud Spend", "Shared Spend", "Implemented Savings"),
+            "finops": (
+                "Total Technology Spend",
+                "Potential Savings",
+                "Approved Savings",
+                "Realized Savings",
+            ),
+            "application_owner": ("Total Technology Spend", "Potential Savings"),
+            "technology_owner": ("Cloud Spend", "Potential Savings", "Implemented Savings"),
+            "tam": ("Total Technology Spend", "Unresolved Spend", "Approved Savings"),
+        }.get(normalized)
+        if not preferred:
+            return metrics
+        by_title = {metric.title: metric for metric in metrics}
+        return [by_title[title] for title in preferred if title in by_title]
 
     @staticmethod
     def _certified_snapshot(key: str, dashboard: dict[str, Any]) -> WorkspaceSnapshot:

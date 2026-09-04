@@ -4,6 +4,8 @@ import streamlit as st
 
 from components.executive_experience import render_workspace
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES, render_sidebar_navigation
+from services.canonical_optimization_service import CanonicalOptimizationService
+from services.enterprise_intelligence_query_service import EnterpriseIntelligenceQueryService
 from services.enterprise_spend_composition import (
     authenticated_tenant_context,
     enterprise_spend_service,
@@ -11,10 +13,10 @@ from services.enterprise_spend_composition import (
 from services.executive_workspace_composition_service import (
     ExecutiveWorkspaceCompositionService,
 )
-from shared.session import init_session
-from shared.styles import configure_page
 from shared.currency import format_currency_amount
 from shared.evidence_context import resolve_active_evidence_context
+from shared.session import init_session
+from shared.styles import configure_page
 
 
 def _render_prospect_workspace(key: str, analysis: object) -> None:
@@ -38,9 +40,7 @@ def _render_prospect_workspace(key: str, analysis: object) -> None:
     metrics = st.columns(4)
     metrics[0].metric("Observed spend", total)
     metrics[1].metric("Evidence rows", f"{getattr(analysis, 'row_count', 0):,}")
-    metrics[2].metric(
-        "Evidence coverage", f"{getattr(analysis, 'evidence_coverage', 0):.1f}%"
-    )
+    metrics[2].metric("Evidence coverage", f"{getattr(analysis, 'evidence_coverage', 0):.1f}%")
     metrics[3].metric("Evidence-qualified opportunity", qualified)
     st.info(
         "Observed spend and evidence coverage come from the current uploaded analysis. "
@@ -71,10 +71,22 @@ def run_executive_workspace(key: str, title: str) -> None:
         _render_prospect_workspace(key, evidence_context.prospect_analysis)
         return
     authenticated = authenticated_tenant_context(st.session_state)
+    spend_service = enterprise_spend_service()
+    try:
+        optimization_service = CanonicalOptimizationService()
+    except RuntimeError:
+        optimization_service = None
+    query_service = EnterpriseIntelligenceQueryService(
+        financial_service=spend_service,
+        financial_context=authenticated,
+        optimization_service=optimization_service,
+    )
     snapshot = ExecutiveWorkspaceCompositionService.get_snapshot(
         key,
         authenticated,
-        enterprise_spend_service(),
+        spend_service,
+        query_service=query_service,
+        role=role,
     )
     allowed_page_paths = frozenset(
         PAGE_PATHS[label] for label in ROLE_PAGES.get(role, ()) if label in PAGE_PATHS

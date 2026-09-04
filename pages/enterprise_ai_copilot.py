@@ -38,9 +38,7 @@ st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
 if evidence_context.is_prospect:
     analysis = evidence_context.prospect_analysis
     admission = evidence_context.evidence_admission
-    scope_id = getattr(admission, "fingerprint", None) or getattr(
-        analysis, "audit_id", "analysis"
-    )
+    scope_id = getattr(admission, "fingerprint", None) or getattr(analysis, "audit_id", "analysis")
     prospect_history_key = f"prospect_copilot:{scope_id}"
     prospect_history = st.session_state.setdefault(prospect_history_key, [])
     st.title("Ask Nexora")
@@ -64,9 +62,7 @@ if evidence_context.is_prospect:
         metrics[2].metric("Evidence coverage", f"{analysis.evidence_coverage:.1f}%")
         metrics[3].metric(
             "Qualified opportunity",
-            format_currency_amount(
-                analysis.opportunity_evidence_qualified, analysis.currency
-            ),
+            format_currency_amount(analysis.opportunity_evidence_qualified, analysis.currency),
         )
     for item in prospect_history[-10:]:
         with st.chat_message(item["role"]):
@@ -102,9 +98,7 @@ if evidence_context.is_prospect:
             st.write(answer)
             if governed is not None and governed.provenance:
                 with st.expander("Evidence"):
-                    st.caption(
-                        f"{len(governed.provenance)} governed provenance reference(s)"
-                    )
+                    st.caption(f"{len(governed.provenance)} governed provenance reference(s)")
                     st.json(list(governed.provenance))
         prospect_history.extend(
             ({"role": "user", "content": question}, {"role": "assistant", "content": answer})
@@ -118,10 +112,13 @@ if evidence_context.is_demo:
     session_id = f"demo:{organization_id}:{st.session_state.get('user_id', 'session')}"
 else:
     authenticated = authenticated_tenant_context(st.session_state)
-    copilot = enterprise_ai_copilot(authenticated.fabric_context, role=authenticated.role)
+    copilot = enterprise_ai_copilot(
+        authenticated.fabric_context,
+        role=authenticated.role,
+        financial_context=authenticated,
+    )
     session_id = (
-        f"{authenticated.fabric_context.tenant_id}:"
-        f"{st.session_state.get('user_id', 'session')}"
+        f"{authenticated.fabric_context.tenant_id}:" f"{st.session_state.get('user_id', 'session')}"
     )
 history_key = f"enterprise_copilot:{session_id}"
 history = st.session_state.setdefault(history_key, [])
@@ -190,9 +187,7 @@ if question:
         )
     with st.chat_message("assistant"):
         answer = (
-            demo_result.answer
-            if demo_result is not None
-            else str(response.answer or "").strip()
+            demo_result.answer if demo_result is not None else str(response.answer or "").strip()
         )
         empty_answer = answer.lower() in {"", "unknown", "unknown remains unknown.", "[]", "{}"}
         if empty_answer:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Mapping
 from uuid import uuid4
@@ -31,6 +32,82 @@ class DimensionState(str, Enum):
     STALE = "STALE"
     MISSING = "MISSING"
     UNSUPPORTED = "UNSUPPORTED"
+
+
+class AvailabilityState(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    PARTIAL = "PARTIAL"
+    UNKNOWN = "UNKNOWN"
+    UNSUPPORTED = "UNSUPPORTED"
+    STALE = "STALE"
+    CONFLICTED = "CONFLICTED"
+    QUARANTINED = "QUARANTINED"
+    NOT_COMPARABLE = "NOT_COMPARABLE"
+
+
+class ReconciliationState(str, Enum):
+    RECONCILED = "RECONCILED"
+    PARTIAL = "PARTIAL"
+    NOT_RECONCILABLE = "NOT_RECONCILABLE"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+@dataclass(frozen=True, slots=True)
+class IntelligencePeriod:
+    start: date | None = None
+    end: date | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class IntelligenceBreakdown:
+    key: str
+    label: str
+    value: Decimal | int | float | str | None
+    availability: AvailabilityState = AvailabilityState.AVAILABLE
+    entity_ids: tuple[str, ...] = ()
+    observation_ids: tuple[str, ...] = ()
+    opportunity_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class IntelligenceResult:
+    """A deterministic, non-persisted projection of canonical authorities."""
+
+    tenant_id: str
+    organization_id: str
+    scope: str
+    query_family: str
+    period: IntelligencePeriod
+    availability: AvailabilityState
+    value: Any = None
+    currency: str | None = None
+    unit: str | None = None
+    breakdown: tuple[IntelligenceBreakdown, ...] = ()
+    contributing_observation_ids: tuple[str, ...] = ()
+    contributing_opportunity_ids: tuple[str, ...] = ()
+    contributing_entity_ids: tuple[str, ...] = ()
+    coverage: Decimal | None = None
+    reconciliation: ReconciliationState = ReconciliationState.NOT_APPLICABLE
+    freshness: str | None = None
+    conflicts: tuple[str, ...] = ()
+    evidence_references: tuple[str, ...] = ()
+    explanation_references: tuple[str, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    fingerprint: str = ""
+    authority: str = ""
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonResult:
+    current: IntelligenceResult
+    comparison: IntelligenceResult
+    availability: AvailabilityState
+    absolute_change: Decimal | None
+    percentage_change: Decimal | None
+    reason_codes: tuple[str, ...]
+    fingerprint: str
 
 
 @dataclass(frozen=True, slots=True)

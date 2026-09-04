@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 from typing import Any
@@ -46,6 +48,10 @@ def main() -> None:
     role = normalize_role(st.session_state.get("role") or user.get("role") or "cio")
     render_sidebar_navigation(role)
     _require_access(role)
+
+    # Compatibility route: governed Enterprise AI is the production composition root.
+    st.switch_page("enterprise_ai_copilot.py")
+    return
 
     organization_id = get_current_organization_id()
     session_id = f"{organization_id}:{user.get('email') or st.session_state.get('email') or 'default'}"

@@ -175,6 +175,13 @@ class EnterpriseAIOrchestrator:
                 "total cost",
                 "governed records",
                 "cost by service",
+                "spend",
+                "saving",
+                "optimization",
+                "source health",
+                "unresolved",
+                "conflict",
+                "impact",
             )
         )
 
@@ -207,6 +214,9 @@ class EnterpriseAIOrchestrator:
                 "latency_ms": (perf_counter() - started) * 1000,
                 "governed_state": governed.state.value,
                 "answer_fingerprint": governed.answer_fingerprint,
+                "canonical_result_fingerprint": getattr(
+                    getattr(governed, "canonical_result", None), "fingerprint", None
+                ),
             },
             CopilotResponse.now(),
         )

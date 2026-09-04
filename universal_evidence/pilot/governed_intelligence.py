@@ -40,6 +40,7 @@ class GovernedAskResponse:
     provenance: tuple[dict[str, Any], ...]
     answer_fingerprint: str
     reason: str | None = None
+    canonical_result: Any | None = None
 
 
 class FinancialQueryError(RuntimeError):
@@ -77,6 +78,7 @@ class GovernedAskNexoraService:
         policy=None,
         operations=None,
         operation_context=None,
+        intelligence_service=None,
     ) -> None:
         self.measurement_service = measurement_service
         self.financial_service = financial_service
@@ -89,6 +91,7 @@ class GovernedAskNexoraService:
         self.policy = policy or InterpretationPolicy()
         self.operations = operations
         self.operation_context = operation_context
+        self.intelligence_service = intelligence_service
 
     def ask(
         self,
@@ -222,6 +225,10 @@ class GovernedAskNexoraService:
                 "governance",
                 "Governance cannot be bypassed by question text or uploaded data.",
             )
+        if self.intelligence_service is not None:
+            canonical = self._canonical_query(text, scope)
+            if canonical is not None:
+                return canonical
         if self._unsupported(text):
             return self._finish(
                 AskState.UNSUPPORTED,
@@ -241,6 +248,130 @@ class GovernedAskNexoraService:
                 "I do not have enough governed evidence to answer that yet.",
             )
         return self._enterprise(text, scope, source_bindings)
+
+    def _canonical_query(self, text, scope):
+        """Map bounded product intents to the shared P5 result, without calculating."""
+        lower = text.casefold()
+        family = None
+        entity_id = None
+        dimensions = {
+            "business service": "business_service",
+            "cost center": "cost_center",
+            "cost centre": "cost_center",
+            "application": "application",
+            "owner": "owner",
+            "technology": "technology",
+            "domain": "domain",
+        }
+        if "source health" in lower:
+            family = "source_health"
+        elif "source" in lower or "provenance" in lower or "evidence" in lower:
+            family = "source_explanation"
+        elif "conflict" in lower:
+            family = "conflicted_context"
+        elif "unresolved" in lower or "unknown context" in lower:
+            family = "unresolved_context"
+        elif "depend" in lower:
+            family = "dependencies_for_entity"
+        elif "impact" in lower:
+            family = "impact_of_change"
+        elif "who own" in lower or "ownership" in lower:
+            family = "owner_for_entity"
+        elif "business service" in lower and "application" in lower and "spend" not in lower:
+            family = "business_service_for_application"
+        elif ("cost center" in lower or "cost centre" in lower) and "spend" not in lower:
+            family = "cost_center_for_entity"
+        elif "opportunit" in lower and any(
+            word in lower for word in ("entity", "application", "technology")
+        ):
+            family = "opportunities_for_entity"
+        elif "saving" in lower or "optimization" in lower:
+            dimension = next(
+                (value for label, value in dimensions.items() if f"by {label}" in lower), None
+            )
+            family = f"savings_by_{dimension}" if dimension else "optimization_summary"
+        elif "spend" in lower:
+            dimension = next(
+                (value for label, value in dimensions.items() if f"by {label}" in lower), None
+            )
+            family = f"spend_by_{dimension}" if dimension else "enterprise_spend_summary"
+        if family is None:
+            return None
+        if family in {
+            "owner_for_entity",
+            "business_service_for_application",
+            "cost_center_for_entity",
+            "dependencies_for_entity",
+            "impact_of_change",
+            "opportunities_for_entity",
+        }:
+            entity_id = self._subject(text) or None
+        try:
+            result = self.intelligence_service.query(scope, family, entity_id=entity_id)
+        except PermissionError:
+            return self._finish(
+                AskState.BLOCKED,
+                text,
+                "canonical",
+                "The requested authority is outside the active scope.",
+            )
+        state_name = result.availability.value
+        supported = state_name in {"AVAILABLE", "PARTIAL", "STALE", "CONFLICTED", "QUARANTINED"}
+        ask_state = (
+            AskState.STALE
+            if state_name == "STALE"
+            else AskState.SUPPORTED
+            if supported
+            else AskState.INSUFFICIENT
+        )
+        answer = self._canonical_answer(result)
+        citations = tuple(
+            {"type": "canonical_evidence", "reference": ref} for ref in result.evidence_references
+        )
+        provenance = (
+            {
+                "query_family": result.query_family,
+                "scope": result.scope,
+                "availability": state_name,
+                "authority": result.authority,
+                "result_fingerprint": result.fingerprint,
+                "period": result.period,
+                "currency": result.currency,
+                "coverage": result.coverage,
+                "freshness": result.freshness,
+                "conflicts": result.conflicts,
+            },
+        )
+        return self._finish(
+            ask_state,
+            text,
+            "canonical",
+            answer,
+            citations=citations,
+            provenance=provenance,
+            canonical_result=result,
+        )
+
+    @staticmethod
+    def _canonical_answer(result):
+        state = result.availability.value
+        if state not in {"AVAILABLE", "PARTIAL"}:
+            reason = ", ".join(result.reason_codes) or "canonical evidence is unavailable"
+            return f"{state}: {reason}."
+        suffix = (
+            f" {result.currency}" if result.currency else f" {result.unit}" if result.unit else ""
+        )
+        if result.breakdown:
+            groups = "; ".join(
+                f"{row.label}: "
+                f"{row.value if row.value is not None else row.availability.value}{suffix}"
+                for row in result.breakdown
+            )
+            return (
+                f"{result.query_family.replace('_', ' ').title()}: {groups}. Availability: {state}."
+            )
+        title = result.query_family.replace("_", " ").title()
+        return f"{title}: {result.value}{suffix}. Availability: {state}."
 
     def _financial(self, text, scope):
         if self.financial_service is None or self.financial_context is None:
@@ -290,8 +421,7 @@ class GovernedAskNexoraService:
             answer = f"Governed total spend: {result.amount} {result.currency}."
         else:
             groups = ", ".join(
-                f"{item['label']}: {item['amount']} {result.currency}"
-                for item in result.groups
+                f"{item['label']}: {item['amount']} {result.currency}" for item in result.groups
             )
             dimension = result.operation.removeprefix("SPEND_BY_").casefold()
             answer = f"Governed spend by {dimension}: {groups}."
@@ -350,20 +480,7 @@ class GovernedAskNexoraService:
         elif "service" in lower:
             operation = "SPEND_BY_SERVICE"
             rows = service.get_spend_by_service(context)
-        references = tuple(
-            reference
-            for row in rows
-            for reference in row.get("observation_ids", ())
-        )
-        if operation == "TOTAL_SPEND":
-            references = tuple(
-                reference
-                for row in service.get_spend_by_service(context)
-                for reference in row.get("observation_ids", ())
-            )
-        evidence_references = tuple(
-            dict.fromkeys(item["observation_id"] for item in evidence)
-        )
+        evidence_references = tuple(dict.fromkeys(item["observation_id"] for item in evidence))
         source_references = tuple(
             dict.fromkeys(
                 reference
@@ -375,11 +492,7 @@ class GovernedAskNexoraService:
                 if reference
             )
         )
-        represented_dimensions = {
-            key
-            for item in evidence
-            for key in item.get("dimensions", {})
-        }
+        represented_dimensions = {key for item in evidence for key in item.get("dimensions", {})}
         unresolved = tuple(
             label
             for key, label in (
@@ -405,7 +518,7 @@ class GovernedAskNexoraService:
             groups,
             currency,
             "CANONICAL_FINANCIAL_AUTHORITY",
-                len(evidence),
+            len(evidence),
             (scope.organization_id, scope.tenant_id),
             evidence_references,
             source_references,
@@ -812,6 +925,7 @@ class GovernedAskNexoraService:
         citations=(),
         provenance=(),
         reason=None,
+        canonical_result=None,
     ):
         identity = fingerprint(
             state.value,
@@ -823,6 +937,7 @@ class GovernedAskNexoraService:
             citations,
             provenance,
             reason,
+            getattr(canonical_result, "fingerprint", None),
         )
         return GovernedAskResponse(
             state,
@@ -836,6 +951,7 @@ class GovernedAskNexoraService:
             tuple(provenance),
             identity,
             reason,
+            canonical_result,
         )
 
     @staticmethod

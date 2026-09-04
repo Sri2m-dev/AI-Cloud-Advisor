@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from decimal import Decimal
 
 import pandas as pd
@@ -39,6 +41,10 @@ require_role(
         "super_admin",
     ]
 )
+
+# Compatibility route: shared Executive workspace owns the production snapshot.
+st.switch_page("executive_command_center.py")
+st.stop()
 
 try:
     tenant_context = authenticated_tenant_context(st.session_state)
