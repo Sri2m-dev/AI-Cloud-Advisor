@@ -130,9 +130,10 @@ def _admit_uploaded_evidence(
     scan = scan_upload(filename, content)
     now = now or datetime.now(timezone.utc)
     evidence_fingerprint = scan["sha256"]
-    analysis_id = "pue-upload-analysis-" + fingerprint(
-        tenant.tenant_id, tenant.audit_id, evidence_fingerprint
-    )[:24]
+    analysis_id = (
+        "pue-upload-analysis-"
+        + fingerprint(tenant.tenant_id, tenant.audit_id, evidence_fingerprint)[:24]
+    )
     source_id = "pue-upload-source-" + evidence_fingerprint[:24]
     organization_id = getattr(tenant_context, "organization_id", None)
     authorized_tenant_id = getattr(tenant_context, "tenant_id", None)
@@ -157,9 +158,7 @@ def _admit_uploaded_evidence(
         organization_id,
         authorized_tenant_id,
     )
-    legacy_reference = (
-        str(getattr(legacy_analysis, "audit_id", "") or "") or None
-    )
+    legacy_reference = str(getattr(legacy_analysis, "audit_id", "") or "") or None
     identity = fingerprint(
         scope,
         source_id,
@@ -192,6 +191,9 @@ def admitted_source_rows(admission: EvidencePilotAdmission, *, data_only: bool =
 
 
 def discover_structural_regions(profile, *, filename, content):
+    if Path(filename).suffix.lower() == ".pdf":
+        # PUE-011D owns PDF structure. PUE-001's tabular compatibility profiler does not.
+        return ()
     rows_by_sheet = _source_rows(filename, content)
     discovered = []
     for sheet_profile, rows in zip(profile.sheets, rows_by_sheet, strict=True):
@@ -208,8 +210,7 @@ def discover_structural_regions(profile, *, filename, content):
         if primary_region is not None:
             end_row = _detail_end(rows, header_row, primary_region[1])
             headers = tuple(
-                str(value).strip() if value is not None else ""
-                for value in rows[header_row - 1]
+                str(value).strip() if value is not None else "" for value in rows[header_row - 1]
             )
             discovered.append(
                 _region(
@@ -252,8 +253,7 @@ def _detail_end(rows: list[list[Any]], header_row: int, region_end: int):
     ]
     populated = [value for value in key_values if nonempty(value)]
     numeric_key = (
-        populated
-        and sum(_is_number(value) for value in populated) / len(populated) >= 0.8
+        populated and sum(_is_number(value) for value in populated) / len(populated) >= 0.8
     )
     if numeric_key:
         for row_number in range(header_row + 1, region_end + 1):

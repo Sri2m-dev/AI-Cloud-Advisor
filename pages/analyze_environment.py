@@ -45,6 +45,7 @@ from shared.evidence_context import (  # noqa: E402
 )
 from shared.session import init_session  # noqa: E402
 from shared.styles import configure_page  # noqa: E402
+from universal_evidence.contracts import EvidenceAnalysisContext  # noqa: E402
 from universal_evidence.financial.ui import render_financial_governance  # noqa: E402
 from universal_evidence.persistence import LifecyclePersistenceError  # noqa: E402
 from universal_evidence.pilot import (  # noqa: E402
@@ -70,13 +71,16 @@ from universal_evidence.pilot.production_views import (  # noqa: E402
     build_enterprise_context,
     build_reconciliation_view,
 )
+from universal_evidence.product_closure import analyze_document_bundle  # noqa: E402
 from universal_evidence.production_workflow import (  # noqa: E402
     activate_production_workflow,
     evidence_counts,
     load_configured_production_views,
     load_live_canonical_views,
+    persist_document_closure,
     persist_production_workspace,
     resumable_production_workspaces,
+    resume_document_closure,
     resume_production_workspace,
     upload_outcome,
 )
@@ -138,6 +142,7 @@ def _reset_journey() -> None:
         "environment_analysis_result",
         "prospect_analysis",
         "prospect_analysis_error",
+        "document_closure_result",
         "pue_pilot_context",
         "pue_dev_harness_active",
         "pue_shadow_analysis",
@@ -198,6 +203,89 @@ def _financial_context():
 
 
 def _render_upload_pue(admission):
+    closure = st.session_state.get("document_closure_result")
+    if closure is not None:
+        st.markdown("### Evidence overview")
+        metrics = st.columns(4)
+        metrics[0].metric("Source files", len(closure.documents))
+        metrics[1].metric("Representations", closure.representation_count)
+        metrics[2].metric("Business documents", closure.business_document_count)
+        metrics[3].metric("Analysis status", "COMPLETE · AUTOMATIC")
+        st.caption("Scope: Current prospect · Governed Document Intelligence")
+        st.success("Document Intelligence completed successfully.")
+        licenses = st.columns(4)
+        licenses[0].metric("Purchased licenses", closure.purchased_licenses)
+        licenses[1].metric("Assigned licenses", closure.assigned_licenses)
+        licenses[2].metric("Unassigned licenses", closure.unassigned_licenses)
+        licenses[3].metric("Access entitlements", closure.access_entitlements)
+        st.warning(
+            "Savings remain UNKNOWN. No optimization amount is inferred without governed "
+            "price, currency, and eligibility evidence."
+        )
+        st.dataframe(
+            [
+                {
+                    "Document": item.filename,
+                    "Type": item.container_type,
+                    "Regions": item.region_count,
+                    "Invoice representations": item.financial_representation_count,
+                    "Purchased": item.purchased_licenses,
+                    "Assigned": item.assigned_licenses,
+                    "Unassigned": item.unassigned_licenses,
+                    "Access": item.access_entitlements,
+                }
+                for item in closure.documents
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("### Financial documents")
+        grouped = {}
+        for item in closure.financial_documents:
+            grouped.setdefault(item["business_document_id"], []).append(item)
+        financial_rows = []
+        for business_document_id, representations in grouped.items():
+            preferred = next(
+                (item for item in representations if item["total_due"] is not None),
+                representations[0],
+            )
+            states = {state for item in representations for state in item["reconciliations"]}
+            currencies = {
+                currency
+                for item in representations
+                for currency in item["currencies"]
+                if item["currency_governed"]
+            }
+            financial_rows.append(
+                {
+                    "Document": business_document_id,
+                    "Evidence": " + ".join(
+                        sorted(
+                            {
+                                item["filename"].rsplit(".", 1)[-1].upper()
+                                for item in representations
+                            }
+                        )
+                    ),
+                    "Representations": len(representations),
+                    "Detail/Subtotal": preferred["detail_total"],
+                    "Tax": preferred["tax"],
+                    "Total Due": preferred["total_due"],
+                    "Currency": next(iter(currencies)) if len(currencies) == 1 else "UNKNOWN",
+                    "Reconciliation": "Reconciled"
+                    if states == {"RECONCILED"}
+                    else "Review required",
+                }
+            )
+        st.dataframe(financial_rows, use_container_width=True, hide_index=True)
+        with st.expander("Technical provenance"):
+            st.json(list(closure.financial_documents))
+        st.caption("Unresolved: " + ", ".join(closure.unknowns))
+        st.info(
+            "Document Intelligence completed automatically. Manual review is only required "
+            "for a material conflict; unresolved non-critical facts remain UNKNOWN."
+        )
+        return
     records, fields = evidence_counts(admission)
     st.markdown("### Evidence overview")
     summary = st.columns(4)
@@ -379,9 +467,7 @@ if not selected_path:
     if resumable_workspaces:
         with st.container(border=True):
             st.subheader("Resume governed analysis")
-            st.write(
-                "Continue retained evidence governance without uploading the source again."
-            )
+            st.write("Continue retained evidence governance without uploading the source again.")
             if len(resumable_workspaces) == 1:
                 selected_workspace = resumable_workspaces[0]
             else:
@@ -408,6 +494,13 @@ if not selected_path:
                         selected_workspace,
                         authorization=workspace_authorization,
                     )
+                    try:
+                        closure, _files = resume_document_closure(
+                            selected_workspace, authorization=workspace_authorization
+                        )
+                        st.session_state["document_closure_result"] = closure
+                    except Exception:  # noqa: BLE001 - older single-file workspaces remain valid
+                        st.session_state.pop("document_closure_result", None)
                     st.session_state["analysis_start_path"] = "upload"
                     st.session_state["pue_upload_admission"] = admission
                     st.session_state["prospect_tenant"] = tenant
@@ -486,9 +579,7 @@ for column, card in zip(actions, action_specs, strict=True):
             if st.button(label, key=f"start_{key}", type="primary", use_container_width=True):
                 if key == "demo" and demo_available:
                     _open_demo(organization_id)
-                _start_source_path(
-                    "demo_unavailable" if key == "demo" else key
-                )
+                _start_source_path("demo_unavailable" if key == "demo" else key)
                 st.rerun()
             if key in {"aws", "azure"}:
                 st.caption("Authorization checked before live connection")
@@ -725,22 +816,26 @@ if (
                 )
                 profile = st.selectbox("Input profile", SUPPORTED_PROFILES)
                 upload = st.file_uploader(
-                    "Drag and drop CSV or Excel evidence here, or browse files",
-                    type=["csv", "xlsx"],
+                    "Drag and drop CSV, Excel, or PDF evidence here, or browse files",
+                    type=["csv", "xlsx", "pdf"],
+                    accept_multiple_files=True,
                 )
-                if upload is not None:
-                    size_mb = len(upload.getvalue()) / (1024 * 1024)
-                    st.success(f"{upload.name} · {size_mb:.2f} MB · ready for governed validation")
+                if upload:
+                    size_mb = sum(len(item.getvalue()) for item in upload) / (1024 * 1024)
+                    st.success(
+                        f"{len(upload)} files · {size_mb:.2f} MB · ready for governed validation"
+                    )
                 st.caption(
                     "Accepted now: AWS CUR-derived CSV, Azure/GCP billing export, SaaS or "
-                    "technology-cost CSV/XLSX. JSON and standalone ZIP are not yet supported."
+                    "technology-cost CSV/XLSX, and native-text PDF invoices. Scanned PDF is "
+                    "not supported. JSON and standalone ZIP are not yet supported."
                 )
                 run_upload = st.form_submit_button(
                     "Continue Analysis", type="primary", use_container_width=True
                 )
             if run_upload:
-                if upload is None:
-                    st.error("Select a CSV or XLSX file before starting analysis.")
+                if not upload:
+                    st.error("Select at least one CSV, XLSX, or PDF file before starting analysis.")
                 else:
                     try:
                         _step_header(
@@ -759,7 +854,15 @@ if (
                             retention_days=DEFAULT_RETENTION_DAYS,
                             key=key,
                         )
-                        content = upload.getvalue()
+                        bundle = tuple((item.name, item.getvalue()) for item in upload)
+                        primary_name, content = next(
+                            (
+                                item
+                                for item in bundle
+                                if item[0].lower().endswith((".csv", ".xlsx"))
+                            ),
+                            bundle[0],
+                        )
                         st.session_state["prospect_tenant"] = tenant
                         st.session_state["prospect_name"] = prospect_name.strip()
                         try:
@@ -769,7 +872,7 @@ if (
                             )
                             admission = admit_uploaded_evidence(
                                 tenant,
-                                filename=upload.name,
+                                filename=primary_name,
                                 content=content,
                                 tenant_context=authenticated,
                             )
@@ -780,6 +883,23 @@ if (
                                 input_profile=profile,
                                 authorization=workspace_authorization,
                             )
+                            closure_context = EvidenceAnalysisContext(
+                                admission.scope.analysis_id,
+                                admission.source_id,
+                                admission.scope.prospect_id,
+                                admission.scope.organization_id,
+                                admission.scope.tenant_id,
+                            )
+                            closure = analyze_document_bundle(context=closure_context, files=bundle)
+                            persist_document_closure(
+                                admission,
+                                closure,
+                                prospect_tenant=tenant,
+                                files=bundle,
+                                input_profile=profile,
+                                authorization=workspace_authorization,
+                            )
+                            st.session_state["document_closure_result"] = closure
                             st.session_state["pue_upload_admission"] = admission
                             activate_prospect_workspace(
                                 st.session_state,
@@ -792,25 +912,32 @@ if (
                             st.session_state["pue_upload_admission_error"] = (
                                 "Additional governed evidence analysis is temporarily unavailable."
                             )
-                        try:
-                            prospect_analysis = ingest_upload(
-                                tenant,
-                                profile=profile,
-                                filename=upload.name,
-                                content=content,
-                                actor=actor,
-                                role=role,
-                                key=key,
-                            )
-                            st.session_state["prospect_analysis"] = prospect_analysis
-                            st.session_state.pop("prospect_analysis_error", None)
-                            st.success(
-                                "Evidence was scanned, validated, normalized, encrypted, "
-                                "and analyzed."
-                            )
-                        except ProspectIntakeError as exc:
+                        if primary_name.lower().endswith((".csv", ".xlsx")):
+                            try:
+                                prospect_analysis = ingest_upload(
+                                    tenant,
+                                    profile=profile,
+                                    filename=primary_name,
+                                    content=content,
+                                    actor=actor,
+                                    role=role,
+                                    key=key,
+                                )
+                                st.session_state["prospect_analysis"] = prospect_analysis
+                                st.session_state.pop("prospect_analysis_error", None)
+                            except ProspectIntakeError as exc:
+                                st.session_state.pop("prospect_analysis", None)
+                                st.session_state["prospect_analysis_error"] = str(exc)
+                        else:
                             st.session_state.pop("prospect_analysis", None)
-                            st.session_state["prospect_analysis_error"] = str(exc)
+                            st.session_state["prospect_analysis_error"] = (
+                                "Legacy billing compatibility is unavailable for PDF-only "
+                                "evidence; Document Intelligence completed successfully."
+                            )
+                        st.success(
+                            "Document Intelligence scanned, encrypted, interpreted, and "
+                            "analyzed the evidence."
+                        )
                         st.rerun()
                     except ProspectIntakeError as exc:
                         st.session_state["prospect_analysis_error"] = str(exc)
@@ -906,7 +1033,7 @@ if prospect_result and selected_path == "upload":
                 except ProspectIntakeError as exc:
                     st.error(str(exc))
         render_pue_stage12(st, pue_pilot_model)
-        if upload_admission is not None:
+        if upload_admission is not None and st.session_state.get("document_closure_result") is None:
             render_semantic_governance(st, upload_admission)
             render_governed_normalization(st, upload_admission)
             render_governed_measurement(st, upload_admission)
@@ -949,7 +1076,7 @@ if prospect_result and selected_path == "upload":
         ),
     )
     render_pue_stage12(st, pue_pilot_model)
-    if upload_admission is not None:
+    if upload_admission is not None and st.session_state.get("document_closure_result") is None:
         render_semantic_governance(st, upload_admission)
         render_governed_normalization(st, upload_admission)
         render_governed_measurement(st, upload_admission)
@@ -977,7 +1104,8 @@ if upload_admission is not None and prospect_result is None and selected_path ==
     )
     st.success(outcome.message)
     if outcome.compatibility_notice:
-        st.info(outcome.compatibility_notice)
+        if st.session_state.get("document_closure_result") is None:
+            st.info(outcome.compatibility_notice)
     _render_upload_pue(upload_admission)
 
 if (
@@ -1001,8 +1129,8 @@ if not selected_path:
 with st.expander("Learn more about supported evidence and secure processing"):
     st.write(
         "Supported uploads: AWS CUR-derived CSV, Azure and GCP billing exports, supported "
-        "SaaS/license CSV or Excel, and generic technology-cost spreadsheets. PDF invoices "
-        "are not yet supported."
+        "SaaS/license CSV or Excel, generic technology-cost spreadsheets, and native-text "
+        "PDF invoices. Scanned-image PDFs remain unsupported."
     )
     st.caption("Coming Soon — additional certified enterprise connection paths")
     st.write(

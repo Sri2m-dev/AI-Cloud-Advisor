@@ -15,8 +15,21 @@ class FinancialConcept(str, Enum):
     DISCOUNT = "financial.discount"
     CREDIT = "financial.credit"
     TAX = "financial.tax"
+    TAX_RATE = "financial.tax.rate"
     SAVINGS = "financial.savings"
     CURRENCY = "financial.currency"
+    LINE_ITEM_QUANTITY = "financial.document.line_item.quantity"
+    LINE_ITEM_UNIT_PRICE = "financial.document.line_item.unit_price"
+    LINE_ITEM_AMOUNT = "financial.document.line_item.amount"
+    SUBTOTAL = "financial.document.subtotal"
+    FEE = "financial.document.fee"
+    TOTAL_DUE = "financial.document.total_due"
+    BALANCE = "financial.document.balance"
+    BILLING_PERIOD = "financial.document.billing_period"
+    INVOICE_DATE = "financial.document.invoice_date"
+    DUE_DATE = "financial.document.due_date"
+    MONTHLY_EQUIVALENT = "financial.document.monthly_equivalent"
+    ANNUAL_AMOUNT = "financial.document.annual_amount"
 
 
 class CurrencyAuthorityType(str, Enum):

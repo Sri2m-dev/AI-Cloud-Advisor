@@ -46,9 +46,7 @@ class ActiveEvidenceContext:
 
 def activate_demo_workspace(session: Any) -> None:
     """Select the isolated demo presentation without mutating prospect authority."""
-    organization_id = str(
-        session.get("organization_id") or session.get("org_id") or ""
-    ).strip()
+    organization_id = str(session.get("organization_id") or session.get("org_id") or "").strip()
     if not (demo_mode_enabled() and is_demo_tenant(organization_id)):
         raise PermissionError("synthetic workspace is not authorized for this tenant")
     session[ACTIVE_WORKSPACE_CONTEXT_KEY] = EvidenceContextKind.DEMO.value
@@ -67,9 +65,7 @@ def activate_prospect_workspace(session: Any, *, expected_fingerprint: str | Non
 
 
 def activate_tenant_workspace(session: Any) -> None:
-    organization_id = str(
-        session.get("organization_id") or session.get("org_id") or ""
-    ).strip()
+    organization_id = str(session.get("organization_id") or session.get("org_id") or "").strip()
     if not organization_id:
         raise PermissionError("tenant workspace authority is required")
     session[ACTIVE_WORKSPACE_CONTEXT_KEY] = EvidenceContextKind.TENANT.value
@@ -93,7 +89,8 @@ def resolve_active_evidence_context(
                 getattr(prospect, "tenant_id", "")
                 or getattr(getattr(admission, "scope", None), "prospect_id", "")
                 or ""
-            ) or None,
+            )
+            or None,
             prospect_analysis=prospect,
             evidence_admission=admission,
         )
@@ -106,14 +103,13 @@ def resolve_active_evidence_context(
                 getattr(prospect, "tenant_id", "")
                 or getattr(getattr(admission, "scope", None), "prospect_id", "")
                 or ""
-            ) or None,
+            )
+            or None,
             prospect_analysis=prospect,
             evidence_admission=admission,
         )
 
-    organization_id = str(
-        session.get("organization_id") or session.get("org_id") or ""
-    ).strip()
+    organization_id = str(session.get("organization_id") or session.get("org_id") or "").strip()
     if not organization_id:
         return ActiveEvidenceContext(EvidenceContextKind.UNKNOWN)
     enabled = demo_mode_enabled() if demo_enabled is None else demo_enabled
@@ -145,6 +141,7 @@ def clear_prospect_context(session: Any) -> None:
         "pue_enterprise_context_view",
         "pue_reconciliation_view",
         "pue_reconciliation_control",
+        "document_closure_result",
     ):
         session.pop(key, None)
     for key in tuple(session):

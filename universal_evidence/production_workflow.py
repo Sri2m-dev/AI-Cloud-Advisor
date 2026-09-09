@@ -82,8 +82,7 @@ def evidence_counts(admission) -> tuple[int, int]:
     )
     records = sum(int(region.detail_record_count or 0) for region in primary)
     fields = sum(
-        len(tuple(header for header in region.original_headers if header))
-        for region in primary
+        len(tuple(header for header in region.original_headers if header)) for region in primary
     )
     return records, fields
 
@@ -147,15 +146,65 @@ def persist_production_workspace(
     )
 
 
+def persist_document_closure(
+    admission, result, *, prospect_tenant, files, input_profile, authorization
+):
+    """Persist a closure view and encrypted sources in the existing workspace."""
+    authorization.authorize_scope(admission.scope)
+    from services.prospect_data_intake_service import prospect_encryption_key, store_governed_bundle
+    from services.universal_evidence_runtime_service import initialize_universal_evidence_runtime
+
+    root = Path(os.getenv("NEXORA_PROSPECT_DATA_ROOT", "var/prospect_data"))
+    store_governed_bundle(
+        prospect_tenant,
+        files=tuple(files),
+        input_profile=input_profile,
+        actor=authorization.actor_id,
+        root=root,
+        key=prospect_encryption_key(),
+    )
+    runtime = initialize_universal_evidence_runtime(os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB"))
+    if runtime is None:
+        return None
+    return runtime.lifecycle.put(
+        "document_closure",
+        admission.fingerprint,
+        _workspace_scope(admission),
+        payload={"owner_subject_id": authorization.actor_id, "result": result.to_dict()},
+        fingerprint_value=admission.fingerprint,
+        actor_id=authorization.actor_id,
+        reason="integrated document intelligence closure persisted",
+    )
+
+
+def resume_document_closure(locator, *, authorization):
+    """Restore and verify a retained closure without another browser upload."""
+    from services.prospect_data_intake_service import load_governed_bundle, prospect_encryption_key
+    from services.universal_evidence_runtime_service import initialize_universal_evidence_runtime
+    from universal_evidence.product_closure import ProductClosureResult
+
+    scope = LifecycleScope(
+        locator.organization_id, locator.tenant_id, locator.prospect_id, locator.analysis_id
+    )
+    authorization.authorize_scope(_capability_scope(scope))
+    runtime = initialize_universal_evidence_runtime(os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB"))
+    if runtime is None:
+        raise RuntimeError("durable evidence workspace service is unavailable")
+    record = runtime.lifecycle.get("document_closure", locator.workspace_id, scope)
+    if (record.payload or {}).get("owner_subject_id") != authorization.actor_id:
+        raise PermissionError("document closure is not authorized for this subject")
+    root = Path(os.getenv("NEXORA_PROSPECT_DATA_ROOT", "var/prospect_data"))
+    files = load_governed_bundle(locator.prospect_id, root=root, key=prospect_encryption_key())
+    return ProductClosureResult.from_dict(record.payload["result"]), files
+
+
 def resumable_production_workspaces(authorization) -> tuple[ResumableAnalysis, ...]:
     """Discover only this trusted subject's active workspaces inside its tenant."""
     from services.universal_evidence_runtime_service import (
         initialize_universal_evidence_runtime,
     )
 
-    runtime = initialize_universal_evidence_runtime(
-        os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB")
-    )
+    runtime = initialize_universal_evidence_runtime(os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB"))
     if runtime is None:
         return ()
     results = []
@@ -215,9 +264,7 @@ def resume_production_workspace(locator, *, authorization):
         locator.analysis_id,
     )
     authorization.authorize_scope(_capability_scope(scope))
-    runtime = initialize_universal_evidence_runtime(
-        os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB")
-    )
+    runtime = initialize_universal_evidence_runtime(os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB"))
     if runtime is None:
         raise RuntimeError("durable evidence workspace service is unavailable")
     record = runtime.lifecycle.get("evidence_workspace", locator.workspace_id, scope)

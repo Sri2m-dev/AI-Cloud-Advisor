@@ -25,6 +25,7 @@ from shared.styles import configure_page
 from universal_evidence.pilot.governed_intelligence import GovernedAskNexoraService
 from universal_evidence.pilot.runtime import ACTIVATION_RESOLVER, get_measurement_pilot_service
 from universal_evidence.pilot.semantic_control import authenticated_confirmation_actor
+from universal_evidence.product_closure import answer_document_question
 from universal_evidence.production_workflow import evidence_counts
 
 ROLES = ["super_admin", "client_admin", "executive", "cio", "finance", "auditor", "operations"]
@@ -50,6 +51,13 @@ if evidence_context.is_prospect:
         metrics[0].metric("Evidence", admission.original_filename)
         metrics[1].metric("Detail records", f"{records:,}")
         metrics[2].metric("Fields discovered", f"{fields:,}")
+    closure = st.session_state.get("document_closure_result")
+    if closure is not None:
+        document_metrics = st.columns(4)
+        document_metrics[0].metric("Documents", len(closure.documents))
+        document_metrics[1].metric("Business invoices", closure.business_document_count)
+        document_metrics[2].metric("Purchased licenses", closure.purchased_licenses)
+        document_metrics[3].metric("Unassigned licenses", closure.unassigned_licenses)
     if analysis is None or getattr(analysis, "currency_resolution_required", True):
         st.warning("Currency could not be determined from the uploaded evidence.")
     else:
@@ -70,7 +78,11 @@ if evidence_context.is_prospect:
     question = st.chat_input("Ask about the current uploaded prospect evidence")
     if question:
         governed = None
-        if admission is not None:
+        closure_answer = None
+        closure_provenance = ()
+        if closure is not None:
+            closure_answer, closure_provenance = answer_document_question(question, closure)
+        elif admission is not None:
             try:
                 actor = authenticated_confirmation_actor(st.session_state)
                 governed = GovernedAskNexoraService(
@@ -86,7 +98,9 @@ if evidence_context.is_prospect:
             except PermissionError:
                 governed = None
         answer = (
-            governed.answer
+            closure_answer
+            if closure_answer is not None
+            else governed.answer
             if governed is not None
             else prospect_evidence_answer(question, analysis)
             if analysis is not None
@@ -100,6 +114,10 @@ if evidence_context.is_prospect:
                 with st.expander("Evidence"):
                     st.caption(f"{len(governed.provenance)} governed provenance reference(s)")
                     st.json(list(governed.provenance))
+            elif closure_provenance:
+                with st.expander("Evidence"):
+                    st.caption(f"{len(closure_provenance)} source reference(s)")
+                    st.json(list(closure_provenance))
         prospect_history.extend(
             ({"role": "user", "content": question}, {"role": "assistant", "content": answer})
         )

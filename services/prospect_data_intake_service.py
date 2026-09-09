@@ -237,8 +237,8 @@ def create_prospect_tenant(
 
 def scan_upload(filename: str, content: bytes) -> dict[str, Any]:
     suffix = Path(filename).suffix.lower()
-    if suffix not in {".csv", ".xlsx"}:
-        raise ProspectIntakeError("only CSV and XLSX inputs are permitted")
+    if suffix not in {".csv", ".xlsx", ".pdf"}:
+        raise ProspectIntakeError("only CSV, XLSX, and native-text PDF inputs are permitted")
     if not content or len(content) > MAX_UPLOAD_BYTES:
         raise ProspectIntakeError("upload is empty or exceeds the 25 MB limit")
     lowered = content.lower()
@@ -246,6 +246,8 @@ def scan_upload(filename: str, content: bytes) -> dict[str, Any]:
         raise ProspectIntakeError("malware signature detected")
     if content.startswith((b"MZ", b"\x7fELF")):
         raise ProspectIntakeError("executable content is not permitted")
+    if suffix == ".pdf" and not content.startswith(b"%PDF-"):
+        raise ProspectIntakeError("invalid PDF container")
     if suffix == ".xlsx":
         try:
             with zipfile.ZipFile(io.BytesIO(content)) as archive:
@@ -273,6 +275,69 @@ def scan_upload(filename: str, content: bytes) -> dict[str, Any]:
         "size": len(content),
         "status": "PASS",
     }
+
+
+def store_governed_bundle(
+    tenant: ProspectTenant,
+    *,
+    files: tuple[tuple[str, bytes], ...],
+    input_profile: str,
+    actor: str,
+    root: Path = STORE_ROOT,
+    key: str | bytes | None = None,
+) -> None:
+    """Retain an ordered evidence bundle inside the existing encrypted prospect store."""
+    if not files:
+        raise ProspectIntakeError("at least one governed source is required")
+    cipher = _tenant_cipher(tenant.tenant_id, root=root, key=key)
+    tenant_path = _tenant_dir(tenant.tenant_id, root)
+    manifest = []
+    for index, (filename, content) in enumerate(files):
+        scan = scan_upload(filename, content)
+        source_name = f"governed_source_{index:03d}.enc"
+        _write_encrypted(tenant_path / source_name, content, cipher)
+        manifest.append(
+            {
+                "filename": filename,
+                "input_profile": input_profile,
+                "source_sha256": scan["sha256"],
+                "source_name": source_name,
+            }
+        )
+    _write_encrypted(
+        tenant_path / "governed_bundle.enc",
+        json.dumps(manifest, sort_keys=True).encode("utf-8"),
+        cipher,
+    )
+    _audit(
+        tenant,
+        "GOVERNED_EVIDENCE_BUNDLE_RETAINED",
+        actor,
+        {"document_count": len(manifest)},
+        root=root,
+        cipher=cipher,
+    )
+
+
+def load_governed_bundle(
+    tenant_id: str,
+    *,
+    root: Path = STORE_ROOT,
+    key: str | bytes | None = None,
+):
+    """Load and verify an encrypted evidence bundle after locator authorization."""
+    cipher = _tenant_cipher(tenant_id, root=root, key=key)
+    tenant_path = _tenant_dir(tenant_id, root)
+    manifest = json.loads(
+        _read_encrypted(tenant_path / "governed_bundle.enc", cipher).decode("utf-8")
+    )
+    files = []
+    for item in manifest:
+        content = _read_encrypted(tenant_path / item["source_name"], cipher)
+        if scan_upload(item["filename"], content)["sha256"] != item["source_sha256"]:
+            raise ProspectIntakeError("governed bundle source identity does not match its locator")
+        files.append((item["filename"], content))
+    return tuple(files)
 
 
 ALIASES = {
