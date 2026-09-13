@@ -8,6 +8,7 @@ import pandas as pd
 from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.enterprise_financial_model import EnterpriseFinancialModel
 from services.enterprise_spend_service import EnterpriseSpendService
+from services.financial_read_models import enterprise_spend_read_model
 from services.supabase_client import supabase
 
 
@@ -74,11 +75,18 @@ class ExecutiveDashboardCertificationService:
         spend_service: EnterpriseSpendService,
     ) -> dict[str, Any]:
         posture = spend_service.get_financial_posture(context)
+        read_model = enterprise_spend_read_model(context, spend_service)
         legacy_metrics = ExecutiveDashboardCertificationService._legacy_metrics(context)
         if posture.cloud_spend:
             legacy_metrics["cloud_cost"] = float(posture.cloud_spend)
         if posture.total_ingested_spend:
             legacy_metrics["total_spend"] = float(posture.total_ingested_spend)
+        legacy_metrics["spend_breakdown"] = {
+            "cloud_spend": read_model.cloud.value,
+            "saas_spend": read_model.saas.value,
+            "msp_spend": read_model.msp.value,
+            "license_spend": read_model.license.value,
+        }
         legacy_metrics["data_available"] = bool(
             posture.source_rows
             or posture.persisted_facts

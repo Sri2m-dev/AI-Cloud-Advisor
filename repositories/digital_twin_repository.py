@@ -60,12 +60,12 @@ class DigitalTwinRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_registry() -> list[dict[str, Any]]:
-        return DigitalTwinRepository._fetch_table("application_registry")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_technology_inventory() -> list[dict[str, Any]]:
-        return DigitalTwinRepository._fetch_table("technology_inventory")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)

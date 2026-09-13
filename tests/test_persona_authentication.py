@@ -118,6 +118,7 @@ def test_sidebar_visibility_matches_persona_authority():
         "CEO Workspace",
         "Executive Decisions",
         "Enterprise AI Copilot",
+        "Approvals",
         "Business Services",
         "Financial Health",
         "Strategic Risks",

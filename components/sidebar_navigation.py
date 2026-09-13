@@ -139,6 +139,7 @@ ROLE_PAGES = {
     "executive": [
         "CEO Workspace",
         "Executive Decisions",
+        "Approvals",
         "Business Services",
         "Financial Health",
         "Strategic Risks",

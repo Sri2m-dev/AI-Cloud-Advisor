@@ -34,6 +34,9 @@ def _safe_int(value: Any, fallback: int = 0) -> int:
 
 
 def _fetch_table(table_name: str) -> list[dict[str, Any]]:
+    """Return only context-free supporting data; tenant inventory is unavailable here."""
+    if table_name == "technology_inventory":
+        return []
     try:
         response = supabase.table(table_name).select("*").execute()
         return response.data or []
@@ -118,6 +121,7 @@ class TechnologyInventoryCertificationService:
                 "unallocated_spend": _safe_float(financial_model.get("unallocated_spend")),
                 "unallocated_spend_display": _money(financial_model.get("unallocated_spend")),
             },
+            "availability": "UNKNOWN" if inventory_df.empty else "AVAILABLE",
             "business_context": business_context,
             "executive_summary": TechnologyInventoryCertificationService._executive_summary(
                 metrics,

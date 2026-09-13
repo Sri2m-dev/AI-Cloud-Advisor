@@ -15,6 +15,7 @@ class CopilotRequest:
     persona: str
     session_id: str
     provider: str = "mock"
+    conversation: tuple[Mapping[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,7 @@ class CopilotContext:
     evidence: CopilotEvidence
     unknowns: tuple[str, ...]
     policy_version: str
+    question: str = ""
 
 
 @dataclass(frozen=True, slots=True)

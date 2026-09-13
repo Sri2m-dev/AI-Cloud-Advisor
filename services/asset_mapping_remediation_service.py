@@ -68,7 +68,6 @@ class AssetMappingRemediationService:
         }
         AssetMappingRemediationService._upsert_relationship("technology_relationships", edge)
         AssetMappingRemediationService._upsert_relationship("relationship_graph", edge)
-        AssetMappingRemediationService._ensure_application_spend_mapping(asset_name, application_name)
         AssetMappingRemediationService._update_discovered_payload(
             asset,
             {
@@ -103,7 +102,11 @@ class AssetMappingRemediationService:
             },
         )
         if application_name:
-            AssetMappingRemediationService._update_application(application_name, {"cost_center": cost_center})
+            return AssetMappingRemediationService._result(
+                "UNSUPPORTED",
+                "Application cost-center mutation requires the canonical registry authority",
+                asset["organization_id"],
+            )
 
         return AssetMappingRemediationService._result(
             "SUCCESS",
@@ -174,17 +177,7 @@ class AssetMappingRemediationService:
 
     @staticmethod
     def get_applications() -> list[dict[str, Any]]:
-        try:
-            response = (
-                supabase.table("application_registry")
-                .select("app_name,owner_name,owner_email,cost_center")
-                .order("app_name")
-                .execute()
-            )
-            return response.data or []
-        except Exception as exc:
-            print("APPLICATION OPTIONS LOAD FAILED:", exc)
-            return []
+        return []
 
     @staticmethod
     def get_dashboard(organization_id: str | None = None) -> dict[str, Any]:
@@ -278,28 +271,6 @@ class AssetMappingRemediationService:
             print(f"{table_name.upper()} REMEDIATION UPSERT FAILED:", exc)
 
     @staticmethod
-    def _ensure_application_spend_mapping(asset_name: str, application_name: str) -> None:
-        try:
-            existing = (
-                supabase.table("application_spend_mapping")
-                .select("*")
-                .eq("spend_application_name", asset_name)
-                .eq("registry_app_name", application_name)
-                .limit(1)
-                .execute()
-            )
-            if existing.data:
-                return
-            supabase.table("application_spend_mapping").insert(
-                {
-                    "spend_application_name": asset_name,
-                    "registry_app_name": application_name,
-                }
-            ).execute()
-        except Exception as exc:
-            print("APPLICATION SPEND MAPPING REMEDIATION FAILED:", exc)
-
-    @staticmethod
     def _update_discovered_payload(asset: dict[str, Any], updates: dict[str, Any]) -> None:
         discovered = asset.get("discovered") or {}
         asset_id = discovered.get("asset_id") or asset.get("source_asset_id")
@@ -319,53 +290,6 @@ class AssetMappingRemediationService:
             ).execute()
         except Exception as exc:
             print("DISCOVERED ASSET REMEDIATION UPDATE FAILED:", exc)
-
-    @staticmethod
-    def _upsert_technology_owner(asset: dict[str, Any], owner_payload: dict[str, Any]) -> None:
-        technology_name = asset.get("asset_name") or asset.get("source_asset_id")
-        if not technology_name:
-            return
-
-        payload = {
-            "technology_name": technology_name,
-            "technology_type": asset.get("asset_type") or "Cloud Resource",
-            "vendor_name": asset.get("provider") or "Unknown",
-            "category": asset.get("asset_type") or "Cloud Resource",
-            "cloud_provider": asset.get("provider"),
-            "owner_department": owner_payload.get("owner_department"),
-            "business_owner": owner_payload.get("business_owner"),
-            "technical_owner": owner_payload.get("technical_owner"),
-            "status": "ACTIVE",
-            "source_system": "Asset Mapping Remediation",
-            "organization_id": asset.get("organization_id"),
-            "updated_at": AssetMappingRemediationService._now(),
-        }
-        payload = {key: value for key, value in payload.items() if value not in (None, "")}
-
-        try:
-            existing = (
-                supabase.table("technology_inventory")
-                .select("technology_name")
-                .eq("technology_name", technology_name)
-                .limit(1)
-                .execute()
-            )
-            if existing.data:
-                supabase.table("technology_inventory").update(payload).eq(
-                    "technology_name",
-                    technology_name,
-                ).execute()
-            else:
-                supabase.table("technology_inventory").insert(payload).execute()
-        except Exception as exc:
-            print("TECHNOLOGY OWNER REMEDIATION UPSERT FAILED:", exc)
-
-    @staticmethod
-    def _update_application(application_name: str, updates: dict[str, Any]) -> None:
-        try:
-            supabase.table("application_registry").update(updates).eq("app_name", application_name).execute()
-        except Exception as exc:
-            print("APPLICATION REMEDIATION UPDATE FAILED:", exc)
 
     @staticmethod
     def _result(status: str, message: str, organization_id: str | None = None) -> dict[str, Any]:

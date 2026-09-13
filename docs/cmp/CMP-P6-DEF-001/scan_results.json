@@ -1,0 +1,30 @@
+{
+  "secret_scan": {
+    "status": "PASS",
+    "findings": []
+  },
+  "credential_patterns": {
+    "status": "PASS",
+    "findings": []
+  },
+  "client_confidential_evidence": {
+    "status": "PASS",
+    "findings": []
+  },
+  "new_file_whitespace": {
+    "status": "PASS",
+    "findings": []
+  },
+  "scope": "All added/modified deliverables; pattern scan, not an external secret-scanner certification. No runtime data or secrets files opened.",
+  "files": [
+    "docs/NEXORA_DEPLOYMENT_GUIDE.md",
+    "docs/cmp/CMP-P6-DEF-001/REPORT.md",
+    "docs/cmp/CMP-P6-DEF-001/local_catalog.json",
+    "docs/cmp/CMP-P6-DEF-001/migration_manifest.json",
+    "docs/cmp/CMP-P6-DEF-001/scan_results.json",
+    "docs/cmp/CMP-P6-DEF-001/schema_inventory.json",
+    "scripts/audit_database_bootstrap.py",
+    "supabase/bootstrap/public_prerequisites.sql",
+    "tests/security/test_database_bootstrap_audit.py"
+  ]
+}

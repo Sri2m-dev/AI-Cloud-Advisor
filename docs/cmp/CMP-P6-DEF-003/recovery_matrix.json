@@ -1,0 +1,75 @@
+{
+  "defect": "CMP-P6-DEF-003",
+  "status": "BLOCKED_SCHEMA_RECOVERY",
+  "original_unresolved_count": 34,
+  "historical_refs_inspected": [
+    {
+      "ref": "v2-executive-dashboard-complete",
+      "commit": "cf1e8a1e5e4e0f4a99752a2522414467aa32e360",
+      "evidence": [
+        "supabase/approval_workflow.sql creates approval_audit and alters approval_queue only",
+        "supabase/mart_executive_summary_view.sql creates mart_executive_summary and references mart objects",
+        "supabase/migration_standardize_org_tenant_account.sql alters KPI/mart objects with IF EXISTS only"
+      ]
+    },
+    {
+      "ref": "v4.0-enterprise-connector-platform",
+      "commit": "8fcd1aee9f24d2f533b89f6cc54b6296502a3a77",
+      "evidence": [
+        "connector_tenancy.sql alters technology_inventory but does not create it",
+        "connector platform SQL creates differently named enterprise_connector_* objects"
+      ]
+    },
+    {
+      "ref": "main",
+      "commit": "715ae97a902b84adaf7b6493801b904ef99d17f3",
+      "evidence": [
+        "current historical SQL inventory retains the same ALTER-only assumptions"
+      ]
+    }
+  ],
+  "objects": [
+    {"name":"alert_executions","type":"table","operations":"read/write candidate; backend/routes/alerts.py","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"application_registry","type":"table","operations":"select; application portfolio and enterprise graph repositories","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"application_spend_mapping","type":"table","operations":"select/insert; application and asset mapping repositories/services","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"approval_history","type":"table","operations":"select; approval repository/service","historical_source":"none found; approval_audit is a different object","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"approval_queue","type":"table","operations":"select/update candidate; governance and dashboard repositories","historical_source":"v2-executive-dashboard-complete:supabase/approval_workflow.sql alters only","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"approval_requests","type":"table","operations":"select/insert/update candidate; approval and reporting services","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"cloud_connections","type":"table","operations":"select; pages/cloud_connections.py","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"connector_certification","type":"table","operations":"select/write candidate; enterprise connector repository","historical_source":"historical enterprise_connector_certifications is differently named","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"connector_credential_vault","type":"table","operations":"select/write candidate; enterprise connector repository","historical_source":"none found; credential material not inspected","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"connector_quality_event","type":"table","operations":"select/write candidate; enterprise connector repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"connector_sync_run","type":"table","operations":"select/write candidate; enterprise connector repository","historical_source":"historical connector run objects are differently named","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"cost_uploads","type":"table","operations":"read/write candidate; pages/cost_upload_center.py","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"enterprise_connector_registry","type":"table","operations":"select/write candidate; enterprise connector repository","historical_source":"enterprise_connectors exists historically, but not this name","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"enterprise_cost_attribution","type":"table/view unknown","operations":"select; enterprise cost attribution service","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"enterprise_data_fabric","type":"table/view unknown","operations":"select/write candidate; enterprise connector repository","historical_source":"none found under this public name; data_fabric schema is different","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"kpi_spend_by_cloud","type":"table/view unknown","operations":"select; executive dashboard data utilities","historical_source":"migration_standardize_org_tenant_account.sql alters only with IF EXISTS; mart_kpi_table_schemas.md is examples only","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"kpi_top_services","type":"table/view unknown","operations":"select; executive dashboard KPI utilities","historical_source":"migration_standardize_org_tenant_account.sql alters only with IF EXISTS; documentation examples only","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"kpi_total_cloud_spend","type":"table/view unknown","operations":"select; executive dashboard data utilities","historical_source":"migration_standardize_org_tenant_account.sql alters only with IF EXISTS; documentation examples only","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"mart_application_spend","type":"table/view unknown","operations":"select; application repository","historical_source":"none found; similarly named historical views do not match","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"mart_cost_anomalies","type":"table/view unknown","operations":"select; cost intelligence, leadership, governance","historical_source":"mart_executive_summary_view.sql references it; no CREATE found","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"mart_enterprise_forecast","type":"table/view unknown","operations":"select; reports page","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"mart_enterprise_spend","type":"table/view unknown","operations":"select; cost intelligence repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"mart_enterprise_spend_v2","type":"table/view unknown","operations":"select; reports page","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"mart_optimization_opportunities","type":"table/view unknown","operations":"select; cost intelligence, leadership, savings governance","historical_source":"mart_executive_summary_view.sql references it; no CREATE found","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"mart_service_classification","type":"table/view unknown","operations":"select; service explorer repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"notification_queue","type":"table","operations":"read/write candidate; escalation service","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"platform_health_history","type":"table","operations":"select/write candidate; platform health repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"platform_health_snapshot","type":"table","operations":"select/write candidate; platform health repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"platform_operations_log","type":"table","operations":"select/write candidate; platform health repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"refresh_kpis","type":"function/RPC","operations":"call; backend/jobs/tasks.py","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"technology_inventory","type":"table","operations":"select/insert/update; connector, technology, governance, graph, and service paths","historical_source":"main:supabase/connector_tenancy.sql alters and updates only; no CREATE found","evidence_grade":"B","decision":"UNRESOLVED"},
+    {"name":"vw_inactive_saas_users","type":"view","operations":"select; technology graph repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"vw_saas_renewal_risk","type":"view","operations":"select; technology graph repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"},
+    {"name":"vw_vendor_spend","type":"view","operations":"select; technology graph repository","historical_source":"none found","evidence_grade":"D","decision":"UNRESOLVED"}
+  ],
+  "counts": {
+    "recoverable_authoritative": 0,
+    "recoverable_with_review": 0,
+    "superseded_not_required": 0,
+    "dead_reference": 0,
+    "unresolved": 34
+  },
+  "interpretation": "Historical SQL recovered adjacent definitions and ALTER-only assumptions, but no Grade A-C CREATE DDL for the 34 active public object names. No object was marked dead without proving the absence of reachable production, startup, worker, migration, Executive, and Ask dependencies. No bootstrap DDL was added."
+}

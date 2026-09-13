@@ -322,6 +322,24 @@ def test_migrations_have_exact_tables_rls_security_and_append_only_controls():
     assert current_row_replay not in rpc
 
 
+def test_stewardship_transition_predicate_is_postgresql_valid_and_preserves_edges():
+    root = Path(__file__).parents[2]
+    rpc = (root / "migrations/data_fabric/0020_create_stewardship_rpcs.sql").read_text()
+    assert "if not (case v_current.state" in rpc
+    assert "if not case v_current.state" not in rpc
+    assert "when 'discovered' then v_target in ('classified','rejected')" in rpc
+    assert "when 'superseded' then v_target='archived' else false end)" in rpc
+
+
+def test_stewardship_revision_trigger_guards_table_specific_record_fields():
+    root = Path(__file__).parents[2]
+    schema = (root / "migrations/data_fabric/0019_create_stewardship_persistence.sql").read_text()
+    assert "if tg_table_name = 'stewardship_policies' then" in schema
+    assert "if tg_table_name = 'stewardship_review_items' then" in schema
+    assert "if tg_table_name = 'stewardship_policies' and" not in schema
+    assert "if tg_table_name = 'stewardship_review_items' and" not in schema
+
+
 class Response:
     def __init__(self, data):
         self.data = data

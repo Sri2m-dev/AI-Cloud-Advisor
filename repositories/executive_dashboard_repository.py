@@ -20,15 +20,11 @@ class ExecutiveDashboardRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_enterprise_spend():
-        # Enterprise spend mart is currently a global snapshot.
-        response = (
-            supabase
-            .table("mart_enterprise_spend_v2")
-            .select("*")
-            .limit(1)
-            .execute()
-        )
-        return response.data[0] if response.data else {}
+        return {
+            "availability": "UNKNOWN",
+            "authority": "P1",
+            "reason": "authenticated tenant context is required",
+        }
 
     @staticmethod
     @st.cache_data(ttl=300)

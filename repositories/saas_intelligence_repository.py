@@ -15,7 +15,7 @@ class SaaSIntelligenceRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_saas_inventory():
-        return SaaSIntelligenceRepository._fetch_table("technology_inventory")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)

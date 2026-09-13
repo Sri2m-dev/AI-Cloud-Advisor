@@ -50,3 +50,14 @@ data/technology_digital_twins.json
 .streamlit/cache/
 .tmp/
 temp_uploads/
+
+# Supabase CLI temporary runtime metadata
+supabase/.temp/
+
+# Historical/archival material excluded from commercial release
+backup_unused/
+*.bak
+backups/technology_tables_20260620_130633/
+
+# Provenance-unresolved sample workbook excluded from commercial release
+data/CUR Jan 2026.xlsx

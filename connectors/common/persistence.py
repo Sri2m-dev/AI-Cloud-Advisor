@@ -119,8 +119,10 @@ def upsert_discovered_assets(rows: list[dict[str, Any]], organization_id: str) -
     )
 
 
-def upsert_technology_inventory(rows: list[dict[str, Any]], organization_id: str) -> None:
-    upsert_rows("technology_inventory", with_organization(rows, organization_id), "technology_name")
+def upsert_technology_inventory(rows: list[dict[str, Any]], organization_id: str) -> bool:
+    """Reject legacy inventory writes; observations require canonicalization first."""
+    require_organization_id(organization_id)
+    return False
 
 
 def upsert_technology_relationships(rows: list[dict[str, Any]], organization_id: str) -> None:

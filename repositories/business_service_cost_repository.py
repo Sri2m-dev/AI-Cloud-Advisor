@@ -20,17 +20,17 @@ class BusinessServiceCostRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_mappings():
-        return BusinessServiceCostRepository._fetch_table("application_registry")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend():
-        return BusinessServiceCostRepository._fetch_table("mart_application_spend")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_technology_inventory():
-        return BusinessServiceCostRepository._fetch_table("technology_inventory")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
@@ -40,4 +40,4 @@ class BusinessServiceCostRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend_mapping():
-        return BusinessServiceCostRepository._fetch_table("application_spend_mapping")
+        return []

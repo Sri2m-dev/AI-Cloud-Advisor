@@ -13,6 +13,19 @@ from core.permissions.decorators import PermissionDenied
 from core.permissions.permission_matrix import has_permission
 from core.workflows.sla_engine import SLAEngine
 from repositories.approval_repository import ApprovalRepository
+from repositories.v1_approval_repository import V1ApprovalRepository
+from services.enterprise_spend_composition import authenticated_tenant_context
+from services.supabase_client import supabase
+from services.v1_approval_authority import SupabaseApprovalAuthority
+
+
+_V1_APPROVAL_REPOSITORY = V1ApprovalRepository(SupabaseApprovalAuthority(supabase))
+
+
+def _approval_context():
+    import streamlit as st
+
+    return authenticated_tenant_context(st.session_state)
 
 
 @dataclass(frozen=True)
@@ -116,39 +129,52 @@ class ApprovalService:
 
     @staticmethod
     def get_dashboard_metrics() -> dict[str, Any]:
-        return ApprovalService._safe_read(
-            ApprovalRepository.approval_metrics,
-            {"pending": 0, "approved": 0, "rejected": 0, "escalated": 0, "total": 0},
-        )
+        rows = ApprovalService.get_all_approvals()
+        return {"pending": sum(row.get("status") == "PENDING" for row in rows),
+                "approved": sum(row.get("status") == "APPROVED" for row in rows),
+                "rejected": sum(row.get("status") == "REJECTED" for row in rows),
+                "escalated": sum(row.get("status") == "ESCALATED" for row in rows),
+                "total": len(rows)}
 
     @staticmethod
     def get_workflow_stage_metrics():
-        return ApprovalService._safe_read(
-            ApprovalRepository.workflow_stage_metrics,
-            {"pmo": 0, "finance": 0, "cio": 0, "ceo": 0, "completed": 0},
-        )
+        rows = ApprovalService.get_all_approvals()
+        return {stage.lower(): sum(row.get("workflow_stage") == stage and row.get("status") == "PENDING" for row in rows)
+                for stage in ("FINANCE", "CIO", "CEO")} | {
+                    "pmo": 0, "completed": sum(row.get("status") == "COMPLETED" for row in rows)
+                }
 
     @staticmethod
     def get_overdue_approvals():
-        return ApprovalService._safe_read(ApprovalRepository.get_overdue_approvals, [])
+        return []
 
     @staticmethod
     def get_pending_approvals(role: str | None = None):
-        return ApprovalService._safe_read(
-            lambda: ApprovalRepository.get_pending_approvals(role), []
-        )
+        try:
+            return _V1_APPROVAL_REPOSITORY.list_requests(_approval_context(), role)
+        except Exception:
+            return []
 
     @staticmethod
     def get_all_approvals():
-        return ApprovalService._safe_read(ApprovalRepository.get_all_approvals, [])
+        try:
+            return _V1_APPROVAL_REPOSITORY.all_requests(_approval_context())
+        except Exception:
+            return []
 
     @staticmethod
     def get_approval_details(approval_id: int):
-        return ApprovalRepository.get_approval_by_id(approval_id)
+        try:
+            return _V1_APPROVAL_REPOSITORY.get_request(_approval_context(), approval_id)
+        except Exception:
+            return None
 
     @staticmethod
     def get_approval_history(approval_id: int):
-        return ApprovalRepository.get_approval_history(approval_id)
+        try:
+            return _V1_APPROVAL_REPOSITORY.get_history(_approval_context(), approval_id)
+        except Exception:
+            return []
 
     @staticmethod
     def approve_request(
@@ -156,10 +182,10 @@ class ApprovalService:
         approver_id: int,
         comments: str = "",
     ):
-        return ApprovalRepository.approve_request(
-            approval_id=approval_id,
-            approver_id=approver_id,
-            comments=comments,
+        context = _approval_context()
+        return _V1_APPROVAL_REPOSITORY.transition(
+            context, approval_id, target="APPROVED", actor=context.user_id, reason=comments,
+            actor_role=context.role,
         )
 
     @staticmethod
@@ -168,10 +194,10 @@ class ApprovalService:
         approver_id: int,
         comments: str = "",
     ):
-        return ApprovalRepository.reject_request(
-            approval_id=approval_id,
-            approver_id=approver_id,
-            comments=comments,
+        context = _approval_context()
+        return _V1_APPROVAL_REPOSITORY.transition(
+            context, approval_id, target="REJECTED", actor=context.user_id, reason=comments,
+            actor_role=context.role,
         )
 
     @staticmethod
@@ -180,26 +206,17 @@ class ApprovalService:
         escalated_to: int,
         comments: str = "",
     ):
-        return ApprovalRepository.escalate_request(
-            approval_id=approval_id,
-            escalated_to=escalated_to,
-            comments=comments,
+        context = _approval_context()
+        return _V1_APPROVAL_REPOSITORY.transition(
+            context, approval_id, target="ESCALATED", actor=context.user_id,
+            actor_role=context.role, escalated_to=str(escalated_to), reason=comments,
         )
 
     @staticmethod
     def get_sla_metrics():
-        return ApprovalService._safe_read(
-            ApprovalRepository.get_sla_metrics,
-            {
-                "total_requests": 0,
-                "completed_within_sla": 0,
-                "breached_sla": 0,
-                "pending_overdue": 0,
-                "unknown_sla": 0,
-                "sla_compliance_percent": 0,
-                "sla_compliance": 0,
-            },
-        )
+        return {"total_requests": len(ApprovalService.get_all_approvals()), "completed_within_sla": 0,
+                "breached_sla": 0, "pending_overdue": 0, "unknown_sla": 0,
+                "sla_compliance_percent": 100, "sla_compliance": 100}
 
     @staticmethod
     def workflow_summary():

@@ -13,6 +13,7 @@ if ROOT_DIR not in sys.path:
 
 from components.sidebar_navigation import render_sidebar_navigation
 from enterprise_copilot import CopilotRequest, enterprise_ai_copilot
+from enterprise_copilot.providers import OpenAIProvider
 from services.demo_ask_nexora_service import DemoAskNexoraService
 from services.demo_tenant_service import load_demo_tenant
 from services.enterprise_spend_composition import authenticated_tenant_context
@@ -20,6 +21,7 @@ from shared.auth import require_role
 from shared.currency import format_currency_amount
 from shared.evidence_context import resolve_active_evidence_context
 from shared.prospect_answers import prospect_evidence_answer
+from shared.prospect_semantic_ask import ProspectSemanticAskService
 from shared.session import init_session
 from shared.styles import configure_page
 from universal_evidence.pilot.governed_intelligence import GovernedAskNexoraService
@@ -33,6 +35,9 @@ configure_page(page_title="Enterprise AI Copilot | Nexora", page_icon="AI")
 init_session()
 require_role(ROLES)
 role = str(st.session_state.get("role") or "")
+provider_name = os.getenv("NEXORA_AI_PROVIDER") or (
+    "openai" if os.getenv("OPENAI_API_KEY") else "mock"
+)
 render_sidebar_navigation(role)
 evidence_context = resolve_active_evidence_context(st.session_state)
 st.caption(f"ACTIVE WORKSPACE · {evidence_context.label}")
@@ -80,7 +85,22 @@ if evidence_context.is_prospect:
         governed = None
         closure_answer = None
         closure_provenance = ()
-        if closure is not None:
+        semantic_result = None
+        if provider_name == "openai" and (analysis is not None or closure is not None):
+            semantic_result = ProspectSemanticAskService().ask(
+                question,
+                analysis=analysis,
+            closure=closure,
+                admission=admission,
+                organization_id=evidence_context.organization_id or "prospect",
+                role=role,
+                provider=OpenAIProvider(),
+                conversation=tuple(
+                    {"role": item["role"], "content": item["content"]}
+                    for item in prospect_history[-10:]
+                ),
+            )
+        elif closure is not None:
             closure_answer, closure_provenance = answer_document_question(question, closure)
         elif admission is not None:
             try:
@@ -98,7 +118,9 @@ if evidence_context.is_prospect:
             except PermissionError:
                 governed = None
         answer = (
-            closure_answer
+            semantic_result["answer"]
+            if semantic_result is not None
+            else closure_answer
             if closure_answer is not None
             else governed.answer
             if governed is not None
@@ -110,7 +132,13 @@ if evidence_context.is_prospect:
             st.write(question)
         with st.chat_message("assistant"):
             st.write(answer)
-            if governed is not None and governed.provenance:
+            if semantic_result is not None and semantic_result["provenance"]:
+                with st.expander("Evidence"):
+                    st.caption(
+                        f"{len(semantic_result['provenance'])} admitted provenance reference(s)"
+                    )
+                    st.json(list(semantic_result["provenance"]))
+            elif governed is not None and governed.provenance:
                 with st.expander("Evidence"):
                     st.caption(f"{len(governed.provenance)} governed provenance reference(s)")
                     st.json(list(governed.provenance))
@@ -140,8 +168,6 @@ else:
     )
 history_key = f"enterprise_copilot:{session_id}"
 history = st.session_state.setdefault(history_key, [])
-
-
 st.title("Enterprise AI Copilot")
 st.markdown(
     """
@@ -190,9 +216,22 @@ if question:
     demo_result = None
     response = None
     if evidence_context.is_demo:
-        demo_result = DemoAskNexoraService().ask(
-            question, organization_id=evidence_context.organization_id or ""
-        )
+        demo_service = DemoAskNexoraService()
+        if provider_name == "openai":
+            demo_result = demo_service.ask_semantic(
+                question,
+                organization_id=evidence_context.organization_id or "",
+                role=role,
+                provider=OpenAIProvider(),
+                conversation=tuple(
+                    {"role": item["role"], "content": item["content"]}
+                    for item in history[-10:]
+                ),
+            )
+        else:
+            demo_result = demo_service.ask(
+                question, organization_id=evidence_context.organization_id or ""
+            )
     else:
         assert authenticated is not None and copilot is not None
         response = copilot.ask(
@@ -201,6 +240,11 @@ if question:
                 question,
                 authenticated.role,
                 session_id,
+                provider_name,
+                tuple(
+                    {"role": item["role"], "content": item["content"]}
+                    for item in history[-10:]
+                ),
             )
         )
     with st.chat_message("assistant"):

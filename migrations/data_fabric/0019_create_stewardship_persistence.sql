@@ -47,12 +47,14 @@ create or replace function data_fabric.enforce_stewardship_revision() returns tr
 begin
  if new.revision <> old.revision + 1 then raise exception 'stewardship revision must increase by exactly one'; end if;
  if new.organization_id <> old.organization_id or new.tenant_id <> old.tenant_id then raise exception 'stewardship tenant scope is immutable'; end if;
- if tg_table_name = 'stewardship_policies' and
-    (new.policy_id <> old.policy_id or new.policy_type <> old.policy_type or new.domain <> old.domain or new.policy_key <> old.policy_key or new.created_at <> old.created_at or new.created_by <> old.created_by)
- then raise exception 'stewardship policy identity is immutable'; end if;
- if tg_table_name = 'stewardship_review_items' and
-    (new.review_id <> old.review_id or new.review_key <> old.review_key or new.review_type <> old.review_type or new.domain <> old.domain or new.subject_type <> old.subject_type or new.subject_id <> old.subject_id or new.created_at <> old.created_at or new.created_by <> old.created_by)
- then raise exception 'stewardship review identity is immutable'; end if;
+ if tg_table_name = 'stewardship_policies' then
+  if new.policy_id <> old.policy_id or new.policy_type <> old.policy_type or new.domain <> old.domain or new.policy_key <> old.policy_key or new.created_at <> old.created_at or new.created_by <> old.created_by
+  then raise exception 'stewardship policy identity is immutable'; end if;
+ end if;
+ if tg_table_name = 'stewardship_review_items' then
+  if new.review_id <> old.review_id or new.review_key <> old.review_key or new.review_type <> old.review_type or new.domain <> old.domain or new.subject_type <> old.subject_type or new.subject_id <> old.subject_id or new.created_at <> old.created_at or new.created_by <> old.created_by
+  then raise exception 'stewardship review identity is immutable'; end if;
+ end if;
  return new;
 end $$;
 do $$ begin

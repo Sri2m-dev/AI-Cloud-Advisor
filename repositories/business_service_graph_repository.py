@@ -25,17 +25,17 @@ class BusinessServiceGraphRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_registry():
-        return BusinessServiceGraphRepository._fetch_table("application_registry")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend_mapping():
-        return BusinessServiceGraphRepository._fetch_table("application_spend_mapping")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_technology_inventory():
-        return BusinessServiceGraphRepository._fetch_table("technology_inventory")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
@@ -45,4 +45,4 @@ class BusinessServiceGraphRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend():
-        return BusinessServiceGraphRepository._fetch_table("mart_application_spend")
+        return []

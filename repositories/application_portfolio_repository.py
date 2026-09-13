@@ -14,26 +14,12 @@ class ApplicationPortfolioRepository:
 
     @staticmethod
     def get_applications():
-        try:
-            response = (
-                supabase
-                .table("application_registry")
-                .select(
-                    "app_code,app_name,business_unit,department,team_name,"
-                    "owner_name,owner_email,environment,criticality,cloud_provider,"
-                    "cost_center,allocation_enabled,active"
-                )
-                .eq("active", True)
-                .execute()
-            )
-            return response.data or []
-        except Exception:
-            return []
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend():
-        return ApplicationPortfolioRepository._fetch_table("mart_application_spend")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
@@ -48,9 +34,9 @@ class ApplicationPortfolioRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_unallocated_spend():
-        return ApplicationPortfolioRepository._fetch_table("technology_inventory")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend_mapping():
-        return ApplicationPortfolioRepository._fetch_table("application_spend_mapping")
+        return []

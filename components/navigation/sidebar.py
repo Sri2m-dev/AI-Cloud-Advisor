@@ -55,6 +55,7 @@ SIMPLIFIED_ROLE_NAVIGATION: dict[str, list[dict[str, str]]] = {
         {"label": "Brief", "page_label": "CEO Workspace", "section": "Executive", "icon": "executive"},
         {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Executive", "icon": "ai"},
         {"label": "Executive Decisions", "page_label": "Executive Decisions", "section": "Executive", "icon": "approval"},
+        {"label": "Approvals", "page_label": "Approvals", "section": "Governance", "icon": "approval"},
         {"label": "Analyze Environment", "page_label": "Analyse Your Environment", "section": "Business", "icon": "search"},
         {"label": "Services", "page_label": "Business Services", "section": "Business", "icon": "service"},
         {"label": "Digital Twin", "page_label": "Twin Explorer", "section": "Business", "icon": "technology"},

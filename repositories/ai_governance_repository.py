@@ -10,16 +10,7 @@ from services.supabase_client import supabase
 class AIGovernanceRepository:
     @staticmethod
     def _fetch_ai_inventory() -> list[dict[str, Any]]:
-        try:
-            response = (
-                supabase.table("technology_inventory")
-                .select("*")
-                .eq("technology_type", "AI")
-                .execute()
-            )
-            return response.data or []
-        except Exception:
-            return []
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)

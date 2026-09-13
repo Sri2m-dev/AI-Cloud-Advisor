@@ -31,17 +31,17 @@ class BusinessProcessRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_registry() -> list[dict[str, Any]]:
-        return BusinessProcessRepository._fetch_table("application_registry")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend() -> list[dict[str, Any]]:
-        return BusinessProcessRepository._fetch_table("mart_application_spend")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_technology_inventory() -> list[dict[str, Any]]:
-        return BusinessProcessRepository._fetch_table("technology_inventory")
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)

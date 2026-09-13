@@ -8,16 +8,7 @@ class TechnologyGraphRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_technology_inventory():
-        try:
-            response = (
-                supabase
-                .table("technology_inventory")
-                .select("*")
-                .execute()
-            )
-            return response.data or []
-        except Exception:
-            return []
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)

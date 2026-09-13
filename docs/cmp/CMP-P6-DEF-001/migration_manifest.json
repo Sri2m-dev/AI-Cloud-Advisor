@@ -1,0 +1,204 @@
+{
+  "defect": "CMP-P6-DEF-002",
+  "status": "BLOCKED",
+  "executable": false,
+  "hash_format": "SHA-256 of UTF-8 SQL text with LF newlines; portable across Git EOL conversion",
+  "reason": "0020 is corrected, but active application objects still lack authoritative creation DDL and fresh PostgreSQL replay is unavailable in this environment.",
+  "blockers": [
+    "Missing creation DDL for active application objects; see schema_inventory.json and the CMP-P6-DEF-002 report.",
+    "Fresh local PostgreSQL certification could not be rerun because PostgreSQL client/server binaries are unavailable in this environment."
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "name": "public_bootstrap",
+      "path": "supabase/bootstrap/public_prerequisites.sql",
+      "sha256": "d5a09c834e27f71af7d07c843568cb1eaf9abe251a00d996a910b83745ed7757",
+      "status": "PREREQUISITES_ONLY_INCOMPLETE_APPLICATION_BASELINE"
+    },
+    {
+      "order": 2,
+      "name": "dated_public",
+      "files": [
+        {
+          "path": "supabase/migrations/202607230001_public_security_reconciliation.sql",
+          "sha256": "98247d9f17a9aa4babe1a19efa49e96d1ba464c9c6ee343e422ca20c975f879e"
+        },
+        {
+          "path": "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql",
+          "sha256": "f9632250ccc23e530868b1dea4cff381bf9cfe9a122a6c5ea2a4ccab4c7de83f"
+        },
+        {
+          "path": "supabase/migrations/202607290001_enterprise_financial_data_fabric.sql",
+          "sha256": "aba304f7aa680ded856d430b1719d979f7d889256780c33990a5d3769c5a2165"
+        },
+        {
+          "path": "supabase/migrations/202607290002_optimize_enterprise_financial_posture.sql",
+          "sha256": "7e5c41450a541ef3e7bf06b43777fd78986858659bb06ebcfbdb1e93d7ec5215"
+        },
+        {
+          "path": "supabase/migrations/202607290003_materialize_cloud_financial_projections.sql",
+          "sha256": "12d87759f19e121d503b5ed674efab32877724c285756d3bdceada89f0846182"
+        },
+        {
+          "path": "supabase/migrations/202607290004_correct_persisted_fact_posture.sql",
+          "sha256": "469ab4e547c38027973890b957d7a05b0cd2979009aba69c47486f58f0abe1d3"
+        },
+        {
+          "path": "supabase/migrations/202607300001_bound_enterprise_financial_posture.sql",
+          "sha256": "9ecb13bc294010231bf0b66b78e65508a211bc31b689e33c51538f466fd9356c"
+        },
+        {
+          "path": "supabase/migrations/202607310001_add_import_history_billing_period.sql",
+          "sha256": "a93dc02170b006ac720c3c7f380327c743f21c125a22c28f5174358e8e735de5"
+        },
+        {
+          "path": "supabase/migrations/202607310002_cloud_account_registry.sql",
+          "sha256": "8cda78c23f30299967d01e4a5cd67842ced3d71a069a3f03bfe19648ed769919"
+        },
+        {
+          "path": "supabase/migrations/202608080001_fg002_account_resolution.sql",
+          "sha256": "9072195cd23bfae9ac04e3e972bb28d8b1d9de7030adc69716a711d86e6feff6"
+        },
+        {
+          "path": "supabase/migrations/202608090001_p42_enterprise_classification.sql",
+          "sha256": "df509c711de2922ebe3a8fff83c12fdc07489a9d51586b12bb9395c15291feee"
+        },
+        {
+          "path": "supabase/migrations/202608090002_p42_owner_optional_resolution.sql",
+          "sha256": "0f4ebf5b1026359b7bd44779e42dff1a764b6140adc8f9eec97b744e9f15ee0d"
+        },
+        {
+          "path": "supabase/migrations/202608090003_p42_aws_user_tag_normalization.sql",
+          "sha256": "8604604f3e7f0c1e851fdae545d8e83ce0d3b9549392ae4c9defa4fc31744653"
+        },
+        {
+          "path": "supabase/migrations/202608090004_p42_inference_persistence_rpc.sql",
+          "sha256": "f6db405b6264ac17c7e15174b500bcd163854ef3b28aba121627cd864a900e86"
+        },
+        {
+          "path": "supabase/migrations/202608090005_p42_persistence_lock_key.sql",
+          "sha256": "21ee67969f59f2a7169afbfc12c2cae4ff0f52fbb4ad6dbe2faa2ee163030cb7"
+        },
+        {
+          "path": "supabase/migrations/202608090006_p42_batch_account_evidence.sql",
+          "sha256": "875e8b985df923b4b3b89d607057728e93e4774056c6ba2196ef8f8cfa3fff41"
+        },
+        {
+          "path": "supabase/migrations/202608090007_p42_single_scan_batch_evidence.sql",
+          "sha256": "516dd304043c2af0c7881a304c996ef021ab1a45bd076404d10f15b0a02a68f5"
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "name": "data_fabric",
+      "files": [
+        {
+          "path": "migrations/data_fabric/0001_create_data_fabric_schema.sql",
+          "sha256": "4a5fe2c3eed355b598d9910e2afc1e6d519082a183bac9ad409af7419c712551"
+        },
+        {
+          "path": "migrations/data_fabric/0002_create_enterprise_entities.sql",
+          "sha256": "4bf6f3e4c7ae5bc8034bcee3d82b76216e33d284816acf45249186c6ed30bbff"
+        },
+        {
+          "path": "migrations/data_fabric/0003_create_entity_update_rpc.sql",
+          "sha256": "42b60a9a9bfe8404550776469adf55fc99efa565e362b44e3defb046a6c2829c"
+        },
+        {
+          "path": "migrations/data_fabric/0004_create_enterprise_relationships.sql",
+          "sha256": "9cbbdec923fa6cf0a7a31d334604b0f1414d70a42a966d76b73eb3aaf64cb49d"
+        },
+        {
+          "path": "migrations/data_fabric/0005_create_entity_versions.sql",
+          "sha256": "b2114b863c2fa332b3a27d151a03aa04de8db1f3940e1ef3fc014564628bdacd"
+        },
+        {
+          "path": "migrations/data_fabric/0006_create_lineage_events.sql",
+          "sha256": "9a4579eba33919a17c2e97aa02889c8b711f310b5c9d7bb5c7d9d07e65fdd7e0"
+        },
+        {
+          "path": "migrations/data_fabric/0007_create_provenance_records.sql",
+          "sha256": "3f3dc5ab18fd6af3a7e44d94d34786968265d94b0afade152280f2689a863b61"
+        },
+        {
+          "path": "migrations/data_fabric/0008_create_relationship_update_rpc.sql",
+          "sha256": "b89526b58a1137664eb100b5652ece10cf0df58134017cb83740615137cac299"
+        },
+        {
+          "path": "migrations/data_fabric/0009_create_quality_assessments.sql",
+          "sha256": "94b984f08ac465e2e7915f2f8d1620aaeead2f775753a22a943263f2da891731"
+        },
+        {
+          "path": "migrations/data_fabric/0010_create_ontology_concepts.sql",
+          "sha256": "ce0390077eaa511ad6e4984a9e276ae2ef4ad3dd29bc402fc1565692712b6060"
+        },
+        {
+          "path": "migrations/data_fabric/0011_create_ontology_relationships.sql",
+          "sha256": "e379d936124ddaf47f680eafa75bb4a104c42fc9eb62777bf7533a599fd5b44a"
+        },
+        {
+          "path": "migrations/data_fabric/0012_create_semantic_mappings.sql",
+          "sha256": "a1a1e1d0731f74f4a46936f6de59570af6ed4dd6180b9e0306be2ac3a9655822"
+        },
+        {
+          "path": "migrations/data_fabric/0013_create_idempotency_records.sql",
+          "sha256": "976be88fa6e0e7700bbe8a3aa147662412700751319b57ce000e787a919f300f"
+        },
+        {
+          "path": "migrations/data_fabric/0014_create_ontology_update_rpcs.sql",
+          "sha256": "43c1d113cffd3e9f9e664624cc90d08c867208d2d1610f603c8c5c0363309f3f"
+        },
+        {
+          "path": "migrations/data_fabric/0015_create_semantic_mapping_update_rpc.sql",
+          "sha256": "875f0b6093a696acef7d06e71f9f6434ed5923e680e514f8d444c71bea4fde2a"
+        },
+        {
+          "path": "migrations/data_fabric/0016_create_idempotency_state_rpcs.sql",
+          "sha256": "7e5fe6bda2a4ac9cb9f2af07f41014645e3a706775e8acf7fd17aeadaff54b09"
+        },
+        {
+          "path": "migrations/data_fabric/0017_create_atomic_entity_write_rpc.sql",
+          "sha256": "a2d4d904c816dccf41f54ed787bba3a5956ecc9c3b49a17b1dfcf87fda813c31"
+        },
+        {
+          "path": "migrations/data_fabric/0018_create_atomic_relationship_write_rpc.sql",
+          "sha256": "79810c05e909cb2da1d7059919b188ea5dfb1f23d6012db0d7ae572d5927cbc7"
+        },
+        {
+          "path": "migrations/data_fabric/0019_create_stewardship_persistence.sql",
+          "sha256": "65797c4f66691326c3053dd539d383363ab20a7ec251e90d0df486ef3441d03a"
+        },
+        {
+          "path": "migrations/data_fabric/0020_create_stewardship_rpcs.sql",
+          "sha256": "3f32e182b39c683d5540586b00d61f46daf1fc1ab9bdccb0e36226a7e05510f2"
+        },
+        {
+          "path": "migrations/data_fabric/0021_extend_relationship_authority.sql",
+          "sha256": "1860c48bb82d50655a43464aaeebbf2c76d9d24bcaa3a6a17c2bb5a552988d26"
+        },
+        {
+          "path": "migrations/data_fabric/0022_create_source_fact_authority.sql",
+          "sha256": "7ae8d6d05321344372e73cb7f820f7bc1ebaba8bce7ccbfdfd2bbb5b770833f4"
+        },
+        {
+          "path": "migrations/data_fabric/0023_enforce_relationship_timestamp_order.sql",
+          "sha256": "74f6657cbe53028ce7e88dbb9b312b6e3afe141d31375f43d506bb62773e260e"
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "name": "universal_evidence_local_lifecycle",
+      "engine": "sqlite",
+      "files": [
+        {
+          "path": "migrations/universal_evidence/0001_create_lifecycle_state.sql",
+          "sha256": "ddbe70286b56c7fccd8afbaaa8154e89a2dc6cdf37040cb5cb06376a57da0345"
+        }
+      ],
+      "initialization": "Existing app startup initializer / SQLiteLifecycleRepository; separate persistent local store, never Supabase SQL."
+    }
+  ]
+}

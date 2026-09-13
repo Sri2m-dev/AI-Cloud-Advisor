@@ -7,6 +7,7 @@ import pandas as pd
 
 from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.enterprise_spend_service import EnterpriseSpendService
+from services.financial_read_models import enterprise_spend_read_model
 from services.supabase_client import supabase
 
 
@@ -82,14 +83,20 @@ class EnterpriseSpendCertificationService:
         spend_service: EnterpriseSpendService,
     ) -> dict[str, Any]:
         posture = spend_service.get_financial_posture(context)
-        breakdown = _fetch_one("mart_enterprise_spend_v2", context)
+        read_model = enterprise_spend_read_model(context, spend_service)
+        breakdown = {
+            "cloud_spend": read_model.cloud.value,
+            "saas_spend": read_model.saas.value,
+            "msp_spend": read_model.msp.value,
+            "license_spend": read_model.license.value,
+        }
         forecast_df = pd.DataFrame(_fetch_rows("mart_enterprise_forecast", context))
         cost_df = pd.DataFrame(spend_service.get_spend_by_service(context))
         budget_df = pd.DataFrame(_fetch_rows("mart_budget_vs_actual", context))
         recommendations_df = pd.DataFrame(_fetch_rows("recommendations", context))
 
         # Legacy cloud is deliberately ignored to prevent double counting.
-        spend_available = bool(posture.source_rows or posture.persisted_facts or breakdown)
+        spend_available = bool(posture.source_rows or posture.persisted_facts or posture.has_data)
         cloud_cost = float(posture.cloud_spend) if spend_available else None
         saas_cost = _spend_value(breakdown, "saas_spend", "saas_cost")
         msp_cost = _spend_value(breakdown, "msp_spend", "msp_cost")

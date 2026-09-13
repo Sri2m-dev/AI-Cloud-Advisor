@@ -9,7 +9,7 @@ Scope: Runtime variables and configuration expectations.
 | --- | --- | --- |
 | `SUPABASE_URL` | Yes | Supabase project endpoint |
 | `SUPABASE_KEY` | Yes | Supabase API key used by backend services |
-| `DEFAULT_ORG_ID` | Yes | Default organization context for dashboard queries |
+| `DEFAULT_ORG_ID` | No | Legacy compatibility only; never used as a production tenant fallback |
 | `ENVIRONMENT` | Yes | Runtime environment, for example `production` or `development` |
 | `OPENAI_API_KEY` | Conditional | Required when AI features call OpenAI-backed services |
 

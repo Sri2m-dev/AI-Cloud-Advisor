@@ -35,6 +35,13 @@ OPENAI_API_KEY=...
 
 ## Deployment Steps
 
+Fresh Supabase projects must first pass the [CMP-P6-DEF-001 bootstrap gate](cmp/CMP-P6-DEF-001/REPORT.md).
+That gate is currently **BLOCKED**. The recorded migration order is not an executable
+deployment approval: the public prerequisite SQL covers only the dated chain,
+some active application objects have no creation DDL, and local replay found a
+Data Fabric 0020 compilation error. Do not replay top-level historical SQL or
+create staging based on the steps below until the gate is resolved.
+
 1. Pull the approved release branch or tag.
 2. Install dependencies from the project requirements.
 3. Configure environment variables in the deployment platform.

@@ -15,7 +15,7 @@ Real values belong in the deployment secret manager, never `.env.example` or Git
 | `NEXORA_PROSPECT_DATA_KEY` | Prospect encryption | Prospect | ephemeral outside production | Stable managed Fernet key | Yes | Production persistence raises when absent/invalid |
 | `NEXORA_DEMO_MODE` | Demo opt-in | Optional | `false` | `false` in customer production | No | Demo authority unavailable unless Demo tenant is authorized |
 | `PUE_PILOT_DEV_MODE` | Development pilot | Optional | `false` | `false` | No | Cannot grant production authority |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` | Optional model provider | Optional | none | Certified provider/model | Yes/No | No invented evidence; unsupported remains fail-closed |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | Optional OpenAI Responses provider for bounded Ask Nexora generation | Optional | none / `gpt-5.6` | Certified provider/model | Yes/No | Missing key or provider failure raises; no invented evidence; unsupported remains fail-closed |
 | `AWS_*`, `AZURE_*`, `GCP_*` | Connector authority | Conditional | none | Workload identity/secret refs preferred | Mixed | Connector unavailable; no simulated success |
 | `REDIS_URL`, `CELERY_*` | API/worker state | Conditional | container URL | Managed Redis | Sensitive | Optional API/worker surface unavailable |
 | `BACKGROUND_JOBS_ENABLED` | Scheduler activation | Optional | `false` | Explicit after certification | No | Jobs stay off |

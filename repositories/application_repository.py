@@ -12,47 +12,17 @@ class ApplicationRepository:
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_registry():
-        try:
-            response = (
-                supabase
-                .table("application_registry")
-                .select(
-                    "app_name,business_unit,department,team_name,owner_name,"
-                    "owner_email,criticality,cloud_provider,cost_center"
-                )
-                .execute()
-            )
-            return response.data or []
-        except Exception:
-            return []
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend_mapping():
-        try:
-            response = (
-                supabase
-                .table("application_spend_mapping")
-                .select("spend_application_name,registry_app_name")
-                .execute()
-            )
-            return response.data or []
-        except Exception:
-            return []
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
     def get_application_spend():
-        try:
-            response = (
-                supabase
-                .table("mart_application_spend")
-                .select("*")
-                .execute()
-            )
-            return response.data or []
-        except Exception:
-            return []
+        return []
 
     @staticmethod
     @st.cache_data(ttl=300)
