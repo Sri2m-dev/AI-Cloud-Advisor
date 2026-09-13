@@ -11881,6 +11881,66 @@
       "namespace": "requires_client_schema_review"
     },
     {
+      "path": "services/v1_approval_authority.py",
+      "line": 279,
+      "operation": "table",
+      "name": "nexora_v1_approval_history",
+      "definition_candidates": [
+        "public.nexora_v1_approval_history"
+      ],
+      "namespace": "requires_client_schema_review"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 215,
+      "operation": "table",
+      "name": "nexora_v1_approval_requests",
+      "definition_candidates": [
+        "public.nexora_v1_approval_requests"
+      ],
+      "namespace": "requires_client_schema_review"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 234,
+      "operation": "table",
+      "name": "nexora_v1_approval_requests",
+      "definition_candidates": [
+        "public.nexora_v1_approval_requests"
+      ],
+      "namespace": "requires_client_schema_review"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 264,
+      "operation": "table",
+      "name": "nexora_v1_approval_requests",
+      "definition_candidates": [
+        "public.nexora_v1_approval_requests"
+      ],
+      "namespace": "requires_client_schema_review"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 220,
+      "operation": "table",
+      "name": "nexora_v1_approval_requests",
+      "definition_candidates": [
+        "public.nexora_v1_approval_requests"
+      ],
+      "namespace": "requires_client_schema_review"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 295,
+      "operation": "table",
+      "name": "nexora_v1_approval_history",
+      "definition_candidates": [
+        "public.nexora_v1_approval_history"
+      ],
+      "namespace": "requires_client_schema_review"
+    },
+    {
       "path": "services/workflow_persistence.py",
       "line": 66,
       "operation": "rpc",
@@ -19145,6 +19205,11 @@
       "object": "public.mart_executive_summary"
     },
     {
+      "path": "repositories/v1_approval_repository.py",
+      "line": 66,
+      "object": "public.workflow_stage"
+    },
+    {
       "path": "repositories/workflow_builder_repository.py",
       "line": 127,
       "object": "public.workflow_blueprint"
@@ -22843,6 +22908,51 @@
       "path": "services/universal_connector_platform_service.py",
       "line": 182,
       "object": "public.users"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 212,
+      "object": "public.workflow_stage"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 321,
+      "object": "public.workflow_stage"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 279,
+      "object": "public.nexora_v1_approval_history"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 215,
+      "object": "public.nexora_v1_approval_requests"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 269,
+      "object": "public.workflow_stage"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 234,
+      "object": "public.nexora_v1_approval_requests"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 264,
+      "object": "public.nexora_v1_approval_requests"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 220,
+      "object": "public.nexora_v1_approval_requests"
+    },
+    {
+      "path": "services/v1_approval_authority.py",
+      "line": 295,
+      "object": "public.nexora_v1_approval_history"
     },
     {
       "path": "services/workflow_builder_service.py",
