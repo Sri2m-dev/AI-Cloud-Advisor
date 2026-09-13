@@ -8,6 +8,11 @@ from services.local_auth_service import (
     ensure_nonproduction_personas,
     local_auth_enabled,
 )
+from services.onboarding_service import (
+    OnboardingError,
+    accept_invitation,
+    create_organization_and_onboard,
+)
 from shared.session import init_session
 from utils.auth import login_user as supabase_login_user
 
@@ -148,47 +153,143 @@ if st.session_state.get("authenticated"):
     route_user(role)
 
 else:
-    username = st.text_input("Username", placeholder="you@example.com")
+    tab_login, tab_onboard, tab_invite = st.tabs(
+        ["Sign In", "Create Organization", "Accept Invitation"]
+    )
 
-    password = st.text_input("Password", type="password")
+    with tab_login:
+        username = st.text_input("Username", placeholder="you@example.com", key="login_username")
 
-    if st.button("Login"):
-        try:
-            if DEV_AUTH_ENABLED:
-                login_success = login_with_dev_user(username, password)
-            else:
-                login_success = login_with_supabase(username, password)
+        password = st.text_input("Password", type="password", key="login_password")
 
-        except Exception:
-            login_success = False
-
-        if login_success:
-            # Automatically log the user login event
+        if st.button("Login", key="btn_login"):
             try:
-                audit_service.log_user_login(
-                    user_id=st.session_state["email"],
-                    org_id=st.session_state["organization_id"],
-                    ip_address=None,  # Would come from request context in production
-                    user_agent=None,  # Would come from request context in production
-                    actor_role=st.session_state["role"],
-                )
+                if DEV_AUTH_ENABLED:
+                    login_success = login_with_dev_user(username, password)
+                else:
+                    login_success = login_with_supabase(username, password)
+
             except Exception:
-                pass
+                login_success = False
 
-            st.success("Login successful")
+            if login_success:
+                # Automatically log the user login event
+                try:
+                    audit_service.log_user_login(
+                        user_id=st.session_state["email"],
+                        org_id=st.session_state["organization_id"],
+                        ip_address=None,  # Would come from request context in production
+                        user_agent=None,  # Would come from request context in production
+                        actor_role=st.session_state["role"],
+                    )
+                except Exception:
+                    pass
 
-            route_user(st.session_state["role"])
+                st.success("Login successful")
 
-        else:
-            if DEV_AUTH_ENABLED:
-                audit_service.log_event(
-                    event_type="USER_LOGIN_FAILED",
-                    user_id="anonymous",
-                    action="login_failed",
-                    resource_type="authentication",
-                    resource_id="unknown",
-                    org_id="bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c",
-                    details={"status": "invalid_credentials"},
-                    status="failure",
-                )
-            st.error("Invalid credentials")
+                route_user(st.session_state["role"])
+
+            else:
+                if DEV_AUTH_ENABLED:
+                    audit_service.log_event(
+                        event_type="USER_LOGIN_FAILED",
+                        user_id="anonymous",
+                        action="login_failed",
+                        resource_type="authentication",
+                        resource_id="unknown",
+                        org_id="bff29e99-1a33-4bf7-a2dc-3abe9bd2a03c",
+                        details={"status": "invalid_credentials"},
+                        status="failure",
+                    )
+                st.error("Invalid credentials")
+
+    with tab_onboard:
+        st.subheader("Onboard New Enterprise Organization")
+        st.caption("Create a clean tenant workspace and become organization administrator")
+
+        with st.form("create_org_form"):
+            onboard_email = st.text_input("Admin Work Email", placeholder="admin@enterprise.com")
+            onboard_org_name = st.text_input("Organization / Company Name", placeholder="Acme Corp")
+            onboard_password = st.text_input(
+                "Admin Password", type="password", placeholder="Enter secure password"
+            )
+            onboard_submit = st.form_submit_button("Create Organization & Workspace", type="primary")
+
+            if onboard_submit:
+                try:
+                    result = create_organization_and_onboard(
+                        user_email=onboard_email,
+                        organization_name=onboard_org_name,
+                        admin_role="client_admin",
+                        password=onboard_password,
+                    )
+                    if result.success and result.organization:
+                        set_login_session(
+                            email=result.user_email,
+                            role=result.role,
+                            org_id=result.organization.organization_id,
+                            user_id=result.user_email,
+                        )
+                        st.session_state["auth_backend"] = "local"
+                        st.session_state["authorized_organization_ids"] = [
+                            result.organization.organization_id
+                        ]
+                        st.session_state["organization_name"] = result.organization.organization_name
+                        st.success(
+                            f"✅ Organization **{result.organization.organization_name}** successfully created!"
+                        )
+                        route_user(result.role)
+                    else:
+                        st.error(f"❌ Onboarding failed: {result.error}")
+                except (OnboardingError, ValueError) as err:
+                    st.error(f"❌ {err}")
+                except Exception as exc:
+                    st.error(f"❌ Unexpected error during onboarding: {exc}")
+
+    with tab_invite:
+        st.subheader("Join via Invitation")
+        st.caption("Accept a tenant invitation to join an existing organization")
+
+        invite_param = ""
+        try:
+            invite_param = str(st.query_params.get("invite", "")).strip()
+        except Exception:
+            pass
+
+        with st.form("accept_invite_form"):
+            invite_token = st.text_input(
+                "Invitation Token", value=invite_param, placeholder="Paste invitation token"
+            )
+            invite_email = st.text_input("Your Email", placeholder="you@company.com")
+            invite_password = st.text_input(
+                "Account Password", type="password", placeholder="Set or enter password"
+            )
+            invite_submit = st.form_submit_button("Accept & Join Organization", type="primary")
+
+            if invite_submit:
+                try:
+                    result = accept_invitation(
+                        token=invite_token,
+                        user_email=invite_email,
+                        password=invite_password,
+                    )
+                    if result.success and result.organization:
+                        set_login_session(
+                            email=result.user_email,
+                            role=result.role,
+                            org_id=result.organization.organization_id,
+                            user_id=result.user_email,
+                        )
+                        st.session_state["auth_backend"] = "local"
+                        st.session_state["authorized_organization_ids"] = [
+                            result.organization.organization_id
+                        ]
+                        st.session_state["organization_name"] = result.organization.organization_name
+                        st.success(
+                            f"✅ Joined **{result.organization.organization_name}** as `{result.role}`!"
+                        )
+                        route_user(result.role)
+                    else:
+                        st.error(f"❌ Could not accept invitation: {result.error}")
+                except Exception as err:
+                    st.error(f"❌ {err}")

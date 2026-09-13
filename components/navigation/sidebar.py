@@ -36,7 +36,7 @@ SECTION_KEYWORDS = {
     "Governance": ["Governance", "Risk", "Approval", "Audit", "Security", "Compliance", "Disaster Recovery", "Readiness", "Data Quality"],
     "Platform": ["Platform", "Connector Health", "Connector Operations", "Data Sources", "Entity Registry", "Enterprise Data Fabric"],
     "Marketplace": ["Marketplace", "Connector Studio", "Connector Marketplace"],
-    "Administration": ["Administration", "Reports"],
+    "Administration": ["Administration", "Organization", "Team", "Reports"],
     "Settings": ["Settings"],
 }
 

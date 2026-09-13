@@ -86,9 +86,11 @@ ROLE_PAGES = {
         "SaaS Governance Center",
         "Audit Timeline",
         "Risk & Governance",
+        "Organization & Team",
         "Reports",
     ],
     "client_admin": [
+        "Organization & Team",
         "AI Copilot",
         "AI Workflow Center",
         "AI Execution Center",
@@ -483,6 +485,7 @@ PAGE_PATHS = {
     "SaaS Governance Center": "pages/saas_governance.py",
     "Audit Timeline": "pages/audit_timeline.py",
     "Risk & Governance": "pages/risk_governance.py",
+    "Organization & Team": "pages/organization_administration.py",
     "Reports": "pages/reports.py",
 }
 
