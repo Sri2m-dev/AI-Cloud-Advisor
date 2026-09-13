@@ -17,6 +17,7 @@ from connector_adapters.live_cost import (
     failure_category,
     validate_configuration,
 )
+from connector_adapters.m365_discovery import M365DiscoveryConnector
 from connector_orchestration.scheduler import OrchestrationSchedule, ScheduleType
 from connector_orchestration.trigger import ConnectorTriggerType
 from connector_registry import ConnectorRegistry
@@ -44,9 +45,13 @@ class LiveSourceService:
         self.repository = repository
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.registry = ConnectorRegistry()
-        for adapter in (AWSLiveCostConnector, AzureLiveCostConnector):
+        for adapter in (AWSLiveCostConnector, AzureLiveCostConnector, M365DiscoveryConnector):
             self.registry.register_connector(adapter)
-        self.factories = factories or {"aws": AWSLiveCostConnector, "azure": AzureLiveCostConnector}
+        self.factories = factories or {
+            "aws": AWSLiveCostConnector,
+            "azure": AzureLiveCostConnector,
+            "m365": M365DiscoveryConnector,
+        }
 
     @staticmethod
     def authorize(context, *, admin=False):
@@ -62,9 +67,13 @@ class LiveSourceService:
         ))
 
     def _instance(self, context, row, enabled):
+        connector_type = "saas_api" if row["provider"] == "m365" else "cloud_api"
+        connector_name = (
+            "m365.discovery" if row["provider"] == "m365" else f"{row['provider']}.live_cost"
+        )
         return SourceInstance(
             row["source_id"], context.organization_id, context.tenant_id,
-            "cloud_api", row["provider"], f"{row['provider']}.live_cost", "1.1.0",
+            connector_type, row["provider"], connector_name, "1.1.0",
             f"connector-config:{row['source_id']}", f"connector-secret:{row['source_id']}",
             enabled=enabled, updated_at=self.clock(),
         )
@@ -103,7 +112,7 @@ class LiveSourceService:
         expected = {"external_id"} if provider == "aws" else {"client_secret"}
         if set(material) - expected or not all(isinstance(v, str) for v in material.values()):
             raise ProviderFailure("INVALID_CONFIGURATION")
-        if provider == "azure" and not material.get("client_secret"):
+        if provider in {"azure", "m365"} and not material.get("client_secret"):
             raise ProviderFailure("AUTHENTICATION")
         return material
 
@@ -122,12 +131,17 @@ class LiveSourceService:
             SourceFactService(context.fabric_context, self.repository.bound(db)).register(
                 self._instance(context, row, False),
             )
+            account_identifier = (
+                config.get("account_id")
+                or config.get("subscription_id")
+                or config.get("tenant_id")
+            )
             db.execute(
                 "INSERT INTO connector_source_config (organization_id,tenant_id,source_id,"
                 "provider,account_id,display_name,config_json,credential_ciphertext,status,"
                 "created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (context.organization_id, context.tenant_id, source_id, provider,
-                 config.get("account_id") or config["subscription_id"], display_name.strip(),
+                 account_identifier, display_name.strip(),
                  json.dumps(config), ciphertext, "DRAFT", context.user_id, now, now),
             )
             self._audit(db, context, source_id, "SOURCE_CREATED")
@@ -146,6 +160,11 @@ class LiveSourceService:
             ciphertext = ScopedCredentialProvider.seal(
                 context, source_id, self._material(row["provider"], secrets),
             )
+            account_identifier = (
+                config.get("account_id")
+                or config.get("subscription_id")
+                or config.get("tenant_id")
+            )
             db.execute(
                 "UPDATE connector_source_config SET config_json=?,credential_ciphertext=?,"
                 "account_id=?,status='DRAFT',schedule_enabled=0,next_run_at=NULL,updated_at=? "
@@ -153,7 +172,7 @@ class LiveSourceService:
                 (
                     json.dumps(config),
                     ciphertext,
-                    config.get("account_id") or config["subscription_id"],
+                    account_identifier,
                     self.clock().isoformat(),
                     context.organization_id,
                     context.tenant_id,
@@ -166,7 +185,10 @@ class LiveSourceService:
             self._audit(db, context, source_id, "CONFIGURATION_CHANGED")
 
     def _connector(self, context, row):
-        registered = self.registry.get_connector(f"{row['provider']}.live_cost")
+        connector_key = (
+            "m365.discovery" if row["provider"] == "m365" else f"{row['provider']}.live_cost"
+        )
+        registered = self.registry.get_connector(connector_key)
         if registered is None or not registered.enabled:
             raise ProviderFailure("DISABLED")
         return self.factories[row["provider"]](
@@ -331,9 +353,14 @@ class LiveSourceService:
             connector = self._connector(context, row)
             records = self._read(connector)
             count = len(records)
-            adapted = ConnectorSourceFactAdapter().adapt(
-                records, {"cloud_cost": FactType.CLOUD_COST}
-            )
+            type_mapping = {
+                "cloud_cost": FactType.CLOUD_COST,
+                "license_sku": FactType.CONTRACT_TERM,
+                "identity_user": FactType.RESOURCE_IDENTITY,
+                "license_assignment": FactType.LICENSE_ASSIGNMENT,
+                "application": FactType.RESOURCE_IDENTITY,
+            }
+            adapted = ConnectorSourceFactAdapter().adapt(records, type_mapping)
             facts = tuple(
                 replace(
                     fact,
@@ -360,6 +387,7 @@ class LiveSourceService:
                     or not self.repository.bound(db).instance_enabled(*scope)
                 ):
                     raise ProviderFailure("DISABLED")
+                schema_name = "discovery" if row["provider"] == "m365" else "cloud_cost"
                 publication = SourceFactService(
                     context.fabric_context, self.repository.bound(db)
                 ).publish(
@@ -367,8 +395,8 @@ class LiveSourceService:
                     facts,
                     run_id=execution_id,
                     mode=RunMode.INCREMENTAL,
-                    schema={"cloud_cost": "object"},
-                    required_fields=("cloud_cost",),
+                    schema={schema_name: "object"},
+                    required_fields=(),
                     correlation_id=execution_id,
                 )
                 if publication.status is not RunStatus.SUCCESS or publication.quarantined:

@@ -45,6 +45,7 @@ def validate_configuration(provider, config):
     required = {
         "aws": {"account_id", "role_arn", "region"},
         "azure": {"tenant_id", "subscription_id", "client_id"},
+        "m365": {"tenant_id", "client_id"},
     }
     if provider not in required or set(config) != required[provider]:
         raise ProviderFailure("INVALID_CONFIGURATION")

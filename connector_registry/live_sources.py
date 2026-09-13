@@ -5,9 +5,11 @@ from pathlib import Path
 
 from data_fabric.source_facts.persistence import SQLiteSourceFactRepository
 
-MIGRATION = (
+MIGRATIONS = (
     Path(__file__).resolve().parents[1]
-    / "migrations/connectors/0001_live_source_control.sql"
+    / "migrations/connectors/0001_live_source_control.sql",
+    Path(__file__).resolve().parents[1]
+    / "migrations/connectors/0002_add_m365_provider.sql",
 )
 
 
@@ -34,13 +36,14 @@ class LiveSourceRepository(SQLiteSourceFactRepository):
     """SQLite durable deployment, matching the v1 SourceFact storage contract."""
 
     def __init__(self, database):
-        super().__init__(database)
+        self.database = str(database)
+        self._migrate()
         with self.transaction() as db:
-            # Statements are additive and replay-safe. Do not use executescript:
-            # it would commit the surrounding transaction implicitly.
-            for statement in MIGRATION.read_text(encoding="utf-8").split(";"):
-                if statement.strip():
-                    db.execute(statement)
+            for migration_file in MIGRATIONS:
+                if migration_file.exists():
+                    for statement in migration_file.read_text(encoding="utf-8").split(";"):
+                        if statement.strip():
+                            db.execute(statement)
 
     @contextmanager
     def transaction(self):

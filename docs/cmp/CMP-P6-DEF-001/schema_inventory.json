@@ -2436,6 +2436,38 @@
       "classification_reason": "Contains required-object evidence; NOT approval to replay whole file or choose among conflicting definitions."
     },
     {
+      "path": "migrations/connectors/0001_live_source_control.sql",
+      "sha256": "fc186eb4dc4359169f658ee997d4b69aec27848ea137c2feec8b106685c7f165",
+      "objects": [
+        {
+          "kind": "table",
+          "name": "public.connector_source_config",
+          "line": 2
+        },
+        {
+          "kind": "table",
+          "name": "public.connector_executions",
+          "line": 18
+        },
+        {
+          "kind": "table",
+          "name": "public.connector_control_audit",
+          "line": 35
+        }
+      ],
+      "structural_objects": [
+        {
+          "kind": "index",
+          "name": "connector_one_running_source",
+          "line": 32
+        }
+      ],
+      "qualified_references": [],
+      "review_flags": [],
+      "classification": "CURRENT_REQUIRED",
+      "classification_reason": "Existing versioned chain; preserve unchanged."
+    },
+    {
       "path": "migrations/data_fabric/0001_create_data_fabric_schema.sql",
       "sha256": "4a5fe2c3eed355b598d9910e2afc1e6d519082a183bac9ad409af7419c712551",
       "objects": [
@@ -9145,8 +9177,17 @@
     "public.confidence_history": [
       "supabase/learning_engine.sql"
     ],
+    "public.connector_control_audit": [
+      "migrations/connectors/0001_live_source_control.sql"
+    ],
+    "public.connector_executions": [
+      "migrations/connectors/0001_live_source_control.sql"
+    ],
     "public.connector_registry": [
       "supabase/aws_connector_persistence.sql"
+    ],
+    "public.connector_source_config": [
+      "migrations/connectors/0001_live_source_control.sql"
     ],
     "public.connector_status": [
       "supabase/connector_status.sql"

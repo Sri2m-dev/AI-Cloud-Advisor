@@ -154,9 +154,11 @@ def main() -> None:
                         st.divider()
 
             if is_admin:
-                st.subheader("Connect New Cloud Source")
-                with st.expander("➕ Add AWS or Azure Data Source", expanded=False):
-                    provider_choice = st.radio("Cloud Provider", ["AWS", "Azure"], horizontal=True)
+                st.subheader("Connect New Cloud or SaaS Source")
+                with st.expander("➕ Add Data Source (AWS, Azure, M365)", expanded=False):
+                    provider_choice = st.radio(
+                        "Provider", ["AWS", "Azure", "Microsoft 365 / Entra ID"], horizontal=True
+                    )
 
                     if provider_choice == "AWS":
                         with st.form("add_aws_source_form"):
@@ -251,6 +253,47 @@ def main() -> None:
                                     st.rerun()
                                 except Exception as exc:
                                     st.error(f"Failed to create Azure source: {exc}")
+
+                    elif provider_choice == "Microsoft 365 / Entra ID":
+                        with st.form("add_m365_source_form"):
+                            st.caption("Configure M365 / Entra ID access using Service Principal")
+                            m365_name = st.text_input(
+                                "Source Display Name", placeholder="Corporate Microsoft 365"
+                            )
+                            m365_tenant_id = st.text_input(
+                                "Microsoft Tenant ID (UUID)",
+                                placeholder="00000000-0000-0000-0000-000000000000",
+                            )
+                            m365_client_id = st.text_input(
+                                "Client / App ID (UUID)",
+                                placeholder="00000000-0000-0000-0000-000000000000",
+                            )
+                            m365_client_secret = st.text_input(
+                                "Client Secret",
+                                type="password",
+                                placeholder="Enter client secret",
+                            )
+
+                            m365_submit = st.form_submit_button(
+                                "Register & Save M365 Source", type="primary"
+                            )
+                            if m365_submit:
+                                try:
+                                    service = live_source_service()
+                                    new_src = service.create(
+                                        ctx,
+                                        provider="m365",
+                                        display_name=m365_name,
+                                        configuration={
+                                            "tenant_id": m365_tenant_id.strip(),
+                                            "client_id": m365_client_id.strip(),
+                                        },
+                                        secrets={"client_secret": m365_client_secret.strip()},
+                                    )
+                                    st.success(f"M365 source **{new_src['display_name']}** added.")
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"Failed to create M365 source: {exc}")
 
     with tab_overview:
         kpis = ConnectorService.get_connector_kpis()
