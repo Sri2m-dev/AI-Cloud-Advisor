@@ -2468,6 +2468,22 @@
       "classification_reason": "Existing versioned chain; preserve unchanged."
     },
     {
+      "path": "migrations/connectors/0002_add_m365_provider.sql",
+      "sha256": "5f660dd3ef2d47c988b48713a9023cd4fdde56ff723f36eaf0d3a5d21032f1fc",
+      "objects": [
+        {
+          "kind": "table",
+          "name": "public.connector_source_config_new",
+          "line": 3
+        }
+      ],
+      "structural_objects": [],
+      "qualified_references": [],
+      "review_flags": [],
+      "classification": "CURRENT_REQUIRED",
+      "classification_reason": "Existing versioned chain; preserve unchanged."
+    },
+    {
       "path": "migrations/data_fabric/0001_create_data_fabric_schema.sql",
       "sha256": "4a5fe2c3eed355b598d9910e2afc1e6d519082a183bac9ad409af7419c712551",
       "objects": [
@@ -9188,6 +9204,9 @@
     ],
     "public.connector_source_config": [
       "migrations/connectors/0001_live_source_control.sql"
+    ],
+    "public.connector_source_config_new": [
+      "migrations/connectors/0002_add_m365_provider.sql"
     ],
     "public.connector_status": [
       "supabase/connector_status.sql"
