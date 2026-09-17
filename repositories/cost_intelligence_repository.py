@@ -1,14 +1,26 @@
-from services.supabase_client import supabase
 import streamlit as st
+
+from services.supabase_client import supabase
 
 
 class CostIntelligenceRepository:
-
     @staticmethod
-    @st.cache_data(ttl=300)
     def get_enterprise_spend():
-        response = supabase.table("mart_enterprise_spend").select("*").limit(1).execute()
-        return response.data[0] if response.data else {}
+        from services.enterprise_spend_composition import (
+            authenticated_tenant_context,
+            enterprise_spend_service,
+        )
+        from services.financial_read_models import enterprise_spend_read_model
+
+        context = authenticated_tenant_context(st.session_state)
+        model = enterprise_spend_read_model(context, enterprise_spend_service())
+        return {
+            "total_spend": model.total.value,
+            "cloud_spend": model.cloud.value,
+            "currency": model.total.currency,
+            "availability": model.total.availability,
+            "provenance": model.total.provenance,
+        }
 
     @staticmethod
     @st.cache_data(ttl=300)
@@ -38,8 +50,7 @@ class CostIntelligenceRepository:
     @st.cache_data(ttl=300)
     def get_optimization_opportunities():
         response = (
-            supabase
-            .table("mart_optimization_opportunities")
+            supabase.table("mart_optimization_opportunities")
             .select("*")
             .order("total_cost", desc=True)
             .execute()

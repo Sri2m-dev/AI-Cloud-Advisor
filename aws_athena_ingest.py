@@ -1,28 +1,23 @@
-import time
 import os
+import time
+
 import boto3
 import pandas as pd
-from supabase import create_client
+
 from config import DEFAULT_ORG_ID
+from supabase import create_client
 
 # =====================================================
 # SUPABASE CONFIG
 # =====================================================
 
-SUPABASE_URL = os.getenv(
-    "SUPABASE_URL",
-    "https://iafrrtmvvqmuksvprrsj.supabase.co"
-)
-SUPABASE_KEY = os.getenv(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhZnJydG12dnFtdWtzdnBycnNqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTE0OTY2NiwiZXhwIjoyMDkwNzI1NjY2fQ.Q-fVo1tmO3XbvhudOawn-eQ3Gmz8Bb4nKW-XF6hX1wI"
-)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
 if SUPABASE_KEY.startswith("sb_publishable_"):
-    print(
-        "Warning: publishable key detected. Inserts may fail under RLS. "
-        "Set SUPABASE_SERVICE_ROLE_KEY for backend ingestion."
-    )
+    raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY must be a backend credential")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 

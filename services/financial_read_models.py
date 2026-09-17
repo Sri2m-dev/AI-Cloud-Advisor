@@ -33,11 +33,15 @@ def enterprise_spend_read_model(
     spend_service: EnterpriseSpendService,
 ) -> EnterpriseSpendReadModel:
     posture = spend_service.get_financial_posture(context)
-    provenance = tuple(
-        str(value)
-        for value in getattr(posture, "evidence_references", ())
-        if value
-    )
+    provenance = tuple(str(value) for value in getattr(posture, "evidence_references", ()) if value)
+    if not provenance and hasattr(spend_service, "get_financial_evidence"):
+        provenance = tuple(
+            dict.fromkeys(
+                str(row["evidence_reference"])
+                for row in spend_service.get_financial_evidence(context)
+                if row.get("evidence_reference")
+            )
+        )
     availability = "AVAILABLE" if posture.has_data else "UNKNOWN"
     currency = posture.currency if posture.has_data else None
     contract_version = getattr(spend_service, "CONTRACT_VERSION", "pvt-003c1-v1")

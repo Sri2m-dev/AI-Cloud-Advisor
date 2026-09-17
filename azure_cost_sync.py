@@ -1,24 +1,36 @@
-from datetime import datetime, timedelta, timezone
 import json
+import os
+from datetime import datetime, timedelta, timezone
+
 from azure.identity import ClientSecretCredential
 from azure.mgmt.costmanagement import CostManagementClient
-from supabase import create_client
-import os
+
 from config import DEFAULT_ORG_ID
+from supabase import create_client
 
 # -----------------------------
 # AZURE CONFIG
 # -----------------------------
-TENANT_ID = "24a3f016-0781-4a96-be61-17e3ea81b8dd"
-CLIENT_ID = "a1111608-fa69-4438-a425-975567abc0ec"
-CLIENT_SECRET = "cUt8Q~fVsN1uhn3NBv5bq6~AcUPXDa37SKkezbWC"
-SUBSCRIPTION_ID = "49ce7e88-e929-4031-b5b2-c8b557e5da2d"
+TENANT_ID = os.getenv("AZURE_TENANT_ID", "").strip()
+CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "").strip()
+CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET", "").strip()
+SUBSCRIPTION_ID = os.getenv("AZURE_SUBSCRIPTION_ID", "").strip()
 
 # -----------------------------
 # SUPABASE CONFIG
 # -----------------------------
-SUPABASE_URL = "https://iafrrtmvvqmuksvprrsj.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhZnJydG12dnFtdWtzdnBycnNqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTE0OTY2NiwiZXhwIjoyMDkwNzI1NjY2fQ.Q-fVo1tmO3XbvhudOawn-eQ3Gmz8Bb4nKW-XF6hX1wI"
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+if not all((TENANT_ID, CLIENT_ID, CLIENT_SECRET, SUBSCRIPTION_ID)):
+    raise RuntimeError(
+        "AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and "
+        "AZURE_SUBSCRIPTION_ID are required"
+    )
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
+if SUPABASE_KEY.startswith("sb_publishable_"):
+    raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY must be a backend credential")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 

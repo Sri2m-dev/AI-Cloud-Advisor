@@ -52,7 +52,12 @@ def test_all_canonical_personas_seed_and_authenticate(local_database):
         assert user is not None
         assert user.email == email
         assert user.role == expected_role
-        assert user.organization_id == local_auth_service.DEFAULT_ORGANIZATION_ID
+        expected_organization_id = (
+            local_auth_service.DEMO_ORGANIZATION_ID
+            if local_auth_service.demo_mode_enabled()
+            else local_auth_service.DEFAULT_ORGANIZATION_ID
+        )
+        assert user.organization_id == expected_organization_id
         assert user.organization_name == "Default Org"
 
 

@@ -85,6 +85,11 @@ class EnterpriseSpendService:
         method = getattr(self._repository, "get_spend_by_region", None)
         return method(context, start, end) if method else ()
 
+    def get_spend_by_provider(self, context, period=None):
+        start, end = period or (None, None)
+        method = getattr(self._repository, "get_spend_by_provider", None)
+        return method(context, start, end) if method else ()
+
     def get_financial_evidence(self, context):
         method = getattr(self._repository, "get_financial_evidence", None)
         return method(context) if method else ()

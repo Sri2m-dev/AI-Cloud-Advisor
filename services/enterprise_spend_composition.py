@@ -10,6 +10,7 @@ from auth.authenticated_tenant import (
     AuthenticatedTenantError,
 )
 from repositories.enterprise_spend_repository import EnterpriseSpendRepository
+from repositories.source_fact_financial_repository import SourceFactFinancialRepository
 from services.enterprise_spend_service import EnterpriseSpendService
 from services.supabase_client import supabase
 
@@ -49,7 +50,7 @@ class _EmptyTenantSpendRepository:
         return ()
 
 
-_local_service = EnterpriseSpendService(_EmptyTenantSpendRepository())
+_local_service = EnterpriseSpendService(SourceFactFinancialRepository(), cache_ttl_seconds=0)
 
 
 def _organization_name(organization_id: str) -> str | None:

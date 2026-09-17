@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from time import perf_counter
 
 from enterprise_copilot.models import (
@@ -11,7 +12,7 @@ from enterprise_copilot.models import (
 )
 from enterprise_copilot.policy import POLICY_VERSION, evaluate_prompt
 from enterprise_copilot.prompts import prompt as system_prompt
-from enterprise_copilot.providers import default_providers
+from enterprise_copilot.providers import ProviderResult, default_providers
 from enterprise_copilot.router import route_intent
 from enterprise_copilot.semantic_planner import (
     CapabilityDescriptor,
@@ -27,13 +28,21 @@ class EnterpriseAIOrchestrator:
     """Policy -> route -> retrieve -> ground -> provider -> cited response."""
 
     def __init__(
-        self, *, search, intelligence, providers=None, scenario_service=None, governed_ask=None
+        self,
+        *,
+        search,
+        intelligence,
+        providers=None,
+        scenario_service=None,
+        governed_ask=None,
+        source_capabilities=None,
     ):
         self.search = search
         self.intelligence = intelligence
         self.providers = providers or default_providers()
         self.scenario_service = scenario_service
         self.governed_ask = governed_ask
+        self.source_capabilities = source_capabilities
 
     def explain_scenario(self, request: CopilotRequest, scenario_request) -> CopilotResponse:
         """Explain an explicit ScenarioRequest without silently changing its inputs."""
@@ -184,6 +193,10 @@ class EnterpriseAIOrchestrator:
                 parameters=("query", "result_limit"),
             ),
         )
+        handlers = {"enterprise_search": self._search_handler(request, None)}
+        if self.source_capabilities is not None:
+            catalogue += self.source_capabilities.catalogue()
+            handlers.update(self.source_capabilities.handlers())
         payload = provider.plan(
             question=request.prompt,
             catalogue=catalogue,
@@ -199,7 +212,7 @@ class EnterpriseAIOrchestrator:
             )
             results = execute_semantic_plan(
                 plan,
-                handlers={"enterprise_search": self._search_handler(request, plan)},
+                handlers={**handlers, "enterprise_search": self._search_handler(request, plan)},
             )
         except (SemanticPlanError, PermissionError) as error:
             return CopilotResponse(
@@ -219,17 +232,24 @@ class EnterpriseAIOrchestrator:
                 CopilotResponse.now(),
             )
         search_results = tuple(
-            result
-            for response in results
-            for result in getattr(response, "results", ())
+            result for response in results for result in getattr(response, "results", ())
         )
         context = self._ground(plan.interpretation, search_results, request.prompt)
-        generated = provider.generate(system_prompt=system_prompt(), context=context)
+        authority_results = tuple(result for result in results if isinstance(result, dict))
+        context = self._with_authority_evidence(context, authority_results)
+        supported = bool(search_results) or any(
+            result.get("availability") in {"AVAILABLE", "PARTIAL"}
+            and (result.get("records") or result.get("count") is not None)
+            for result in authority_results
+        )
+        generated = (
+            ProviderResult("UNKNOWN. " + " ".join(context.unknowns))
+            if authority_results and not supported
+            else provider.generate(system_prompt=system_prompt(), context=context)
+        )
         answer = generated.text
         if context.evidence.citations:
-            answer += " " + " ".join(
-                f"[{item.citation_id}]" for item in context.evidence.citations
-            )
+            answer += " " + " ".join(f"[{item.citation_id}]" for item in context.evidence.citations)
         confidence = min(
             (item.confidence for item in context.evidence.citations if item.confidence is not None),
             default=None,
@@ -245,7 +265,7 @@ class EnterpriseAIOrchestrator:
             (decision, "semantic_plan:validated"),
             provider.name,
             False,
-            not bool(search_results),
+            not supported,
             {
                 "latency_ms": (perf_counter() - started) * 1000,
                 "semantic_plan": "validated",
@@ -254,6 +274,44 @@ class EnterpriseAIOrchestrator:
                 "output_tokens": generated.output_tokens,
             },
             CopilotResponse.now(),
+        )
+
+    @staticmethod
+    def _with_authority_evidence(context, results):
+        facts, citations, unknowns = (
+            list(context.evidence.facts),
+            list(context.evidence.citations),
+            list(context.unknowns),
+        )
+        for index, result in enumerate(results):
+            ids = []
+            for offset, reference in enumerate(result.get("evidence_references", ())[:25]):
+                identifier = f"A{index}_{offset}"
+                ids.append(identifier)
+                citations.append(
+                    CopilotCitation(
+                        identifier,
+                        "governed_authority",
+                        reference,
+                        result["capability"],
+                        None,
+                        result["availability"],
+                    )
+                )
+            facts.append(
+                {
+                    "capability": result["capability"],
+                    "availability": result["availability"],
+                    "records": result.get("records", ()),
+                    "count": result.get("count"),
+                    "citation_ids": tuple(ids),
+                }
+            )
+            unknowns.extend(result.get("unknowns", ()))
+        return replace(
+            context,
+            evidence=CopilotEvidence(tuple(facts), context.evidence.derived, tuple(citations)),
+            unknowns=tuple(unknowns),
         )
 
     def _search_handler(self, request, plan):

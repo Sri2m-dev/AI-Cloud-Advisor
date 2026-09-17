@@ -1,5 +1,5 @@
 {
-  "status": "BLOCKED",
+  "status": "READY_FOR_REPLAY",
   "limitations": [
     "Lexical SQL and Python AST inventory, not PostgreSQL execution or semantic validation.",
     "Qualified references include function bodies; unqualified SQL and dynamic SQL require manual review.",
@@ -8,1551 +8,6 @@
     "CURRENT_REQUIRED means evidence is needed; historical files are never an execution allowlist."
   ],
   "sql_files": [
-    {
-      "path": "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql",
-      "sha256": "8d906b607bac8b9300607e24137a7aa45870939e53ae727f7d61a7d1a2194a42",
-      "objects": [
-        {
-          "kind": "schema",
-          "name": "auth",
-          "line": 26
-        },
-        {
-          "kind": "schema",
-          "name": "extensions",
-          "line": 35
-        },
-        {
-          "kind": "schema",
-          "name": "graphql",
-          "line": 44
-        },
-        {
-          "kind": "schema",
-          "name": "graphql_public",
-          "line": 53
-        },
-        {
-          "kind": "schema",
-          "name": "pgbouncer",
-          "line": 62
-        },
-        {
-          "kind": "schema",
-          "name": "realtime",
-          "line": 71
-        },
-        {
-          "kind": "schema",
-          "name": "storage",
-          "line": 80
-        },
-        {
-          "kind": "schema",
-          "name": "vault",
-          "line": 89
-        },
-        {
-          "kind": "extension",
-          "name": "pg_graphql",
-          "line": 98
-        },
-        {
-          "kind": "extension",
-          "name": "pg_stat_statements",
-          "line": 112
-        },
-        {
-          "kind": "extension",
-          "name": "pgcrypto",
-          "line": 126
-        },
-        {
-          "kind": "extension",
-          "name": "supabase_vault",
-          "line": 140
-        },
-        {
-          "kind": "extension",
-          "name": "uuid",
-          "line": 154
-        },
-        {
-          "kind": "function",
-          "name": "auth.email",
-          "line": 371
-        },
-        {
-          "kind": "function",
-          "name": "auth.jwt",
-          "line": 395
-        },
-        {
-          "kind": "function",
-          "name": "auth.role",
-          "line": 412
-        },
-        {
-          "kind": "function",
-          "name": "auth.uid",
-          "line": 436
-        },
-        {
-          "kind": "function",
-          "name": "extensions.grant_pg_cron_access",
-          "line": 460
-        },
-        {
-          "kind": "function",
-          "name": "extensions.grant_pg_graphql_access",
-          "line": 506
-        },
-        {
-          "kind": "function",
-          "name": "graphql_public.graphql",
-          "line": 523
-        },
-        {
-          "kind": "function",
-          "name": "extensions.grant_pg_net_access",
-          "line": 573
-        },
-        {
-          "kind": "function",
-          "name": "extensions.pgrst_ddl_watch",
-          "line": 633
-        },
-        {
-          "kind": "table",
-          "name": "public.as",
-          "line": 643
-        },
-        {
-          "kind": "function",
-          "name": "extensions.pgrst_drop_watch",
-          "line": 668
-        },
-        {
-          "kind": "function",
-          "name": "extensions.set_graphql_placeholder",
-          "line": 701
-        },
-        {
-          "kind": "function",
-          "name": "graphql_public.graphql",
-          "line": 715
-        },
-        {
-          "kind": "function",
-          "name": "pgbouncer.get_auth",
-          "line": 767
-        },
-        {
-          "kind": "function",
-          "name": "realtime.apply_rls",
-          "line": 793
-        },
-        {
-          "kind": "function",
-          "name": "realtime.broadcast_changes",
-          "line": 1103
-        },
-        {
-          "kind": "function",
-          "name": "realtime.build_prepared_statement_sql",
-          "line": 1134
-        },
-        {
-          "kind": "function",
-          "name": "realtime.cast",
-          "line": 1169
-        },
-        {
-          "kind": "function",
-          "name": "realtime.check_equality_op",
-          "line": 1190
-        },
-        {
-          "kind": "function",
-          "name": "realtime.is_visible_through_filters",
-          "line": 1231
-        },
-        {
-          "kind": "function",
-          "name": "realtime.list_changes",
-          "line": 1269
-        },
-        {
-          "kind": "function",
-          "name": "realtime.quote_wal2json",
-          "line": 1337
-        },
-        {
-          "kind": "function",
-          "name": "realtime.send",
-          "line": 1377
-        },
-        {
-          "kind": "function",
-          "name": "realtime.subscription_check_filters",
-          "line": 1416
-        },
-        {
-          "kind": "function",
-          "name": "realtime.to_regrole",
-          "line": 1492
-        },
-        {
-          "kind": "function",
-          "name": "realtime.topic",
-          "line": 1503
-        },
-        {
-          "kind": "function",
-          "name": "storage.can_insert_object",
-          "line": 1516
-        },
-        {
-          "kind": "function",
-          "name": "storage.enforce_bucket_name_length",
-          "line": 1535
-        },
-        {
-          "kind": "function",
-          "name": "storage.extension",
-          "line": 1553
-        },
-        {
-          "kind": "function",
-          "name": "storage.filename",
-          "line": 1574
-        },
-        {
-          "kind": "function",
-          "name": "storage.foldername",
-          "line": 1592
-        },
-        {
-          "kind": "function",
-          "name": "storage.get_common_prefix",
-          "line": 1610
-        },
-        {
-          "kind": "function",
-          "name": "storage.get_size_by_bucket",
-          "line": 1627
-        },
-        {
-          "kind": "function",
-          "name": "storage.list_multipart_uploads_with_delimiter",
-          "line": 1645
-        },
-        {
-          "kind": "function",
-          "name": "storage.list_objects_with_delimiter",
-          "line": 1693
-        },
-        {
-          "kind": "function",
-          "name": "storage.operation",
-          "line": 1910
-        },
-        {
-          "kind": "function",
-          "name": "storage.protect_delete",
-          "line": 1925
-        },
-        {
-          "kind": "function",
-          "name": "storage.search",
-          "line": 1946
-        },
-        {
-          "kind": "function",
-          "name": "storage.search_by_timestamp",
-          "line": 2202
-        },
-        {
-          "kind": "function",
-          "name": "storage.search_v2",
-          "line": 2311
-        },
-        {
-          "kind": "function",
-          "name": "storage.update_updated_at_column",
-          "line": 2373
-        },
-        {
-          "kind": "table",
-          "name": "auth.audit_log_entries",
-          "line": 2393
-        },
-        {
-          "kind": "table",
-          "name": "auth.custom_oauth_providers",
-          "line": 2415
-        },
-        {
-          "kind": "table",
-          "name": "auth.flow_state",
-          "line": 2467
-        },
-        {
-          "kind": "table",
-          "name": "auth.identities",
-          "line": 2501
-        },
-        {
-          "kind": "table",
-          "name": "auth.instances",
-          "line": 2534
-        },
-        {
-          "kind": "table",
-          "name": "auth.mfa_amr_claims",
-          "line": 2556
-        },
-        {
-          "kind": "table",
-          "name": "auth.mfa_challenges",
-          "line": 2578
-        },
-        {
-          "kind": "table",
-          "name": "auth.mfa_factors",
-          "line": 2602
-        },
-        {
-          "kind": "table",
-          "name": "auth.oauth_authorizations",
-          "line": 2639
-        },
-        {
-          "kind": "table",
-          "name": "auth.oauth_client_states",
-          "line": 2674
-        },
-        {
-          "kind": "table",
-          "name": "auth.oauth_clients",
-          "line": 2695
-        },
-        {
-          "kind": "table",
-          "name": "auth.oauth_consents",
-          "line": 2722
-        },
-        {
-          "kind": "table",
-          "name": "auth.one_time_tokens",
-          "line": 2741
-        },
-        {
-          "kind": "table",
-          "name": "auth.refresh_tokens",
-          "line": 2759
-        },
-        {
-          "kind": "sequence",
-          "name": "auth.refresh_tokens_id_seq",
-          "line": 2785
-        },
-        {
-          "kind": "table",
-          "name": "auth.saml_providers",
-          "line": 2806
-        },
-        {
-          "kind": "table",
-          "name": "auth.saml_relay_states",
-          "line": 2835
-        },
-        {
-          "kind": "table",
-          "name": "auth.schema_migrations",
-          "line": 2861
-        },
-        {
-          "kind": "table",
-          "name": "auth.sessions",
-          "line": 2879
-        },
-        {
-          "kind": "table",
-          "name": "auth.sso_domains",
-          "line": 2933
-        },
-        {
-          "kind": "table",
-          "name": "auth.sso_providers",
-          "line": 2956
-        },
-        {
-          "kind": "table",
-          "name": "auth.users",
-          "line": 2986
-        },
-        {
-          "kind": "table",
-          "name": "auth.webauthn_challenges",
-          "line": 3046
-        },
-        {
-          "kind": "table",
-          "name": "auth.webauthn_credentials",
-          "line": 3063
-        },
-        {
-          "kind": "table",
-          "name": "public.profiles",
-          "line": 3087
-        },
-        {
-          "kind": "table",
-          "name": "realtime.messages",
-          "line": 3100
-        },
-        {
-          "kind": "table",
-          "name": "realtime.schema_migrations",
-          "line": 3119
-        },
-        {
-          "kind": "table",
-          "name": "realtime.subscription",
-          "line": 3131
-        },
-        {
-          "kind": "table",
-          "name": "storage.buckets",
-          "line": 3164
-        },
-        {
-          "kind": "table",
-          "name": "storage.buckets_analytics",
-          "line": 3192
-        },
-        {
-          "kind": "table",
-          "name": "storage.buckets_vectors",
-          "line": 3209
-        },
-        {
-          "kind": "table",
-          "name": "storage.migrations",
-          "line": 3223
-        },
-        {
-          "kind": "table",
-          "name": "storage.objects",
-          "line": 3237
-        },
-        {
-          "kind": "table",
-          "name": "storage.s3_multipart_uploads",
-          "line": 3266
-        },
-        {
-          "kind": "table",
-          "name": "storage.s3_multipart_uploads_parts",
-          "line": 3285
-        },
-        {
-          "kind": "table",
-          "name": "storage.vector_indexes",
-          "line": 3305
-        }
-      ],
-      "structural_objects": [
-        {
-          "kind": "index",
-          "name": "audit_logs_instance_id_idx",
-          "line": 4194
-        },
-        {
-          "kind": "index",
-          "name": "confirmation_token_idx",
-          "line": 4201
-        },
-        {
-          "kind": "index",
-          "name": "custom_oauth_providers_created_at_idx",
-          "line": 4208
-        },
-        {
-          "kind": "index",
-          "name": "custom_oauth_providers_enabled_idx",
-          "line": 4215
-        },
-        {
-          "kind": "index",
-          "name": "custom_oauth_providers_identifier_idx",
-          "line": 4222
-        },
-        {
-          "kind": "index",
-          "name": "custom_oauth_providers_provider_type_idx",
-          "line": 4229
-        },
-        {
-          "kind": "index",
-          "name": "email_change_token_current_idx",
-          "line": 4236
-        },
-        {
-          "kind": "index",
-          "name": "email_change_token_new_idx",
-          "line": 4243
-        },
-        {
-          "kind": "index",
-          "name": "factor_id_created_at_idx",
-          "line": 4250
-        },
-        {
-          "kind": "index",
-          "name": "flow_state_created_at_idx",
-          "line": 4257
-        },
-        {
-          "kind": "index",
-          "name": "identities_email_idx",
-          "line": 4264
-        },
-        {
-          "kind": "index",
-          "name": "identities_user_id_idx",
-          "line": 4278
-        },
-        {
-          "kind": "index",
-          "name": "idx_auth_code",
-          "line": 4285
-        },
-        {
-          "kind": "index",
-          "name": "idx_oauth_client_states_created_at",
-          "line": 4292
-        },
-        {
-          "kind": "index",
-          "name": "idx_user_id_auth_method",
-          "line": 4299
-        },
-        {
-          "kind": "index",
-          "name": "mfa_challenge_created_at_idx",
-          "line": 4306
-        },
-        {
-          "kind": "index",
-          "name": "mfa_factors_user_friendly_name_unique",
-          "line": 4313
-        },
-        {
-          "kind": "index",
-          "name": "mfa_factors_user_id_idx",
-          "line": 4320
-        },
-        {
-          "kind": "index",
-          "name": "oauth_auth_pending_exp_idx",
-          "line": 4327
-        },
-        {
-          "kind": "index",
-          "name": "oauth_clients_deleted_at_idx",
-          "line": 4334
-        },
-        {
-          "kind": "index",
-          "name": "oauth_consents_active_client_idx",
-          "line": 4341
-        },
-        {
-          "kind": "index",
-          "name": "oauth_consents_active_user_client_idx",
-          "line": 4348
-        },
-        {
-          "kind": "index",
-          "name": "oauth_consents_user_order_idx",
-          "line": 4355
-        },
-        {
-          "kind": "index",
-          "name": "one_time_tokens_relates_to_hash_idx",
-          "line": 4362
-        },
-        {
-          "kind": "index",
-          "name": "one_time_tokens_token_hash_hash_idx",
-          "line": 4369
-        },
-        {
-          "kind": "index",
-          "name": "one_time_tokens_user_id_token_type_key",
-          "line": 4376
-        },
-        {
-          "kind": "index",
-          "name": "reauthentication_token_idx",
-          "line": 4383
-        },
-        {
-          "kind": "index",
-          "name": "recovery_token_idx",
-          "line": 4390
-        },
-        {
-          "kind": "index",
-          "name": "refresh_tokens_instance_id_idx",
-          "line": 4397
-        },
-        {
-          "kind": "index",
-          "name": "refresh_tokens_instance_id_user_id_idx",
-          "line": 4404
-        },
-        {
-          "kind": "index",
-          "name": "refresh_tokens_parent_idx",
-          "line": 4411
-        },
-        {
-          "kind": "index",
-          "name": "refresh_tokens_session_id_revoked_idx",
-          "line": 4418
-        },
-        {
-          "kind": "index",
-          "name": "refresh_tokens_updated_at_idx",
-          "line": 4425
-        },
-        {
-          "kind": "index",
-          "name": "saml_providers_sso_provider_id_idx",
-          "line": 4432
-        },
-        {
-          "kind": "index",
-          "name": "saml_relay_states_created_at_idx",
-          "line": 4439
-        },
-        {
-          "kind": "index",
-          "name": "saml_relay_states_for_email_idx",
-          "line": 4446
-        },
-        {
-          "kind": "index",
-          "name": "saml_relay_states_sso_provider_id_idx",
-          "line": 4453
-        },
-        {
-          "kind": "index",
-          "name": "sessions_not_after_idx",
-          "line": 4460
-        },
-        {
-          "kind": "index",
-          "name": "sessions_oauth_client_id_idx",
-          "line": 4467
-        },
-        {
-          "kind": "index",
-          "name": "sessions_user_id_idx",
-          "line": 4474
-        },
-        {
-          "kind": "index",
-          "name": "sso_domains_domain_idx",
-          "line": 4481
-        },
-        {
-          "kind": "index",
-          "name": "sso_domains_sso_provider_id_idx",
-          "line": 4488
-        },
-        {
-          "kind": "index",
-          "name": "sso_providers_resource_id_idx",
-          "line": 4495
-        },
-        {
-          "kind": "index",
-          "name": "sso_providers_resource_id_pattern_idx",
-          "line": 4502
-        },
-        {
-          "kind": "index",
-          "name": "unique_phone_factor_per_user",
-          "line": 4509
-        },
-        {
-          "kind": "index",
-          "name": "user_id_created_at_idx",
-          "line": 4516
-        },
-        {
-          "kind": "index",
-          "name": "users_email_partial_key",
-          "line": 4523
-        },
-        {
-          "kind": "index",
-          "name": "users_instance_id_email_idx",
-          "line": 4537
-        },
-        {
-          "kind": "index",
-          "name": "users_instance_id_idx",
-          "line": 4544
-        },
-        {
-          "kind": "index",
-          "name": "users_is_anonymous_idx",
-          "line": 4551
-        },
-        {
-          "kind": "index",
-          "name": "webauthn_challenges_expires_at_idx",
-          "line": 4558
-        },
-        {
-          "kind": "index",
-          "name": "webauthn_challenges_user_id_idx",
-          "line": 4565
-        },
-        {
-          "kind": "index",
-          "name": "webauthn_credentials_credential_id_key",
-          "line": 4572
-        },
-        {
-          "kind": "index",
-          "name": "webauthn_credentials_user_id_idx",
-          "line": 4579
-        },
-        {
-          "kind": "index",
-          "name": "ix_realtime_subscription_entity",
-          "line": 4586
-        },
-        {
-          "kind": "index",
-          "name": "messages_inserted_at_topic_index",
-          "line": 4593
-        },
-        {
-          "kind": "index",
-          "name": "subscription_subscription_id_entity_filters_action_filter_key",
-          "line": 4600
-        },
-        {
-          "kind": "index",
-          "name": "bname",
-          "line": 4607
-        },
-        {
-          "kind": "index",
-          "name": "bucketid_objname",
-          "line": 4614
-        },
-        {
-          "kind": "index",
-          "name": "buckets_analytics_unique_name_idx",
-          "line": 4621
-        },
-        {
-          "kind": "index",
-          "name": "idx_multipart_uploads_list",
-          "line": 4628
-        },
-        {
-          "kind": "index",
-          "name": "idx_objects_bucket_id_name",
-          "line": 4635
-        },
-        {
-          "kind": "index",
-          "name": "idx_objects_bucket_id_name_lower",
-          "line": 4642
-        },
-        {
-          "kind": "index",
-          "name": "name_prefix_search",
-          "line": 4649
-        },
-        {
-          "kind": "index",
-          "name": "vector_indexes_name_bucket_id_idx",
-          "line": 4656
-        },
-        {
-          "kind": "trigger",
-          "name": "tr_check_filters",
-          "line": 4663
-        },
-        {
-          "kind": "trigger",
-          "name": "enforce_bucket_name_length_trigger",
-          "line": 4670
-        },
-        {
-          "kind": "trigger",
-          "name": "protect_buckets_delete",
-          "line": 4677
-        },
-        {
-          "kind": "trigger",
-          "name": "protect_objects_delete",
-          "line": 4684
-        },
-        {
-          "kind": "trigger",
-          "name": "update_objects_updated_at",
-          "line": 4691
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_authorization_url_https",
-          "line": 2440
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_authorization_url_length",
-          "line": 2441
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_client_id_length",
-          "line": 2442
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_discovery_url_length",
-          "line": 2443
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_identifier_format",
-          "line": 2444
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_issuer_length",
-          "line": 2445
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_jwks_uri_https",
-          "line": 2446
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_jwks_uri_length",
-          "line": 2447
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_name_length",
-          "line": 2448
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_oauth2_requires_endpoints",
-          "line": 2449
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_oidc_discovery_url_https",
-          "line": 2450
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_oidc_issuer_https",
-          "line": 2451
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_oidc_requires_issuer",
-          "line": 2452
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_provider_type_check",
-          "line": 2453
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_token_url_https",
-          "line": 2454
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_token_url_length",
-          "line": 2455
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_userinfo_url_https",
-          "line": 2456
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_userinfo_url_length",
-          "line": 2457
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_authorization_code_length",
-          "line": 2657
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_code_challenge_length",
-          "line": 2658
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_expires_at_future",
-          "line": 2659
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_nonce_length",
-          "line": 2660
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_redirect_uri_length",
-          "line": 2661
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_resource_length",
-          "line": 2662
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_scope_length",
-          "line": 2663
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_state_length",
-          "line": 2664
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_clients_client_name_length",
-          "line": 2709
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_clients_client_uri_length",
-          "line": 2710
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_clients_logo_uri_length",
-          "line": 2711
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_clients_token_endpoint_auth_method_check",
-          "line": 2712
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_revoked_after_granted",
-          "line": 2729
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_scopes_length",
-          "line": 2730
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_scopes_not_empty",
-          "line": 2731
-        },
-        {
-          "kind": "constraint",
-          "name": "one_time_tokens_token_hash_check",
-          "line": 2749
-        },
-        {
-          "kind": "constraint",
-          "name": "entity_id",
-          "line": 2816
-        },
-        {
-          "kind": "constraint",
-          "name": "metadata_url",
-          "line": 2817
-        },
-        {
-          "kind": "constraint",
-          "name": "metadata_xml",
-          "line": 2818
-        },
-        {
-          "kind": "constraint",
-          "name": "request_id",
-          "line": 2844
-        },
-        {
-          "kind": "constraint",
-          "name": "sessions_scopes_length",
-          "line": 2895
-        },
-        {
-          "kind": "constraint",
-          "name": "domain",
-          "line": 2939
-        },
-        {
-          "kind": "constraint",
-          "name": "resource_id",
-          "line": 2962
-        },
-        {
-          "kind": "constraint",
-          "name": "users_email_change_confirm_status_check",
-          "line": 3022
-        },
-        {
-          "kind": "constraint",
-          "name": "webauthn_challenges_challenge_type_check",
-          "line": 3053
-        },
-        {
-          "kind": "constraint",
-          "name": "subscription_action_filter_check",
-          "line": 3140
-        },
-        {
-          "kind": "constraint",
-          "name": "amr_id_pk",
-          "line": 3827
-        },
-        {
-          "kind": "constraint",
-          "name": "audit_log_entries_pkey",
-          "line": 3835
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_identifier_key",
-          "line": 3843
-        },
-        {
-          "kind": "constraint",
-          "name": "custom_oauth_providers_pkey",
-          "line": 3851
-        },
-        {
-          "kind": "constraint",
-          "name": "flow_state_pkey",
-          "line": 3859
-        },
-        {
-          "kind": "constraint",
-          "name": "identities_pkey",
-          "line": 3867
-        },
-        {
-          "kind": "constraint",
-          "name": "identities_provider_id_provider_unique",
-          "line": 3875
-        },
-        {
-          "kind": "constraint",
-          "name": "instances_pkey",
-          "line": 3883
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_amr_claims_session_id_authentication_method_pkey",
-          "line": 3891
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_challenges_pkey",
-          "line": 3899
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_factors_last_challenged_at_key",
-          "line": 3907
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_factors_pkey",
-          "line": 3915
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_authorization_code_key",
-          "line": 3923
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_authorization_id_key",
-          "line": 3931
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_pkey",
-          "line": 3939
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_client_states_pkey",
-          "line": 3947
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_clients_pkey",
-          "line": 3955
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_pkey",
-          "line": 3963
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_user_client_unique",
-          "line": 3971
-        },
-        {
-          "kind": "constraint",
-          "name": "one_time_tokens_pkey",
-          "line": 3979
-        },
-        {
-          "kind": "constraint",
-          "name": "refresh_tokens_pkey",
-          "line": 3987
-        },
-        {
-          "kind": "constraint",
-          "name": "refresh_tokens_token_unique",
-          "line": 3995
-        },
-        {
-          "kind": "constraint",
-          "name": "saml_providers_entity_id_key",
-          "line": 4003
-        },
-        {
-          "kind": "constraint",
-          "name": "saml_providers_pkey",
-          "line": 4011
-        },
-        {
-          "kind": "constraint",
-          "name": "saml_relay_states_pkey",
-          "line": 4019
-        },
-        {
-          "kind": "constraint",
-          "name": "schema_migrations_pkey",
-          "line": 4027
-        },
-        {
-          "kind": "constraint",
-          "name": "sessions_pkey",
-          "line": 4035
-        },
-        {
-          "kind": "constraint",
-          "name": "sso_domains_pkey",
-          "line": 4043
-        },
-        {
-          "kind": "constraint",
-          "name": "sso_providers_pkey",
-          "line": 4051
-        },
-        {
-          "kind": "constraint",
-          "name": "users_phone_key",
-          "line": 4059
-        },
-        {
-          "kind": "constraint",
-          "name": "users_pkey",
-          "line": 4067
-        },
-        {
-          "kind": "constraint",
-          "name": "webauthn_challenges_pkey",
-          "line": 4075
-        },
-        {
-          "kind": "constraint",
-          "name": "webauthn_credentials_pkey",
-          "line": 4083
-        },
-        {
-          "kind": "constraint",
-          "name": "profiles_pkey",
-          "line": 4091
-        },
-        {
-          "kind": "constraint",
-          "name": "messages_pkey",
-          "line": 4099
-        },
-        {
-          "kind": "constraint",
-          "name": "pk_subscription",
-          "line": 4107
-        },
-        {
-          "kind": "constraint",
-          "name": "schema_migrations_pkey",
-          "line": 4115
-        },
-        {
-          "kind": "constraint",
-          "name": "buckets_analytics_pkey",
-          "line": 4123
-        },
-        {
-          "kind": "constraint",
-          "name": "buckets_pkey",
-          "line": 4131
-        },
-        {
-          "kind": "constraint",
-          "name": "buckets_vectors_pkey",
-          "line": 4139
-        },
-        {
-          "kind": "constraint",
-          "name": "migrations_name_key",
-          "line": 4147
-        },
-        {
-          "kind": "constraint",
-          "name": "migrations_pkey",
-          "line": 4155
-        },
-        {
-          "kind": "constraint",
-          "name": "objects_pkey",
-          "line": 4163
-        },
-        {
-          "kind": "constraint",
-          "name": "s3_multipart_uploads_parts_pkey",
-          "line": 4171
-        },
-        {
-          "kind": "constraint",
-          "name": "s3_multipart_uploads_pkey",
-          "line": 4179
-        },
-        {
-          "kind": "constraint",
-          "name": "vector_indexes_pkey",
-          "line": 4187
-        },
-        {
-          "kind": "constraint",
-          "name": "identities_user_id_fkey",
-          "line": 4699
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_amr_claims_session_id_fkey",
-          "line": 4707
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_challenges_auth_factor_id_fkey",
-          "line": 4715
-        },
-        {
-          "kind": "constraint",
-          "name": "mfa_factors_user_id_fkey",
-          "line": 4723
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_client_id_fkey",
-          "line": 4731
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_authorizations_user_id_fkey",
-          "line": 4739
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_client_id_fkey",
-          "line": 4747
-        },
-        {
-          "kind": "constraint",
-          "name": "oauth_consents_user_id_fkey",
-          "line": 4755
-        },
-        {
-          "kind": "constraint",
-          "name": "one_time_tokens_user_id_fkey",
-          "line": 4763
-        },
-        {
-          "kind": "constraint",
-          "name": "refresh_tokens_session_id_fkey",
-          "line": 4771
-        },
-        {
-          "kind": "constraint",
-          "name": "saml_providers_sso_provider_id_fkey",
-          "line": 4779
-        },
-        {
-          "kind": "constraint",
-          "name": "saml_relay_states_flow_state_id_fkey",
-          "line": 4787
-        },
-        {
-          "kind": "constraint",
-          "name": "saml_relay_states_sso_provider_id_fkey",
-          "line": 4795
-        },
-        {
-          "kind": "constraint",
-          "name": "sessions_oauth_client_id_fkey",
-          "line": 4803
-        },
-        {
-          "kind": "constraint",
-          "name": "sessions_user_id_fkey",
-          "line": 4811
-        },
-        {
-          "kind": "constraint",
-          "name": "sso_domains_sso_provider_id_fkey",
-          "line": 4819
-        },
-        {
-          "kind": "constraint",
-          "name": "webauthn_challenges_user_id_fkey",
-          "line": 4827
-        },
-        {
-          "kind": "constraint",
-          "name": "webauthn_credentials_user_id_fkey",
-          "line": 4835
-        },
-        {
-          "kind": "constraint",
-          "name": "profiles_id_fkey",
-          "line": 4843
-        },
-        {
-          "kind": "constraint",
-          "name": "objects_bucketid_fkey",
-          "line": 4851
-        },
-        {
-          "kind": "constraint",
-          "name": "s3_multipart_uploads_bucket_id_fkey",
-          "line": 4859
-        },
-        {
-          "kind": "constraint",
-          "name": "s3_multipart_uploads_parts_bucket_id_fkey",
-          "line": 4867
-        },
-        {
-          "kind": "constraint",
-          "name": "s3_multipart_uploads_parts_upload_id_fkey",
-          "line": 4875
-        },
-        {
-          "kind": "constraint",
-          "name": "vector_indexes_bucket_id_fkey",
-          "line": 4883
-        }
-      ],
-      "qualified_references": [
-        "auth.aal_level",
-        "auth.audit_log_entries",
-        "auth.code_challenge_method",
-        "auth.custom_oauth_providers",
-        "auth.email",
-        "auth.factor_status",
-        "auth.factor_type",
-        "auth.flow_state",
-        "auth.identities",
-        "auth.identities_email_idx",
-        "auth.instances",
-        "auth.jwt",
-        "auth.mfa_amr_claims",
-        "auth.mfa_challenges",
-        "auth.mfa_factors",
-        "auth.oauth_authorization_status",
-        "auth.oauth_authorizations",
-        "auth.oauth_client_states",
-        "auth.oauth_client_type",
-        "auth.oauth_clients",
-        "auth.oauth_consents",
-        "auth.oauth_registration_type",
-        "auth.oauth_response_type",
-        "auth.one_time_token_type",
-        "auth.one_time_tokens",
-        "auth.refresh_tokens",
-        "auth.refresh_tokens_id_seq",
-        "auth.role",
-        "auth.saml_providers",
-        "auth.saml_relay_states",
-        "auth.schema_migrations",
-        "auth.sessions",
-        "auth.sso_domains",
-        "auth.sso_providers",
-        "auth.uid",
-        "auth.users",
-        "auth.users_email_partial_key",
-        "auth.webauthn_challenges",
-        "auth.webauthn_credentials",
-        "public.profiles"
-      ],
-      "review_flags": [
-        "contains_dml_review_context",
-        "broad_grant_or_policy",
-        "explicit_failure_guard"
-      ],
-      "classification": "UNSAFE_TO_REPLAY",
-      "classification_reason": "Historical dump; extract reviewed DDL only, never replay."
-    },
-    {
-      "path": "archive/AI-CLOUD-ADVISOR_BACKUP/clean_backup.sql",
-      "sha256": "d3d13f553d63d4d346e656998fc1bd57711fb939822a2d207ef27693bc827f98",
-      "objects": [
-        {
-          "kind": "schema",
-          "name": "public",
-          "line": 26
-        },
-        {
-          "kind": "table",
-          "name": "public.profiles",
-          "line": 44
-        }
-      ],
-      "structural_objects": [
-        {
-          "kind": "constraint",
-          "name": "profiles_pkey",
-          "line": 64
-        },
-        {
-          "kind": "constraint",
-          "name": "profiles_id_fkey",
-          "line": 72
-        }
-      ],
-      "qualified_references": [
-        "auth.users",
-        "public.profiles"
-      ],
-      "review_flags": [
-        "contains_dml_review_context"
-      ],
-      "classification": "UNSAFE_TO_REPLAY",
-      "classification_reason": "Historical dump; extract reviewed DDL only, never replay."
-    },
-    {
-      "path": "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
-      "sha256": "65103e0ced77c2ffbb362fbc1223c3ebf8e712d8abcd77774251704943b7b1a6",
-      "objects": [
-        {
-          "kind": "table",
-          "name": "public.audit_log",
-          "line": 39
-        },
-        {
-          "kind": "table",
-          "name": "public.billing_data",
-          "line": 55
-        },
-        {
-          "kind": "table",
-          "name": "public.cloud_accounts",
-          "line": 71
-        },
-        {
-          "kind": "table",
-          "name": "public.cloud_sync_runs",
-          "line": 105
-        },
-        {
-          "kind": "table",
-          "name": "public.companies",
-          "line": 131
-        },
-        {
-          "kind": "table",
-          "name": "public.company_subscriptions",
-          "line": 147
-        },
-        {
-          "kind": "table",
-          "name": "public.forecast_notes",
-          "line": 172
-        },
-        {
-          "kind": "table",
-          "name": "public.recommendation_events",
-          "line": 185
-        },
-        {
-          "kind": "table",
-          "name": "public.recommendations",
-          "line": 204
-        },
-        {
-          "kind": "table",
-          "name": "public.subscriptions",
-          "line": 238
-        },
-        {
-          "kind": "table",
-          "name": "public.users",
-          "line": 251
-        }
-      ],
-      "structural_objects": [],
-      "qualified_references": [
-        "public.audit_log",
-        "public.billing_data",
-        "public.cloud_accounts",
-        "public.cloud_sync_runs",
-        "public.companies",
-        "public.company_subscriptions",
-        "public.forecast_notes",
-        "public.recommendation_events",
-        "public.recommendations",
-        "public.subscriptions",
-        "public.users"
-      ],
-      "review_flags": [
-        "contains_dml_review_context",
-        "broad_grant_or_policy"
-      ],
-      "classification": "UNSAFE_TO_REPLAY",
-      "classification_reason": "Historical dump; extract reviewed DDL only, never replay."
-    },
     {
       "path": "backups/schema_v1.sql",
       "sha256": "ca6377f9a866911501e4eadea76529a27c31a4519b794156cb5799b8e94d0de5",
@@ -4704,7 +3159,7 @@
         "explicit_failure_guard"
       ],
       "classification": "CURRENT_REQUIRED",
-      "classification_reason": "Reviewed five-table dated-chain prerequisites ONLY; complete application baseline remains blocked."
+      "classification_reason": "Versioned public prerequisites, including canonical v1 approvals; ordered-chain contract is checked separately."
     },
     {
       "path": "supabase/business_capability_registry.sql",
@@ -8674,93 +7129,6 @@
     }
   ],
   "definition_sources": {
-    "auth": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.audit_log_entries": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.custom_oauth_providers": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.email": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.flow_state": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.identities": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.instances": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.jwt": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.mfa_amr_claims": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.mfa_challenges": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.mfa_factors": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.oauth_authorizations": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.oauth_client_states": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.oauth_clients": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.oauth_consents": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.one_time_tokens": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.refresh_tokens": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.refresh_tokens_id_seq": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.role": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.saml_providers": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.saml_relay_states": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.schema_migrations": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.sessions": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.sso_domains": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.sso_providers": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.uid": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.users": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.webauthn_challenges": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "auth.webauthn_credentials": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
     "data_fabric": [
       "migrations/data_fabric/0001_create_data_fabric_schema.sql"
     ],
@@ -8878,55 +7246,10 @@
     "data_fabric.stewardship_transition_review": [
       "migrations/data_fabric/0020_create_stewardship_rpcs.sql"
     ],
-    "extensions": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "extensions.grant_pg_cron_access": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "extensions.grant_pg_graphql_access": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "extensions.grant_pg_net_access": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "extensions.pgrst_ddl_watch": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "extensions.pgrst_drop_watch": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "extensions.set_graphql_placeholder": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "graphql": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "graphql_public": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "graphql_public.graphql": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql",
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "pg_graphql": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "pg_stat_statements": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "pgbouncer": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "pgbouncer.get_auth": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
     "pgcrypto": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql",
       "supabase/workflow_persistence.sql"
     ],
     "public": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/clean_backup.sql",
       "backups/schema_v1.sql"
     ],
     "public.accept_recommendation": [
@@ -9053,12 +7376,6 @@
     "public.approval_request": [
       "supabase/governance_authorization.sql"
     ],
-    "public.as": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "public.audit_log": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
-    ],
     "public.audit_logs": [
       "backups/schema_v1.sql"
     ],
@@ -9073,9 +7390,6 @@
     ],
     "public.aws_onboarding_templates": [
       "supabase/aws_onboarding_templates.sql"
-    ],
-    "public.billing_data": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
     ],
     "public.budget": [
       "backups/schema_v1.sql"
@@ -9142,7 +7456,6 @@
       "supabase/migrations/202608080001_fg002_account_resolution.sql"
     ],
     "public.cloud_accounts": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
       "backups/schema_v1.sql"
     ],
     "public.cloud_cost_fact": [
@@ -9166,17 +7479,8 @@
     "public.cloud_cost_tenant_scope": [
       "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
     ],
-    "public.cloud_sync_runs": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
-    ],
     "public.collaboration_history": [
       "supabase/agentic_ai.sql"
-    ],
-    "public.companies": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
-    ],
-    "public.company_subscriptions": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
     ],
     "public.compliance_control": [
       "supabase/enterprise_compliance.sql"
@@ -9445,9 +7749,6 @@
     "public.forecast_models": [
       "supabase/predictive_intelligence.sql"
     ],
-    "public.forecast_notes": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
-    ],
     "public.goal_execution_plan": [
       "supabase/agentic_ai.sql"
     ],
@@ -9650,10 +7951,6 @@
     "public.production_readiness": [
       "supabase/enterprise_compliance.sql"
     ],
-    "public.profiles": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql",
-      "archive/AI-CLOUD-ADVISOR_BACKUP/clean_backup.sql"
-    ],
     "public.pvt003c1_can_read_organization": [
       "supabase/migrations/202607290001_enterprise_financial_data_fabric.sql"
     ],
@@ -9666,9 +7963,6 @@
     "public.realized_savings": [
       "backups/schema_v1.sql"
     ],
-    "public.recommendation_events": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
-    ],
     "public.recommendation_feedback": [
       "supabase/learning_engine.sql"
     ],
@@ -9680,7 +7974,6 @@
       "supabase/workflow_persistence.sql"
     ],
     "public.recommendations": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
       "backups/schema_v1.sql",
       "supabase/bootstrap/public_prerequisites.sql"
     ],
@@ -9804,9 +8097,6 @@
     ],
     "public.slow_query_log": [
       "supabase/performance_scalability.sql"
-    ],
-    "public.subscriptions": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql"
     ],
     "public.technology_ai_breakdowns": [
       "supabase/technology_digital_twin.sql"
@@ -9954,7 +8244,6 @@
       "backups/schema_v1.sql"
     ],
     "public.users": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
       "backups/schema_v1.sql",
       "supabase/bootstrap/public_prerequisites.sql"
     ],
@@ -10001,54 +8290,6 @@
     "public.workspace_health_status": [
       "supabase/workspace_health_status.sql"
     ],
-    "realtime": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.apply_rls": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.broadcast_changes": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.build_prepared_statement_sql": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.cast": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.check_equality_op": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.is_visible_through_filters": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.list_changes": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.messages": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.quote_wal2json": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.schema_migrations": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.send": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.subscription": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.subscription_check_filters": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.to_regrole": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "realtime.topic": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
     "sqlite.universal_evidence_audit": [
       "migrations/universal_evidence/0001_create_lifecycle_state.sql"
     ],
@@ -10057,87 +8298,6 @@
     ],
     "sqlite.universal_evidence_migrations": [
       "migrations/universal_evidence/0001_create_lifecycle_state.sql"
-    ],
-    "storage": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.buckets": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.buckets_analytics": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.buckets_vectors": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.can_insert_object": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.enforce_bucket_name_length": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.extension": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.filename": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.foldername": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.get_common_prefix": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.get_size_by_bucket": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.list_multipart_uploads_with_delimiter": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.list_objects_with_delimiter": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.migrations": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.objects": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.operation": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.protect_delete": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.s3_multipart_uploads": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.s3_multipart_uploads_parts": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.search": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.search_by_timestamp": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.search_v2": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.update_updated_at_column": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "storage.vector_indexes": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "supabase_vault": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "uuid": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-    ],
-    "vault": [
-      "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
     ]
   },
   "application_calls": [
@@ -10163,7 +8323,7 @@
     },
     {
       "path": "aws_athena_ingest.py",
-      "line": 189,
+      "line": 184,
       "operation": "table",
       "name": "unified_cloud_costs",
       "definition_candidates": [
@@ -10183,7 +8343,7 @@
     },
     {
       "path": "azure_cost_sync.py",
-      "line": 137,
+      "line": 149,
       "operation": "table",
       "name": "unified_cloud_costs",
       "definition_candidates": [
@@ -10214,9 +8374,7 @@
       "line": 253,
       "operation": "table",
       "name": "recommendation_events",
-      "definition_candidates": [
-        "public.recommendation_events"
-      ],
+      "definition_candidates": [],
       "namespace": "requires_client_schema_review"
     },
     {
@@ -10826,7 +8984,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 16,
+      "line": 28,
       "operation": "table",
       "name": "mart_enterprise_forecast",
       "definition_candidates": [],
@@ -10834,7 +8992,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 22,
+      "line": 34,
       "operation": "table",
       "name": "mart_cost_trend",
       "definition_candidates": [
@@ -10844,7 +9002,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 28,
+      "line": 40,
       "operation": "table",
       "name": "mart_cost_forecast",
       "definition_candidates": [
@@ -10854,7 +9012,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 34,
+      "line": 46,
       "operation": "table",
       "name": "mart_cost_anomalies",
       "definition_candidates": [],
@@ -10862,7 +9020,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 52,
+      "line": 63,
       "operation": "table",
       "name": "recommendations",
       "definition_candidates": [
@@ -10872,15 +9030,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 10,
-      "operation": "table",
-      "name": "mart_enterprise_spend",
-      "definition_candidates": [],
-      "namespace": "requires_client_schema_review"
-    },
-    {
-      "path": "repositories/cost_intelligence_repository.py",
-      "line": 41,
+      "line": 53,
       "operation": "table",
       "name": "mart_optimization_opportunities",
       "definition_candidates": [],
@@ -11383,9 +9533,7 @@
       "line": 101,
       "operation": "table",
       "name": "recommendation_events",
-      "definition_candidates": [
-        "public.recommendation_events"
-      ],
+      "definition_candidates": [],
       "namespace": "requires_client_schema_review"
     },
     {
@@ -11786,7 +9934,7 @@
     },
     {
       "path": "services/enterprise_spend_composition.py",
-      "line": 57,
+      "line": 58,
       "operation": "table",
       "name": "organizations",
       "definition_candidates": [
@@ -11837,9 +9985,7 @@
       "line": 252,
       "operation": "table",
       "name": "recommendation_events",
-      "definition_candidates": [
-        "public.recommendation_events"
-      ],
+      "definition_candidates": [],
       "namespace": "requires_client_schema_review"
     },
     {
@@ -13271,11 +11417,6 @@
     },
     {
       "path": "SCHEDULER_QUICKSTART.py",
-      "line": 82,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "SCHEDULER_QUICKSTART.py",
       "line": 83,
       "object": "public.recommendations"
     },
@@ -13351,7 +11492,7 @@
     },
     {
       "path": "aws_athena_ingest.py",
-      "line": 190,
+      "line": 185,
       "object": "public.unified_cloud_costs"
     },
     {
@@ -13361,18 +11502,13 @@
     },
     {
       "path": "azure_cost_sync.py",
-      "line": 138,
+      "line": 150,
       "object": "public.unified_cloud_costs"
     },
     {
       "path": "backend/jobs/tasks.py",
       "line": 28,
       "object": "public.unified_cloud_costs"
-    },
-    {
-      "path": "backend/jobs/tasks.py",
-      "line": 253,
-      "object": "public.recommendation_events"
     },
     {
       "path": "backend/main.py",
@@ -13771,11 +11907,6 @@
     },
     {
       "path": "connectors/azure/azure_connector.py",
-      "line": 21,
-      "object": "public.subscriptions"
-    },
-    {
-      "path": "connectors/azure/azure_connector.py",
       "line": 43,
       "object": "public.unified_cloud_costs"
     },
@@ -13793,11 +11924,6 @@
       "path": "connectors/azure/azure_connector.py",
       "line": 146,
       "object": "public.cloud_accounts"
-    },
-    {
-      "path": "connectors/azure/azure_connector.py",
-      "line": 147,
-      "object": "public.subscriptions"
     },
     {
       "path": "connectors/azure/azure_connector.py",
@@ -13823,11 +11949,6 @@
       "path": "connectors/azure/azure_connector.py",
       "line": 200,
       "object": "public.capacity_forecast"
-    },
-    {
-      "path": "connectors/azure/azure_connector.py",
-      "line": 232,
-      "object": "public.subscriptions"
     },
     {
       "path": "connectors/base/health.py",
@@ -15286,126 +13407,6 @@
     },
     {
       "path": "database/db.py",
-      "line": 245,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 246,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 247,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 248,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 249,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 250,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 357,
-      "object": "public.subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 358,
-      "object": "public.subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 359,
-      "object": "public.subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 384,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 385,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 386,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 387,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 388,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 389,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 390,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 391,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 392,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 393,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 394,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 395,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 396,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 397,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
-      "line": 398,
-      "object": "public.company_subscriptions"
-    },
-    {
-      "path": "database/db.py",
       "line": 764,
       "object": "public.users"
     },
@@ -15433,106 +13434,6 @@
       "path": "database/db.py",
       "line": 769,
       "object": "public.users"
-    },
-    {
-      "path": "database/db.py",
-      "line": 784,
-      "object": "public.audit_log"
-    },
-    {
-      "path": "database/db.py",
-      "line": 799,
-      "object": "public.billing_data"
-    },
-    {
-      "path": "database/db.py",
-      "line": 800,
-      "object": "public.billing_data"
-    },
-    {
-      "path": "database/db.py",
-      "line": 801,
-      "object": "public.billing_data"
-    },
-    {
-      "path": "database/db.py",
-      "line": 802,
-      "object": "public.billing_data"
-    },
-    {
-      "path": "database/db.py",
-      "line": 803,
-      "object": "public.billing_data"
-    },
-    {
-      "path": "database/db.py",
-      "line": 835,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 836,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 837,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 838,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 839,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 840,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 841,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 842,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 843,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 844,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 845,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 846,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 847,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
-      "line": 848,
-      "object": "public.cloud_sync_runs"
     },
     {
       "path": "database/db.py",
@@ -15701,46 +13602,6 @@
     },
     {
       "path": "database/db.py",
-      "line": 937,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 938,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 939,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 940,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 941,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 942,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 943,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
-      "line": 944,
-      "object": "public.recommendation_events"
-    },
-    {
-      "path": "database/db.py",
       "line": 967,
       "object": "public.cloud_accounts"
     },
@@ -15851,18 +13712,8 @@
     },
     {
       "path": "database/db.py",
-      "line": 1133,
-      "object": "public.cloud_sync_runs"
-    },
-    {
-      "path": "database/db.py",
       "line": 1134,
       "object": "public.recommendations"
-    },
-    {
-      "path": "database/db.py",
-      "line": 1135,
-      "object": "public.recommendation_events"
     },
     {
       "path": "database/db.py",
@@ -15883,21 +13734,6 @@
       "path": "database/db.py",
       "line": 144,
       "object": "public.cloud_accounts"
-    },
-    {
-      "path": "database/db.py",
-      "line": 290,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 305,
-      "object": "public.companies"
-    },
-    {
-      "path": "database/db.py",
-      "line": 410,
-      "object": "public.company_subscriptions"
     },
     {
       "path": "database/db.py",
@@ -16003,11 +13839,6 @@
       "path": "pages/analyze_environment.py",
       "line": 609,
       "object": "public.organizations"
-    },
-    {
-      "path": "pages/analyze_environment.py",
-      "line": 611,
-      "object": "public.subscriptions"
     },
     {
       "path": "pages/analyze_environment.py",
@@ -17726,17 +15557,17 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 22,
+      "line": 34,
       "object": "public.mart_cost_trend"
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 28,
+      "line": 40,
       "object": "public.mart_cost_forecast"
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 52,
+      "line": 63,
       "object": "public.recommendations"
     },
     {
@@ -19315,11 +17146,6 @@
       "object": "public.workflow_rollback"
     },
     {
-      "path": "scheduler.py",
-      "line": 101,
-      "object": "public.recommendation_events"
-    },
-    {
       "path": "scheduler/recommendation_jobs.py",
       "line": 125,
       "object": "public.recommendations"
@@ -19948,11 +17774,6 @@
       "path": "services/asset_mapping_remediation_service.py",
       "line": 250,
       "object": "public.discovered_assets"
-    },
-    {
-      "path": "services/audit_timeline_service.py",
-      "line": 13,
-      "object": "public.audit_log"
     },
     {
       "path": "services/audit_timeline_service.py",
@@ -21556,7 +19377,7 @@
     },
     {
       "path": "services/enterprise_spend_composition.py",
-      "line": 57,
+      "line": 58,
       "object": "public.organizations"
     },
     {
@@ -21573,11 +19394,6 @@
       "path": "services/escalation_service.py",
       "line": 34,
       "object": "public.recommendations"
-    },
-    {
-      "path": "services/escalation_service.py",
-      "line": 252,
-      "object": "public.recommendation_events"
     },
     {
       "path": "services/execution_runner.py",
@@ -21773,6 +19589,11 @@
       "path": "services/governance_service.py",
       "line": 12,
       "object": "public.recommendations"
+    },
+    {
+      "path": "services/governed_source_capabilities.py",
+      "line": 175,
+      "object": "public.applications"
     },
     {
       "path": "services/impact_analysis_service.py",
@@ -22545,6 +20366,11 @@
       "object": "public.budget"
     },
     {
+      "path": "services/saas_discovery_intelligence_service.py",
+      "line": 86,
+      "object": "public.applications"
+    },
+    {
       "path": "services/saas_intelligence_certification_service.py",
       "line": 202,
       "object": "public.applications"
@@ -23230,6 +21056,14 @@
       "namespace": "requires_client_schema_review"
     },
     {
+      "path": "backend/jobs/tasks.py",
+      "line": 253,
+      "operation": "table",
+      "name": "recommendation_events",
+      "definition_candidates": [],
+      "namespace": "requires_client_schema_review"
+    },
+    {
       "path": "backend/routes/alerts.py",
       "line": 376,
       "operation": "table",
@@ -23375,7 +21209,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 16,
+      "line": 28,
       "operation": "table",
       "name": "mart_enterprise_forecast",
       "definition_candidates": [],
@@ -23383,7 +21217,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 34,
+      "line": 46,
       "operation": "table",
       "name": "mart_cost_anomalies",
       "definition_candidates": [],
@@ -23391,15 +21225,7 @@
     },
     {
       "path": "repositories/cost_intelligence_repository.py",
-      "line": 10,
-      "operation": "table",
-      "name": "mart_enterprise_spend",
-      "definition_candidates": [],
-      "namespace": "requires_client_schema_review"
-    },
-    {
-      "path": "repositories/cost_intelligence_repository.py",
-      "line": 41,
+      "line": 53,
       "operation": "table",
       "name": "mart_optimization_opportunities",
       "definition_candidates": [],
@@ -23598,6 +21424,14 @@
       "namespace": "requires_client_schema_review"
     },
     {
+      "path": "scheduler.py",
+      "line": 101,
+      "operation": "table",
+      "name": "recommendation_events",
+      "definition_candidates": [],
+      "namespace": "requires_client_schema_review"
+    },
+    {
       "path": "services/alert_processor.py",
       "line": 70,
       "operation": "table",
@@ -23618,6 +21452,14 @@
       "line": 74,
       "operation": "table",
       "name": "notification_queue",
+      "definition_candidates": [],
+      "namespace": "requires_client_schema_review"
+    },
+    {
+      "path": "services/escalation_service.py",
+      "line": 252,
+      "operation": "table",
+      "name": "recommendation_events",
       "definition_candidates": [],
       "namespace": "requires_client_schema_review"
     },
@@ -23738,9 +21580,7 @@
         "public.users"
       ],
       "providers": {
-        "auth.jwt": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
+        "auth.jwt": [],
         "public.clients": [
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
@@ -23750,7 +21590,6 @@
           "supabase/bootstrap/public_prerequisites.sql"
         ],
         "public.recommendations": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
         ],
@@ -23760,7 +21599,6 @@
           "supabase/reporting_tables.sql"
         ],
         "public.users": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
         ]
@@ -23792,9 +21630,7 @@
         "public.users"
       ],
       "providers": {
-        "auth.jwt": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
+        "auth.jwt": [],
         "public.cloud_account_mapping": [
           "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
         ],
@@ -23818,7 +21654,6 @@
           "supabase/bootstrap/public_prerequisites.sql"
         ],
         "public.users": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
         ]
@@ -23851,12 +21686,8 @@
         "public.users"
       ],
       "providers": {
-        "auth.jwt": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
-        "auth.role": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
+        "auth.jwt": [],
+        "auth.role": [],
         "public.cloud_account_mapping": [
           "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
         ],
@@ -23893,7 +21724,6 @@
           "supabase/migrations/202607290003_materialize_cloud_financial_projections.sql"
         ],
         "public.users": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
         ]
@@ -23966,9 +21796,7 @@
       ],
       "pre_chain_or_unresolved": [],
       "providers": {
-        "auth.role": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
+        "auth.role": [],
         "public.cloud_account_mapping": [
           "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
         ],
@@ -24173,12 +22001,8 @@
         "public.users"
       ],
       "providers": {
-        "auth.jwt": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
-        "auth.uid": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
+        "auth.jwt": [],
+        "auth.uid": [],
         "public.cloud_account_mapping": [
           "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
         ],
@@ -24218,7 +22042,6 @@
           "supabase/migrations/202608080001_fg002_account_resolution.sql"
         ],
         "public.users": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
         ]
@@ -24285,12 +22108,8 @@
         "public.users"
       ],
       "providers": {
-        "auth.jwt": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
-        "auth.uid": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/backup.sql"
-        ],
+        "auth.jwt": [],
+        "auth.uid": [],
         "public.cloud_account_mapping": [
           "supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql"
         ],
@@ -24321,7 +22140,6 @@
           "supabase/migrations/202608080001_fg002_account_resolution.sql"
         ],
         "public.users": [
-          "archive/AI-CLOUD-ADVISOR_BACKUP/local_backup.sql",
           "backups/schema_v1.sql",
           "supabase/bootstrap/public_prerequisites.sql"
         ]

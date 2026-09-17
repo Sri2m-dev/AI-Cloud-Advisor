@@ -1,20 +1,28 @@
 {
-  "defect": "CMP-P6-DEF-002",
-  "status": "BLOCKED",
-  "executable": false,
+  "defect": "V1_1_ACCEPTANCE_C",
+  "status": "READY_FOR_REPLAY",
+  "executable": true,
   "hash_format": "SHA-256 of UTF-8 SQL text with LF newlines; portable across Git EOL conversion",
-  "reason": "0020 is corrected, but active application objects still lack authoritative creation DDL and fresh PostgreSQL replay is unavailable in this environment.",
-  "blockers": [
-    "Missing creation DDL for active application objects; see schema_inventory.json and the CMP-P6-DEF-002 report.",
-    "Fresh local PostgreSQL certification could not be rerun because PostgreSQL client/server binaries are unavailable in this environment."
-  ],
+  "reason": "Current canonical authority chains; legacy inventory is not a deployment allowlist.",
+  "blockers": [],
+  "contract": {
+    "status": "READY_FOR_REPLAY",
+    "blockers": [],
+    "validation": "Static ordered-definition and migration-completeness checks only",
+    "postgres_replay": "NOT_EXECUTED",
+    "external_prerequisites": [
+      "Supabase auth schema/functions and roles",
+      "Empty public application schema"
+    ]
+  },
+  "historical_evidence": "docs/cmp/CMP-P6-RC-001/REPORT.md",
   "steps": [
     {
       "order": 1,
       "name": "public_bootstrap",
       "path": "supabase/bootstrap/public_prerequisites.sql",
       "sha256": "d5a09c834e27f71af7d07c843568cb1eaf9abe251a00d996a910b83745ed7757",
-      "status": "PREREQUISITES_ONLY_INCOMPLETE_APPLICATION_BASELINE"
+      "status": "SCHEMA_ONLY_CURRENT_CHAIN_PREREQUISITES"
     },
     {
       "order": 2,
@@ -199,6 +207,33 @@
         }
       ],
       "initialization": "Existing app startup initializer / SQLiteLifecycleRepository; separate persistent local store, never Supabase SQL."
+    },
+    {
+      "order": 5,
+      "name": "source_fact_local_authority",
+      "engine": "sqlite",
+      "initializer": "SQLiteSourceFactRepository",
+      "path": "data_fabric/source_facts/persistence.py",
+      "sha256": "53586d4c13d618dd471b0e8c31dd5ce753dacf4f55878c4ec1e3ef29ca0c3435"
+    },
+    {
+      "order": 6,
+      "name": "live_connectors",
+      "engine": "sqlite",
+      "requires": [
+        "source_fact_local_authority"
+      ],
+      "files": [
+        {
+          "path": "migrations/connectors/0001_live_source_control.sql",
+          "sha256": "fc186eb4dc4359169f658ee997d4b69aec27848ea137c2feec8b106685c7f165"
+        },
+        {
+          "path": "migrations/connectors/0002_add_m365_provider.sql",
+          "sha256": "5f660dd3ef2d47c988b48713a9023cd4fdde56ff723f36eaf0d3a5d21032f1fc"
+        }
+      ],
+      "initialization": "LiveSourceRepository; idempotent version-guarded local initialization"
     }
   ]
 }
