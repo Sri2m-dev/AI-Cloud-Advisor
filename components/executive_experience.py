@@ -597,9 +597,6 @@ def render_workspace(
                 "Certified posture",
                 "P5 displays only upstream-certified values and policies.",
             )
-            cols = executive_columns(len(snapshot.metrics))
-        else:
-            cols = ()
         kinds = {
             "executive": KpiKind.EXECUTIVE,
             "financial": KpiKind.FINANCIAL,
@@ -609,31 +606,50 @@ def render_workspace(
             "decision": KpiKind.DECISION,
         }
         # The CEO synthetic brief intentionally replaces the generic posture cards.
-        # In that presentation ``cols`` is empty while the snapshot remains intact.
-        for column, metric in zip(cols, snapshot.metrics):
-            with column:
-                availability_label = metric.availability or (
-                    "AVAILABLE" if metric.available else "UNKNOWN"
-                )
-                render_kpi_card(
-                    KpiView(
-                        metric.title,
-                        metric.value,
-                        metric.meaning,
-                        (f"{metric.source} · " f"{availability_label}"),
-                        "Current checkpoint",
-                        "Current" if metric.available else "UNKNOWN",
-                        kind=kinds.get(metric.kind, KpiKind.EXECUTIVE),
-                        confidence=snapshot.story.confidence if metric.available else None,
-                        evidence=snapshot.story.evidence if metric.available else None,
-                        state=None if metric.available else ComponentState.UNKNOWN,
-                        state_reason=(
-                            None
-                            if metric.available
-                            else "No certified value was supplied to this composition surface."
-                        ),
-                    )
-                )
+        # Other workspaces render certified metrics in bounded rows of up to four.
+        if not (key == "ceo" and snapshot.synthetic):
+            for metric_index in range(0, len(snapshot.metrics), 4):
+                metric_row = snapshot.metrics[metric_index : metric_index + 4]
+                cols = executive_columns(len(metric_row))
+                for column, metric in zip(cols, metric_row):
+                    with column:
+                        availability_label = metric.availability or (
+                            "AVAILABLE" if metric.available else "UNKNOWN"
+                        )
+                        render_kpi_card(
+                            KpiView(
+                                metric.title,
+                                metric.value,
+                                metric.meaning,
+                                (f"{metric.source} · " f"{availability_label}"),
+                                "Current checkpoint",
+                                "Current" if metric.available else "UNKNOWN",
+                                kind=kinds.get(metric.kind, KpiKind.EXECUTIVE),
+                                confidence=(
+                                    snapshot.story.confidence
+                                    if metric.available
+                                    else None
+                                ),
+                                evidence=(
+                                    snapshot.story.evidence
+                                    if metric.available
+                                    else None
+                                ),
+                                state=(
+                                    None
+                                    if metric.available
+                                    else ComponentState.UNKNOWN
+                                ),
+                                state_reason=(
+                                    None
+                                    if metric.available
+                                    else (
+                                        "No certified value was supplied to this "
+                                        "composition surface."
+                                    )
+                                ),
+                            )
+                        )
         if key == "cfo" and snapshot.synthetic:
             _render_demo_executive_ai(snapshot)
         if key == "ceo" and snapshot.synthetic and snapshot.journeys:

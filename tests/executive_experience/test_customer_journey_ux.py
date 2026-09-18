@@ -216,3 +216,17 @@ def test_v30_reports_only_preview_existing_generated_outputs():
     assert 'str(row.get("status", "")).lower() != "generated"' in source
     assert 'Path(str(row.get("file_name") or "")).name' in source
     assert "Generated report · first-page preview" in source
+
+def test_production_ga_executive_metric_grid_is_bounded():
+    experience = Path(
+        "components/executive_experience.py"
+    ).read_text(encoding="utf-8")
+
+    assert "range(0, len(snapshot.metrics), 4)" in experience
+    assert (
+        "metric_row = snapshot.metrics[metric_index : metric_index + 4]"
+        in experience
+    )
+    assert "executive_columns(len(metric_row))" in experience
+    assert "for column, metric in zip(cols, metric_row):" in experience
+    assert "executive_columns(len(snapshot.metrics))" not in experience
