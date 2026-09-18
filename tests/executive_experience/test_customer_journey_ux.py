@@ -8,9 +8,9 @@ from services.local_auth_service import LOCAL_PERSONAS
 ROOT = Path(__file__).parents[2]
 
 
-def test_welcome_is_the_executive_and_sales_engineer_start_surface():
+def test_canonical_persona_start_surfaces_are_explicit():
     assert PAGE_PATHS["Welcome"] == "pages/welcome.py"
-    assert DEFAULT_ROLE_PAGE["executive"] == "pages/welcome.py"
+    assert DEFAULT_ROLE_PAGE["executive"] == "pages/ceo_workspace.py"
     assert DEFAULT_ROLE_PAGE["sales_engineer"] == "pages/welcome.py"
     assert get_role_pages("executive")[0] == "Welcome"
     assert get_role_pages("sales_engineer")[:2] == ["Welcome", "Analyse Your Environment"]

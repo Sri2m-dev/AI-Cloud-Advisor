@@ -105,15 +105,15 @@ def test_role_aliases_normalize_centrally(alias, canonical):
 
 def test_persona_landing_pages_are_role_specific():
     assert DEFAULT_ROLE_PAGE == {
-        "super_admin": "pages/executive_dashboard.py",
+        "super_admin": "pages/executive_command_center.py",
         "client_admin": "pages/executive_command_center.py",
-        "executive": "pages/welcome.py",
-        "cio": "pages/cio_dashboard.py",
-        "finance": "pages/finance_dashboard.py",
+        "executive": "pages/ceo_workspace.py",
+        "cio": "pages/cio_workspace.py",
+        "finance": "pages/cfo_workspace.py",
         "sales_engineer": "pages/welcome.py",
-        "technical": "pages/operations_workspace.py",
-        "operations": "pages/operations_workspace.py",
-        "auditor": "pages/audit_timeline.py",
+        "technical": "pages/operations_command_center.py",
+        "operations": "pages/operations_command_center.py",
+        "auditor": "pages/board_intelligence.py",
     }
 
 

@@ -530,15 +530,15 @@ for _intelligence_role in (
         ROLE_PAGES[_intelligence_role].append("Decision Intelligence")
 
 DEFAULT_ROLE_PAGE = {
-    "super_admin": PAGE_PATHS["Executive Dashboard"],
+    "super_admin": PAGE_PATHS["Executive Command Center"],
     "client_admin": PAGE_PATHS["Executive Command Center"],
-    "executive": PAGE_PATHS["Welcome"],
-    "cio": PAGE_PATHS["Technology Portfolio Overview"],
-    "finance": PAGE_PATHS["FinOps Dashboard"],
+    "executive": PAGE_PATHS["CEO Workspace"],
+    "cio": PAGE_PATHS["CIO Workspace"],
+    "finance": PAGE_PATHS["CFO Workspace"],
     "sales_engineer": PAGE_PATHS["Welcome"],
-    "technical": PAGE_PATHS["Operations Workspace"],
-    "operations": PAGE_PATHS["Operations Workspace"],
-    "auditor": PAGE_PATHS["Audit Timeline"],
+    "technical": PAGE_PATHS["Operations Command Center"],
+    "operations": PAGE_PATHS["Operations Command Center"],
+    "auditor": PAGE_PATHS["Board Intelligence"],
 }
 
 

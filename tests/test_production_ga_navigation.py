@@ -40,11 +40,16 @@ GA_PERSONA_COUNTS = {
 }
 
 
-CURRENT_DEFAULT_ROLE_PAGES = {
-    "super_admin": "pages/executive_dashboard.py",
+CANONICAL_DEFAULT_ROLE_PAGES = {
+    "super_admin": "pages/executive_command_center.py",
     "client_admin": "pages/executive_command_center.py",
-    "operations": "pages/operations_workspace.py",
-    "auditor": "pages/audit_timeline.py",
+    "executive": "pages/ceo_workspace.py",
+    "cio": "pages/cio_workspace.py",
+    "finance": "pages/cfo_workspace.py",
+    "sales_engineer": "pages/welcome.py",
+    "technical": "pages/operations_command_center.py",
+    "operations": "pages/operations_command_center.py",
+    "auditor": "pages/board_intelligence.py",
 }
 
 
@@ -183,15 +188,15 @@ def test_persona_builder_returns_empty_for_unconfigured_role():
     assert navigation == []
 
 
-def test_current_ga_default_role_pages_are_unchanged():
-    for role, expected_path in CURRENT_DEFAULT_ROLE_PAGES.items():
+def test_canonical_ga_default_role_pages_are_aligned():
+    for role, expected_path in CANONICAL_DEFAULT_ROLE_PAGES.items():
         assert DEFAULT_ROLE_PAGE[role] == expected_path
 
 
-def test_current_ga_default_role_page_files_exist():
+def test_canonical_ga_default_role_page_files_exist():
     repository_root = Path(__file__).resolve().parents[1]
 
-    for role, relative_path in CURRENT_DEFAULT_ROLE_PAGES.items():
+    for role, relative_path in CANONICAL_DEFAULT_ROLE_PAGES.items():
         path = repository_root / relative_path
 
         assert path.is_file(), (role, str(path))
