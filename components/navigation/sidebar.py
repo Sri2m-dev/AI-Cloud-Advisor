@@ -13,17 +13,15 @@ from components.layout import render_status_badge
 
 SECTION_ORDER = [
     "Home",
+    "Ask Nexora",
     "Executive",
-    "Finance",
-    "Cloud",
     "Technology",
-    "Intelligence",
-    "Observability",
+    "Financial",
+    "SaaS",
+    "Operations",
     "Governance",
-    "Platform",
-    "Marketplace",
+    "Data & Integrations",
     "Administration",
-    "Settings",
 ]
 
 SECTION_KEYWORDS = {
@@ -133,6 +131,138 @@ SIMPLIFIED_ROLE_NAVIGATION["finance"] = [
     {"label": "Reports", "page_label": "Reports", "section": "Finance", "icon": "reports"},
 ]
 
+# Production GA canonical persona navigation.
+#
+# ROLE_PAGES remains the authorization authority. These definitions are
+# presentation-only curated subsets of the existing RBAC contract.
+
+SIMPLIFIED_ROLE_NAVIGATION["super_admin"] = [
+    {"label": "Home", "page_label": "Welcome", "section": "Home", "icon": "home"},
+    {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Ask Nexora", "icon": "ai"},
+
+    {"label": "Executive Command Center", "page_label": "Executive Command Center", "section": "Executive", "icon": "executive"},
+    {"label": "CEO", "page_label": "CEO Workspace", "section": "Executive", "icon": "executive"},
+    {"label": "CIO", "page_label": "CIO Workspace", "section": "Executive", "icon": "technology"},
+    {"label": "CFO", "page_label": "CFO Workspace", "section": "Executive", "icon": "finance"},
+    {"label": "Enterprise Architect", "page_label": "Enterprise Architect Workspace", "section": "Executive", "icon": "enterprise"},
+    {"label": "Operations", "page_label": "Operations Command Center", "section": "Executive", "icon": "platform"},
+    {"label": "FinOps", "page_label": "FinOps Workspace", "section": "Executive", "icon": "finance"},
+    {"label": "Board Intelligence", "page_label": "Board Intelligence", "section": "Executive", "icon": "reports"},
+
+    {"label": "Technology Portfolio", "page_label": "Technology Portfolio", "section": "Technology", "icon": "technology"},
+    {"label": "Applications", "page_label": "Application Portfolio", "section": "Technology", "icon": "technology"},
+    {"label": "Business Services", "page_label": "Business Services", "section": "Technology", "icon": "service"},
+    {"label": "Digital Twin", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
+    {"label": "Enterprise Registry", "page_label": "Enterprise Registry", "section": "Technology", "icon": "enterprise"},
+    {"label": "Relationship Explorer", "page_label": "Relationship Explorer", "section": "Technology", "icon": "intelligence"},
+
+    {"label": "Enterprise Spend", "page_label": "Enterprise Spend", "section": "Financial", "icon": "finance"},
+    {"label": "Cost Intelligence", "page_label": "Cost Intelligence", "section": "Financial", "icon": "cost"},
+    {"label": "Optimization", "page_label": "Optimization Center", "section": "Financial", "icon": "cost"},
+    {"label": "Savings Governance", "page_label": "Savings Governance", "section": "Financial", "icon": "cost"},
+    {"label": "TBM & Chargeback", "page_label": "TBM & Chargeback", "section": "Financial", "icon": "finance"},
+
+    {"label": "SaaS Intelligence", "page_label": "SaaS + AI Intelligence", "section": "SaaS", "icon": "marketplace"},
+    {"label": "SaaS Governance", "page_label": "SaaS Governance Center", "section": "SaaS", "icon": "governance"},
+
+    {"label": "Operations Workspace", "page_label": "Operations Workspace", "section": "Operations", "icon": "platform"},
+    {"label": "Observability", "page_label": "Enterprise Observability", "section": "Operations", "icon": "observability"},
+    {"label": "Incidents", "page_label": "Incident Timeline", "section": "Operations", "icon": "warning"},
+    {"label": "Execution", "page_label": "Execution Center", "section": "Operations", "icon": "workflow"},
+
+    {"label": "Approvals", "page_label": "Approvals", "section": "Governance", "icon": "approval"},
+    {"label": "Risk & Governance", "page_label": "Risk & Governance", "section": "Governance", "icon": "governance"},
+    {"label": "Compliance", "page_label": "Compliance Dashboard", "section": "Governance", "icon": "governance"},
+    {"label": "Security", "page_label": "Security Dashboard", "section": "Governance", "icon": "governance"},
+    {"label": "Disaster Recovery", "page_label": "Disaster Recovery Dashboard", "section": "Governance", "icon": "governance"},
+
+    {"label": "Enterprise Data Fabric", "page_label": "Enterprise Data Fabric", "section": "Data & Integrations", "icon": "platform"},
+    {"label": "Data Sources & Connectors", "page_label": "Data Sources & Connectors", "section": "Data & Integrations", "icon": "cloud"},
+    {"label": "Cloud Accounts", "page_label": "Cloud Account Registry", "section": "Data & Integrations", "icon": "cloud"},
+    {"label": "Account Resolution", "page_label": "Account Resolution", "section": "Data & Integrations", "icon": "search"},
+    {"label": "Connector Operations", "page_label": "Connector Operations", "section": "Data & Integrations", "icon": "platform"},
+
+    {"label": "Organization & Team", "page_label": "Organization & Team", "section": "Administration", "icon": "enterprise"},
+    {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
+]
+
+SIMPLIFIED_ROLE_NAVIGATION["client_admin"] = [
+    {"label": "Home", "page_label": "Welcome", "section": "Home", "icon": "home"},
+    {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Ask Nexora", "icon": "ai"},
+
+    {"label": "Executive Command Center", "page_label": "Executive Command Center", "section": "Executive", "icon": "executive"},
+    {"label": "Enterprise Architect", "page_label": "Enterprise Architect Workspace", "section": "Executive", "icon": "enterprise"},
+    {"label": "Operations Command Center", "page_label": "Operations Command Center", "section": "Executive", "icon": "platform"},
+
+    {"label": "Enterprise Registry", "page_label": "Enterprise Registry", "section": "Technology", "icon": "enterprise"},
+    {"label": "Relationship Explorer", "page_label": "Relationship Explorer", "section": "Technology", "icon": "intelligence"},
+    {"label": "Digital Twin", "page_label": "Twin Explorer", "section": "Technology", "icon": "technology"},
+    {"label": "Dependency Analysis", "page_label": "Dependency Analysis", "section": "Technology", "icon": "technology"},
+    {"label": "Enterprise Intelligence", "page_label": "Enterprise Intelligence", "section": "Technology", "icon": "intelligence"},
+    {"label": "Enterprise Search", "page_label": "Enterprise Search", "section": "Technology", "icon": "search"},
+    {"label": "Decision Intelligence", "page_label": "Decision Intelligence", "section": "Technology", "icon": "intelligence"},
+
+    {"label": "Observability", "page_label": "Enterprise Observability", "section": "Operations", "icon": "observability"},
+    {"label": "Incidents", "page_label": "Incident Timeline", "section": "Operations", "icon": "warning"},
+    {"label": "Execution", "page_label": "Execution Center", "section": "Operations", "icon": "workflow"},
+    {"label": "Scheduler", "page_label": "Scheduler Operations", "section": "Operations", "icon": "workflow"},
+
+    {"label": "Compliance", "page_label": "Compliance Dashboard", "section": "Governance", "icon": "governance"},
+    {"label": "Security", "page_label": "Security Dashboard", "section": "Governance", "icon": "governance"},
+    {"label": "Disaster Recovery", "page_label": "Disaster Recovery Dashboard", "section": "Governance", "icon": "governance"},
+    {"label": "Enterprise Readiness", "page_label": "Enterprise Readiness", "section": "Governance", "icon": "governance"},
+
+    {"label": "Data Sources & Connectors", "page_label": "Data Sources & Connectors", "section": "Data & Integrations", "icon": "cloud"},
+    {"label": "Connector Operations", "page_label": "Connector Operations", "section": "Data & Integrations", "icon": "platform"},
+    {"label": "Cloud Accounts", "page_label": "Cloud Account Registry", "section": "Data & Integrations", "icon": "cloud"},
+    {"label": "Account Resolution", "page_label": "Account Resolution", "section": "Data & Integrations", "icon": "search"},
+
+    {"label": "Organization & Team", "page_label": "Organization & Team", "section": "Administration", "icon": "enterprise"},
+    {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
+]
+
+SIMPLIFIED_ROLE_NAVIGATION["operations"] = [
+    {"label": "Home", "page_label": "Operations Workspace", "section": "Home", "icon": "home"},
+    {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Ask Nexora", "icon": "ai"},
+
+    {"label": "Executive Command Center", "page_label": "Executive Command Center", "section": "Executive", "icon": "executive"},
+
+    {"label": "Operations Command Center", "page_label": "Operations Command Center", "section": "Operations", "icon": "platform"},
+    {"label": "Technical Analytics", "page_label": "Technical Analytics", "section": "Operations", "icon": "technology"},
+    {"label": "Service Explorer", "page_label": "Service Explorer", "section": "Operations", "icon": "service"},
+
+    {"label": "Enterprise Registry", "page_label": "Enterprise Registry", "section": "Technology", "icon": "enterprise"},
+    {"label": "Relationship Explorer", "page_label": "Relationship Explorer", "section": "Technology", "icon": "intelligence"},
+    {"label": "Enterprise Intelligence", "page_label": "Enterprise Intelligence", "section": "Technology", "icon": "intelligence"},
+    {"label": "Enterprise Search", "page_label": "Enterprise Search", "section": "Technology", "icon": "search"},
+    {"label": "Decision Intelligence", "page_label": "Decision Intelligence", "section": "Technology", "icon": "intelligence"},
+    {"label": "Scenario Intelligence", "page_label": "Scenario Intelligence", "section": "Technology", "icon": "intelligence"},
+
+    {"label": "Audit Timeline", "page_label": "Audit Timeline", "section": "Governance", "icon": "governance"},
+
+    {"label": "Cloud Accounts", "page_label": "Cloud Account Registry", "section": "Data & Integrations", "icon": "cloud"},
+    {"label": "Account Resolution", "page_label": "Account Resolution", "section": "Data & Integrations", "icon": "search"},
+]
+
+SIMPLIFIED_ROLE_NAVIGATION["auditor"] = [
+    {"label": "Home", "page_label": "Audit Timeline", "section": "Home", "icon": "home"},
+    {"label": "Ask Nexora", "page_label": "Enterprise AI Copilot", "section": "Ask Nexora", "icon": "ai"},
+
+    {"label": "Board Intelligence", "page_label": "Board Intelligence", "section": "Executive", "icon": "reports"},
+    {"label": "Executive Command Center", "page_label": "Executive Command Center", "section": "Executive", "icon": "executive"},
+
+    {"label": "Enterprise Registry", "page_label": "Enterprise Registry", "section": "Technology", "icon": "enterprise"},
+    {"label": "Relationship Explorer", "page_label": "Relationship Explorer", "section": "Technology", "icon": "intelligence"},
+    {"label": "Enterprise Intelligence", "page_label": "Enterprise Intelligence", "section": "Technology", "icon": "intelligence"},
+    {"label": "Enterprise Search", "page_label": "Enterprise Search", "section": "Technology", "icon": "search"},
+    {"label": "Decision Intelligence", "page_label": "Decision Intelligence", "section": "Technology", "icon": "intelligence"},
+    {"label": "Scenario Intelligence", "page_label": "Scenario Intelligence", "section": "Technology", "icon": "intelligence"},
+
+    {"label": "Cloud Accounts", "page_label": "Cloud Account Registry", "section": "Data & Integrations", "icon": "cloud"},
+    {"label": "Account Resolution", "page_label": "Account Resolution", "section": "Data & Integrations", "icon": "search"},
+
+    {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
+]
 PERSONA_PAGE_PATH_FALLBACKS = {
     "Business Architecture": "pages/business_architecture.py",
     "Business Units": "pages/business_units.py",
@@ -419,12 +549,9 @@ def render_enterprise_sidebar(
     theme = get_theme(theme_mode)
     if navigation_items is None:
         normalized_role = normalize_role(role)
-        if normalized_role == "super_admin":
+        navigation_items = build_persona_navigation_items(role=normalized_role, page_paths=page_paths or {})
+        if not navigation_items:
             navigation_items = build_navigation_items(page_paths=page_paths or {}, role_pages=role_pages or {})
-        else:
-            navigation_items = build_persona_navigation_items(role=normalized_role, page_paths=page_paths or {})
-            if not navigation_items:
-                navigation_items = build_navigation_items(page_paths=page_paths or {}, role_pages=role_pages or {})
     visible_items = filter_navigation_by_role(navigation_items, role)
     current_page = active_page or st.session_state.get("current_page", "")
 
