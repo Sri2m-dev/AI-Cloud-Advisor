@@ -1,7 +1,8 @@
-# Secrets
+﻿# Secrets
 .env
 .env.*
 !.env.example
+!.env.production.example
 .streamlit/secrets.toml
 .streamlit/credential.key
 *.key
@@ -66,3 +67,5 @@ data/CUR Jan 2026.xlsx
 /archive/AI-CLOUD-ADVISOR_BACKUP/
 /archive/backup/
 /archive/backup 11-03-26/
+
+!.env.production.backend.example
