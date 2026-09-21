@@ -167,7 +167,7 @@ def _semantic_plan_schema():
                 "additionalProperties": False,
                 "properties": {
                     "query": {"type": ["string", "null"]},
-                    "result_limit": {"type": ["integer", "null"]},
+                    "result_limit": {"type": ["integer", "null"], "minimum": 1, "maximum": 25},
                     "filter": {"type": ["string", "null"]},
                     "value": {"type": ["string", "number", "boolean", "null"]},
                 },
@@ -198,35 +198,9 @@ def _semantic_plan_schema():
                     "required": ["dimension", "operator", "value"],
                 },
             },
-            "time_range": {
-                "anyOf": [
-                    {"type": "null"},
-                    {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "start": {"type": "string"},
-                            "end": {"type": "string"},
-                        },
-                        "required": ["start", "end"],
-                    },
-                ]
-            },
+            "time_range": {"type": "null"},
             "grouping": {"type": "array", "items": {"type": "string"}},
-            "ordering": {
-                "anyOf": [
-                    {"type": "null"},
-                    {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "field": {"type": "string"},
-                            "direction": {"type": "string"},
-                        },
-                        "required": ["field", "direction"],
-                    },
-                ]
-            },
+            "ordering": {"type": "null"},
             "steps": {"type": "array", "items": step, "minItems": 1, "maxItems": 8},
             "synthesis": {"type": "string"},
         },

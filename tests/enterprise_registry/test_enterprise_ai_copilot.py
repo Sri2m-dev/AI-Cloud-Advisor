@@ -34,6 +34,28 @@ def _copilot(role="auditor", providers=None):
     )
 
 
+def test_openai_semantic_plan_schema_matches_runtime_execution_bounds():
+    """Provider schema must advertise only executable semantic-plan features."""
+    from enterprise_copilot.providers import _semantic_plan_schema
+
+    schema = _semantic_plan_schema()
+    properties = schema["properties"]
+
+    parameters = (
+        properties["steps"]["items"]
+        ["properties"]["parameters"]["properties"]
+    )
+
+    result_limit = parameters["result_limit"]
+
+    assert result_limit["type"] == ["integer", "null"]
+    assert result_limit["minimum"] == 1
+    assert result_limit["maximum"] == 25
+
+    assert properties["time_range"] == {"type": "null"}
+    assert properties["ordering"] == {"type": "null"}
+
+
 def test_intent_router_is_deterministic_and_fast():
     assert route_intent("What does this account cost?")[0] == "financial"
     assert route_intent("What breaks if this changes?")[0] == "change"
@@ -577,3 +599,142 @@ def test_copilot_page_renders_without_provider_or_supabase(monkeypatch):
     app.run()
     assert not app.exception
     assert any("Enterprise AI Copilot" in title.value for title in app.title)
+
+def test_demo_savings_grouping_matches_governed_evidence():
+    """Savings capability must advertise only grouping evidenced by its facts."""
+    from services.demo_ask_nexora_service import DemoAskNexoraService
+
+    service = DemoAskNexoraService()
+    catalogue = service.semantic_catalogue("executive")
+
+    savings = next(
+        item
+        for item in catalogue
+        if item.capability_id == "demo_savings"
+    )
+
+    assert savings.grouping is True
+    assert savings.dimensions == ("stage",)
+
+def test_demo_savings_stage_grouping_uses_only_stage_evidenced_facts(monkeypatch):
+    """Stage grouping must not fabricate stage on heterogeneous savings facts."""
+    from services.demo_ask_nexora_service import DemoAskNexoraService
+    from services.demo_tenant_service import (
+        DEMO_ORGANIZATION_ID,
+        load_demo_tenant,
+    )
+
+    monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
+
+    service = DemoAskNexoraService()
+    payload = load_demo_tenant(DEMO_ORGANIZATION_ID)
+
+    ungrouped = service._value(payload)
+
+    assert ungrouped.supported is True
+    assert any("stage" in fact for fact in ungrouped.facts)
+    assert any("stage" not in fact for fact in ungrouped.facts)
+
+    handler = service._semantic_handler(
+        payload,
+        service._value,
+    )
+
+    grouped = handler(
+        operation="SUM_SAVINGS",
+        parameters={
+            "query": None,
+            "result_limit": None,
+            "filter": None,
+            "value": None,
+        },
+        dependencies=(),
+        scope=None,
+        constraints={
+            "filters": (),
+            "grouping": ("stage",),
+        },
+    )
+
+    facts = tuple(grouped["facts"])
+
+    assert facts
+    assert all("stage" in fact for fact in facts)
+
+    source_stages = {
+        row["stage"]
+        for row in (payload.get("analytics") or {}).get(
+            "savings_waterfall",
+            (),
+        )
+    }
+
+    assert {
+        fact["stage"]
+        for fact in facts
+    }.issubset(source_stages)
+
+    # Portfolio opportunity remains heterogeneous evidence;
+    # grouping must not manufacture a stage for it.
+    assert not any(
+        fact.get("id") == "NXR-PORT-118"
+        for fact in facts
+    )
+
+def test_demo_ask_semantic_invalid_plan_fails_closed(monkeypatch):
+    from services.demo_ask_nexora_service import DemoAskNexoraService
+    from services.demo_tenant_service import DEMO_ORGANIZATION_ID
+
+    monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
+
+    class InvalidPlanProvider:
+        name = "invalid-test-provider"
+
+        def plan(self, *, question, catalogue, scope, conversation=()):
+            descriptor = next(
+                item for item in catalogue
+                if item.capability_id == "demo_decisions"
+            )
+            return {
+                "interpretation": "invalid governed plan",
+                "entities": ["business_service"],
+                "measures": [],
+                "dimensions": ["invented_dimension"],
+                "filters": [],
+                "grouping": [],
+                "time_range": None,
+                "ordering": None,
+                "steps": [
+                    {
+                        "step_id": "step_1",
+                        "capability_id": descriptor.capability_id,
+                        "operation": "LIST_ATTENTION",
+                        "parameters": {
+                            "query": question,
+                            "filter": None,
+                            "value": None,
+                            "result_limit": None,
+                        },
+                        "depends_on": [],
+                    }
+                ],
+                "synthesis": "Do not infer unsupported facts.",
+            }
+
+        def generate(self, *, system_prompt, context):
+            raise AssertionError(
+                "generate must not run after invalid semantic planning"
+            )
+
+    result = DemoAskNexoraService().ask_semantic(
+        "Which services need intervention?",
+        organization_id=DEMO_ORGANIZATION_ID,
+        role="executive",
+        provider=InvalidPlanProvider(),
+    )
+
+    assert result.supported is False
+    assert result.facts == ()
+    assert result.provenance == ()
+    assert result.unknowns
+    assert "UNKNOWN remains UNKNOWN" in result.answer

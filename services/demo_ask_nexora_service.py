@@ -54,9 +54,9 @@ class DemoAskNexoraService:
                 "Synthetic savings evidence",
                 "financial",
                 ("identified_savings", "qualified_savings", "verified_value"),
-                ("stage", "business_service", "saas"),
+                ("stage",),
                 ("SUM_SAVINGS",),
-                ("stage", "business_service", "saas"),
+                ("stage",),
                 True,
                 False,
                 role,
@@ -116,17 +116,28 @@ class DemoAskNexoraService:
             raise DemoTenantError("demonstration authority is outside the active tenant scope")
         scope = TenantContext(organization_id, organization_id)
         catalogue = self.semantic_catalogue(role)
-        plan = validate_semantic_plan(
-            provider.plan(
-                question=question,
+        try:
+            plan = validate_semantic_plan(
+                provider.plan(
+                    question=question,
+                    catalogue=catalogue,
+                    scope=scope,
+                    conversation=conversation,
+                ),
                 catalogue=catalogue,
                 scope=scope,
-                conversation=conversation,
-            ),
-            catalogue=catalogue,
-            scope=scope,
-            role=role,
-        )
+                role=role,
+            )
+        except (SemanticPlanError, PermissionError):
+            unknown = "I cannot certify an answer from the requested governed plan. UNKNOWN remains UNKNOWN."
+            return DemoAskResult(
+                answer=unknown,
+                intent="unknown",
+                supported=False,
+                provenance=(),
+                facts=(),
+                unknowns=(unknown,),
+            )
         handlers = {
             "demo_decisions": self._semantic_handler(payload, self._attention),
             "demo_savings": self._semantic_handler(payload, self._value),
@@ -219,10 +230,15 @@ class DemoAskNexoraService:
                 facts = tuple(
                     fact for fact in facts if str(fact.get(key)) == str(item.get("value"))
                 )
-            if grouping and any(
-                any(dimension not in fact for dimension in grouping) for fact in facts
-            ):
-                raise SemanticPlanError("synthetic grouping is not evidenced")
+            if grouping:
+                evidenced_facts = tuple(
+                    fact
+                    for fact in facts
+                    if all(dimension in fact for dimension in grouping)
+                )
+                if not evidenced_facts:
+                    raise SemanticPlanError("synthetic grouping is not evidenced")
+                facts = evidenced_facts
             return {
                 "facts": facts,
                 "provenance": tuple(
