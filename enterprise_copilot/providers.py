@@ -115,7 +115,20 @@ class OpenAIProvider:
                     "If the catalogue cannot support the requested conclusion, "
                     "select its explicit UNKNOWN capability instead of inferring facts. "
                     "Never invent dimensions, measures, filters, or capability IDs "
-                    "that are absent from the catalogue."
+                    "that are absent from the catalogue. "
+                    "The runtime does not execute temporal constraints or custom ordering, "
+                    "so always return null for time_range and ordering. "
+                    "If a question contains a conversational temporal qualifier such as "
+                    "'today' or 'this quarter' but its core current-state business question "
+                    "is supported by the catalogue, select the supported current-state "
+                    "capability and leave unsupported temporal precision to UNKNOWN synthesis. "
+                    "For that partial-support case, do not add the UNKNOWN capability as an "
+                    "additional execution step; UNKNOWN is an execution capability only when "
+                    "the requested conclusion itself is unsupported. Keep global measures, "
+                    "dimensions, filters, and grouping valid for every selected execution "
+                    "capability. Do not convert forecasting or prediction requests into current-state "
+                    "queries; forecasts and unsupported future conclusions must use the "
+                    "explicit UNKNOWN capability."
                 ),
                 "input": json.dumps(
                     {

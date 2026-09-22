@@ -738,3 +738,141 @@ def test_demo_ask_semantic_invalid_plan_fails_closed(monkeypatch):
     assert result.provenance == ()
     assert result.unknowns
     assert "UNKNOWN remains UNKNOWN" in result.answer
+
+def test_openai_semantic_planner_preserves_supported_current_state_under_temporal_qualifiers():
+    """Conversational time qualifiers must not suppress supported current-state evidence."""
+    from enterprise_copilot.providers import OpenAIProvider
+
+    class FakeResponse:
+        is_error = False
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {
+                "output_text": (
+                    '{"interpretation":"attention","entities":[],"measures":[],'
+                    '"dimensions":[],"filters":[],"time_range":null,"grouping":[],'
+                    '"ordering":null,"steps":[{"step_id":"step_1",'
+                    '"capability_id":"demo_decisions","operation":"LIST_ATTENTION",'
+                    '"parameters":{"query":"What requires my attention today?",'
+                    '"result_limit":null,"filter":null,"value":null},'
+                    '"depends_on":[]}],"synthesis":"Use governed current-state evidence; '
+                    'unsupported temporal precision remains UNKNOWN."}'
+                )
+            }
+
+    class FakeClient:
+        def __init__(self):
+            self.request = None
+
+        def post(self, path, *, headers, json):
+            self.request = {
+                "path": path,
+                "headers": headers,
+                "json": json,
+            }
+            return FakeResponse()
+
+    client = FakeClient()
+    provider = OpenAIProvider(
+        api_key="test-key",
+        model="test-model",
+        client=client,
+    )
+
+    class Scope:
+        organization_id = "demo-org"
+        tenant_id = "demo-org"
+
+    provider.plan(
+        question="What requires my attention today?",
+        catalogue=(),
+        scope=Scope(),
+    )
+
+    instructions = client.request["json"]["instructions"]
+
+    assert "always return null for time_range and ordering" in instructions
+    assert "'today' or 'this quarter'" in instructions
+    assert "supported current-state capability" in instructions
+    assert "forecasts and unsupported future conclusions" in instructions
+
+
+
+def test_openai_semantic_planner_does_not_add_unknown_step_for_partial_temporal_support():
+    """Partial temporal uncertainty belongs in synthesis, not a conflicting UNKNOWN step."""
+    from enterprise_copilot.providers import OpenAIProvider
+
+    class FakeResponse:
+        is_error = False
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {
+                "output_text": (
+                    '{"interpretation":"cost reduction","entities":[],"measures":'
+                    '["identified_savings","qualified_savings","verified_value"],'
+                    '"dimensions":["stage"],"filters":[],"time_range":null,'
+                    '"grouping":["stage"],"ordering":null,"steps":['
+                    '{"step_id":"step_1","capability_id":"demo_savings",'
+                    '"operation":"SUM_SAVINGS","parameters":{"query":'
+                    '"Where can we reduce costs?","result_limit":null,'
+                    '"filter":null,"value":null},"depends_on":[]}],'
+                    '"synthesis":"Use current savings evidence; quarter-specific '
+                    'timing remains UNKNOWN."}'
+                )
+            }
+
+    class FakeClient:
+        def __init__(self):
+            self.request = None
+
+        def post(self, path, *, headers, json):
+            self.request = {
+                "path": path,
+                "headers": headers,
+                "json": json,
+            }
+            return FakeResponse()
+
+    client = FakeClient()
+
+    provider = OpenAIProvider(
+        api_key="test-key",
+        model="test-model",
+        client=client,
+    )
+
+    class Scope:
+        organization_id = "demo-org"
+        tenant_id = "demo-org"
+
+    plan = provider.plan(
+        question="Where can we reduce costs this quarter?",
+        catalogue=(),
+        scope=Scope(),
+    )
+
+    instructions = client.request["json"]["instructions"]
+
+    assert "do not add the UNKNOWN capability as an additional execution step" in instructions
+    assert "UNKNOWN is an execution capability only when" in instructions
+    assert "valid for every selected execution capability" in instructions
+
+    assert len(plan["steps"]) == 1
+    assert plan["steps"][0]["capability_id"] == "demo_savings"
+    assert plan["steps"][0]["operation"] == "SUM_SAVINGS"
+    assert plan["time_range"] is None
+    assert plan["ordering"] is None
+
+
+def test_openai_semantic_plan_schema_keeps_temporal_execution_disabled():
+    """The remediation must not enable unsupported temporal execution."""
+    from enterprise_copilot.providers import _semantic_plan_schema
+
+    schema = _semantic_plan_schema()
+
+    assert schema["properties"]["time_range"] == {"type": "null"}
+    assert schema["properties"]["ordering"] == {"type": "null"}
