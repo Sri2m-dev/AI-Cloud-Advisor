@@ -38,11 +38,29 @@ class SourceFactFinancialRepository:
             if not isinstance(value, dict):
                 raise ValueError("Malformed governed cloud-cost evidence")
             try:
-                first = date.fromisoformat(value["period_start"])
-                last = date.fromisoformat(value["period_end"])
                 amount = Decimal(str(value["amount"]))
                 currency = value["currency"]
-                if not amount.is_finite() or last <= first or not currency:
+                aggregate = value.get("aggregation_level") == "enterprise_cloud_total"
+                if aggregate:
+                    # A reported total is evidence, not an invented billing period or allocation.
+                    if not value.get("period_label") or any(
+                        value.get(key) is not None
+                        for key in (
+                            "period_start",
+                            "period_end",
+                            "provider",
+                            "account_id",
+                            "service",
+                        )
+                    ):
+                        raise ValueError
+                    first = last = None
+                else:
+                    first = date.fromisoformat(value["period_start"])
+                    last = date.fromisoformat(value["period_end"])
+                    if last <= first:
+                        raise ValueError
+                if not amount.is_finite() or not currency:
                     raise ValueError
                 identity = tuple(
                     value[key]
@@ -57,6 +75,8 @@ class SourceFactFinancialRepository:
                 )
             except (KeyError, TypeError, ValueError, ArithmeticError):
                 raise ValueError("Malformed governed cloud-cost evidence") from None
+            if aggregate and (start or end):
+                raise ValueError("Reported cloud total has no governed period boundaries")
             if (start and last <= start) or (end and first > end):
                 continue
             if (start and first < start) or (end and last > end + timedelta(days=1)):
@@ -72,6 +92,14 @@ class SourceFactFinancialRepository:
                 "lineage": dict(fact.lineage),
                 "provenance": dict(fact.provenance),
             }
+            if selected and (
+                aggregate
+                or any(
+                    prior.get("aggregation_level") == "enterprise_cloud_total"
+                    for prior in selected.values()
+                )
+            ):
+                raise ValueError("Aggregate and other cloud authorities require reconciliation")
             overlap = any(
                 (prior[0], prior[1], prior[4], prior[5])
                 == (identity[0], identity[1], identity[4], identity[5])
@@ -110,18 +138,34 @@ class SourceFactFinancialRepository:
             "resolved_spend": total,
             "unallocated_resolved_spend": total,
             "reconciled_spend": total,
-            "resolved_account_count": len({row["account_id"] for row in rows}),
+            "resolved_account_count": len({row["account_id"] for row in rows if row["account_id"]}),
             "reconciliation_status": "reconciled",
             "reconciliation_variance": Decimal(0),
             "warnings": (
                 "Observed cloud evidence only; enterprise coverage and business "
                 "allocation are UNKNOWN. SaaS/license cost is not inferred.",
+            )
+            + (
+                (
+                    "Reported cloud total only; exact dates, provider, service, account "
+                    "and business allocation are UNKNOWN.",
+                )
+                if any(row.get("aggregation_level") == "enterprise_cloud_total" for row in rows)
+                else ()
+            )
+            + (
+                ("ISO currency is UNKNOWN; no currency conversion or assumption applied.",)
+                if rows[0]["currency"] == "UNKNOWN"
+                else ()
             ),
         }
 
     def _group(self, context, dimension, start=None, end=None):
         groups = {}
-        for row in self.observations(context, start, end):
+        observations = self.observations(context, start, end)
+        if any(row.get(dimension) in (None, "", "UNKNOWN") for row in observations):
+            return ()
+        for row in observations:
             label = row[dimension]
             group = groups.setdefault(
                 label,

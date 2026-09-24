@@ -13,6 +13,7 @@ if ROOT_DIR not in sys.path:
 
 from components.sidebar_navigation import render_sidebar_navigation
 from enterprise_copilot import CopilotRequest, enterprise_ai_copilot
+from enterprise_copilot.composition import enterprise_intelligence_capabilities
 from enterprise_copilot.providers import OpenAIProvider
 from services.demo_ask_nexora_service import DemoAskNexoraService
 from services.demo_tenant_service import load_demo_tenant
@@ -218,6 +219,15 @@ if question:
     if evidence_context.is_demo:
         demo_service = DemoAskNexoraService()
         if provider_name == "openai":
+            authenticated = authenticated_tenant_context(st.session_state)
+            enterprise_capabilities = enterprise_intelligence_capabilities(
+                authenticated.fabric_context,
+                role=authenticated.role,
+                financial_context=authenticated,
+            )
+            demo_service = DemoAskNexoraService(
+                enterprise_capabilities=enterprise_capabilities,
+            )
             demo_result = demo_service.ask_semantic(
                 question,
                 organization_id=evidence_context.organization_id or "",

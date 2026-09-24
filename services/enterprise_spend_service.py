@@ -46,7 +46,7 @@ class EnterpriseSpendService:
         context: AuthenticatedTenantContext,
         period: tuple[date | None, date | None] | None = None,
         *,
-        currency: str = "USD",
+        currency: str | None = "USD",
     ) -> EnterpriseFinancialPosture:
         start, end = period or (None, None)
         key = self._key(context, start, end, currency)
@@ -61,7 +61,7 @@ class EnterpriseSpendService:
             if row
             else EnterpriseFinancialPosture.empty(context.organization_id)
         )
-        if posture.currency != currency and posture.has_data:
+        if currency is not None and posture.currency != currency and posture.has_data:
             raise ValueError("currency conversion is not available for canonical posture")
         with self._lock:
             self._cache[key] = (now, posture)
@@ -88,6 +88,12 @@ class EnterpriseSpendService:
     def get_spend_by_provider(self, context, period=None):
         start, end = period or (None, None)
         method = getattr(self._repository, "get_spend_by_provider", None)
+        return method(context, start, end) if method else ()
+
+    def get_spend_by_business_service(self, context, period=None):
+        """Business allocation must never be substituted with cloud product spend."""
+        start, end = period or (None, None)
+        method = getattr(self._repository, "get_spend_by_business_service", None)
         return method(context, start, end) if method else ()
 
     def get_financial_evidence(self, context):

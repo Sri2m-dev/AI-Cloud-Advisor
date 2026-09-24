@@ -211,7 +211,11 @@ class EnterpriseIntelligenceQueryService:
                 ),
             )
             reconciled = posture.reconciliation_variance == 0
-            available = not posture.quarantined_spend and not posture.unreconciled_spend
+            available = (
+                not posture.quarantined_spend
+                and not posture.unreconciled_spend
+                and posture.currency != "UNKNOWN"
+            )
             return self._result(
                 context,
                 family,
@@ -233,6 +237,16 @@ class EnterpriseIntelligenceQueryService:
                     "shared_spend": posture.unallocated_resolved_spend,
                     "unresolved_spend": posture.quarantined_spend,
                     "source_rows": posture.source_rows,
+                    "source_period_labels": tuple(
+                        dict.fromkeys(
+                            row["period_label"] for row in evidence if row.get("period_label")
+                        )
+                    ),
+                    "source_as_of": tuple(
+                        dict.fromkeys(
+                            str(row["observed_at"]) for row in evidence if row.get("observed_at")
+                        )
+                    ),
                 },
             )
         dimension = family.removeprefix("spend_by_")

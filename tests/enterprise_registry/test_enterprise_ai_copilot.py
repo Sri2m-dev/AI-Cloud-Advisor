@@ -876,3 +876,15 @@ def test_openai_semantic_plan_schema_keeps_temporal_execution_disabled():
 
     assert schema["properties"]["time_range"] == {"type": "null"}
     assert schema["properties"]["ordering"] == {"type": "null"}
+def test_openai_planner_prompt_requires_undeclared_parameter_slots_to_be_null():
+    import inspect
+
+    from enterprise_copilot.providers import OpenAIProvider
+
+    source = inspect.getsource(OpenAIProvider.plan)
+
+    assert "Each capability descriptor declares its supported parameters" in source
+    assert "populate only parameters explicitly" in source
+    assert "set every slot" in source
+    assert "not declared by the selected capability to null" in source
+    assert "do not duplicate them into capability parameters" in source

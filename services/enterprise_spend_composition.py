@@ -105,7 +105,19 @@ def authenticated_tenant_context(session: Mapping[str, Any]) -> AuthenticatedTen
     return context
 
 
-def enterprise_spend_service() -> EnterpriseSpendService:
+def enterprise_spend_service(context=None) -> EnterpriseSpendService:
+    # Golden Demo uses the same local SourceFact authority, never a parallel cost store.
+    if isinstance(context, AuthenticatedTenantContext):
+        from enterprise_intelligence.search import FINANCIAL_ROLES
+        from services.demo_financial_sourcefact_bootstrap import (
+            bootstrap_demo_financial_sourcefacts,
+        )
+        from services.demo_tenant_service import DEMO_ORGANIZATION_ID
+
+        if context.organization_id == DEMO_ORGANIZATION_ID:
+            if context.role in FINANCIAL_ROLES:
+                bootstrap_demo_financial_sourcefacts(context)
+            return _local_service
     environment = (
         os.getenv("ENVIRONMENT", os.getenv("CLOUD_ADVISOR_ENV", "development")).strip().lower()
     )

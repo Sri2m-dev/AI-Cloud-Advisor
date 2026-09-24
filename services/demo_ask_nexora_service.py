@@ -31,6 +31,9 @@ class DemoAskNexoraService:
 
     SOURCE_TYPE = "synthetic_demonstration_evidence"
 
+    def __init__(self, *, enterprise_capabilities=None):
+        self.enterprise_capabilities = enterprise_capabilities
+
     @staticmethod
     def semantic_catalogue(role: str) -> tuple[CapabilityDescriptor, ...]:
         return (
@@ -116,6 +119,13 @@ class DemoAskNexoraService:
             raise DemoTenantError("demonstration authority is outside the active tenant scope")
         scope = TenantContext(organization_id, organization_id)
         catalogue = self.semantic_catalogue(role)
+        if self.enterprise_capabilities is not None:
+            if (
+                self.enterprise_capabilities.context != scope
+                or self.enterprise_capabilities.role != role
+            ):
+                raise PermissionError("Enterprise authority is outside the active demo scope")
+            catalogue += self.enterprise_capabilities.catalogue()
         try:
             plan = validate_semantic_plan(
                 provider.plan(
@@ -129,7 +139,10 @@ class DemoAskNexoraService:
                 role=role,
             )
         except (SemanticPlanError, PermissionError):
-            unknown = "I cannot certify an answer from the requested governed plan. UNKNOWN remains UNKNOWN."
+            unknown = (
+                "I cannot certify an answer from the requested governed plan. "
+                "UNKNOWN remains UNKNOWN."
+            )
             return DemoAskResult(
                 answer=unknown,
                 intent="unknown",
@@ -145,28 +158,45 @@ class DemoAskNexoraService:
             "demo_evidence": self._evidence_handler(payload),
             "demo_unknown": self._unknown_handler,
         }
-        results = execute_semantic_plan(plan, handlers=handlers)
+        if self.enterprise_capabilities is not None:
+            handlers.update(self.enterprise_capabilities.handlers())
+        try:
+            results = execute_semantic_plan(plan, handlers=handlers)
+        except (SemanticPlanError, PermissionError):
+            return DemoAskResult(
+                answer="The requested governed execution is unsupported. UNKNOWN remains UNKNOWN.",
+                intent="unknown",
+                supported=False,
+                provenance=(),
+                facts=(),
+                unknowns=("The requested governed execution is unsupported.",),
+            )
         facts = tuple(
-            fact
-            for result in results
-            for fact in result.get("facts", ())
+            fact for result in results for fact in result.get("facts", result.get("records", ()))
         )
         provenance = tuple(
             reference
             for result in results
-            for reference in result.get("provenance", ())
+            for reference in result.get(
+                "provenance",
+                tuple(
+                    {
+                        "type": "canonical_enterprise_evidence",
+                        "source": ref,
+                        "organization_id": organization_id,
+                        "tenant_id": scope.tenant_id,
+                    }
+                    for ref in result.get("evidence_references", ())
+                ),
+            )
         )
-        unknowns = tuple(
-            unknown
-            for result in results
-            for unknown in result.get("unknowns", ())
-        )
+        unknowns = tuple(unknown for result in results for unknown in result.get("unknowns", ()))
         citations = tuple(
             CopilotCitation(
                 f"D{index}",
                 str(reference.get("type", self.SOURCE_TYPE)),
                 str(reference.get("record", {}).get("id", reference.get("source", "synthetic"))),
-                "Synthetic governed evidence",
+                str(reference.get("type", self.SOURCE_TYPE)),
                 1.0,
                 str(reference.get("as_of", "CURRENT")),
             )
@@ -180,8 +210,15 @@ class DemoAskNexoraService:
             "SYNTHETIC_DEMO_GOVERNED",
             question,
         )
-        generated = provider.generate(system_prompt=system_prompt(), context=context)
-        answer = generated.text
+        answer = (
+            provider.generate(
+                system_prompt=system_prompt() + " Report supplied deterministic totals and ranks; "
+                "do not calculate allocations, totals or rankings from context.",
+                context=context,
+            ).text
+            if facts
+            else "UNKNOWN: no governed evidence supports the requested conclusion."
+        )
         if unknowns:
             answer += " Unknowns: " + "; ".join(unknowns)
         return DemoAskResult(
@@ -232,9 +269,7 @@ class DemoAskNexoraService:
                 )
             if grouping:
                 evidenced_facts = tuple(
-                    fact
-                    for fact in facts
-                    if all(dimension in fact for dimension in grouping)
+                    fact for fact in facts if all(dimension in fact for dimension in grouping)
                 )
                 if not evidenced_facts:
                     raise SemanticPlanError("synthetic grouping is not evidenced")

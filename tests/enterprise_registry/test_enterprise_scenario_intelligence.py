@@ -310,7 +310,7 @@ def test_standard_copilot_composition_wires_scenario_service(monkeypatch):
     from enterprise_copilot import composition
 
     intelligence = SimpleNamespace(context=CTX, role="super_admin")
-    search = SimpleNamespace()
+    search = SimpleNamespace(context=CTX, role="super_admin")
     scenarios = SimpleNamespace(simulate=lambda request: request)
     monkeypatch.setattr(
         composition, "enterprise_intelligence_service", lambda *a, **k: intelligence

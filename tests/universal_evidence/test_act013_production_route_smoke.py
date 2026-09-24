@@ -6,6 +6,9 @@ from types import SimpleNamespace
 
 from streamlit.testing.v1 import AppTest
 
+from auth.authenticated_tenant import AuthenticatedTenantContext
+from services.demo_tenant_service import DEMO_ORGANIZATION_ID, DEMO_ORGANIZATION_NAME
+
 from services.prospect_data_intake_service import ProspectTenant
 from universal_evidence.pilot import admit_uploaded_evidence
 from universal_evidence.pilot.production_render import render_reconciliation
@@ -14,6 +17,18 @@ from universal_evidence.pilot.production_views import (
     build_reconciliation_view,
 )
 from universal_evidence.production_workflow import activate_production_workflow
+
+
+def _demo_tenant_context():
+    return AuthenticatedTenantContext(
+        organization_id=DEMO_ORGANIZATION_ID,
+        organization_name=DEMO_ORGANIZATION_NAME,
+        user_id="ceo@company.com",
+        user_email="ceo@company.com",
+        role="executive",
+        authorization_claims=frozenset(),
+        tenant_id=DEMO_ORGANIZATION_ID,
+    )
 
 
 def test_production_view_and_render_dependency_graph_imports():
@@ -36,7 +51,11 @@ def test_analyze_environment_route_renders_without_import_exception(monkeypatch,
     app.session_state["email"] = "ceo@company.com"
     app.session_state["user_email"] = "ceo@company.com"
     app.session_state["user_id"] = "ceo@company.com"
-    app.session_state["organization_id"] = "org-demo-retail"
+    app.session_state["organization_id"] = DEMO_ORGANIZATION_ID
+    app.session_state["organization_name"] = DEMO_ORGANIZATION_NAME
+    app.session_state["auth_backend"] = "local"
+    app.session_state["authorized_organization_ids"] = [DEMO_ORGANIZATION_ID]
+    app.session_state["permissions"] = []
     app.run()
     assert not app.exception
     assert app.markdown or app.button or app.get("file_uploader")
@@ -76,6 +95,7 @@ def test_synthetic_cur_zero_governance_route_renders_through_reconciliation(
         tenant,
         filename=workbook.name,
         content=workbook.read_bytes(),
+        tenant_context=_demo_tenant_context(),
     )
     activate_production_workflow(admission)
     app = AppTest.from_file("pages/analyze_environment.py", default_timeout=60)
@@ -85,7 +105,11 @@ def test_synthetic_cur_zero_governance_route_renders_through_reconciliation(
     app.session_state["email"] = "ceo@company.com"
     app.session_state["user_email"] = "ceo@company.com"
     app.session_state["user_id"] = "ceo@company.com"
-    app.session_state["organization_id"] = "org-demo-retail"
+    app.session_state["organization_id"] = DEMO_ORGANIZATION_ID
+    app.session_state["organization_name"] = DEMO_ORGANIZATION_NAME
+    app.session_state["auth_backend"] = "local"
+    app.session_state["authorized_organization_ids"] = [DEMO_ORGANIZATION_ID]
+    app.session_state["permissions"] = []
     app.session_state["analysis_start_path"] = "upload"
     app.session_state["pue_upload_admission"] = admission
     app.session_state["prospect_analysis_error"] = "Legacy parser compatibility notice"
@@ -154,7 +178,11 @@ def test_active_workspace_can_return_to_source_selection_without_mutation(monkey
     app.session_state["email"] = "ceo@company.com"
     app.session_state["user_email"] = "ceo@company.com"
     app.session_state["user_id"] = "ceo@company.com"
-    app.session_state["organization_id"] = "org-demo-retail"
+    app.session_state["organization_id"] = DEMO_ORGANIZATION_ID
+    app.session_state["organization_name"] = DEMO_ORGANIZATION_NAME
+    app.session_state["auth_backend"] = "local"
+    app.session_state["authorized_organization_ids"] = [DEMO_ORGANIZATION_ID]
+    app.session_state["permissions"] = []
     app.session_state["analysis_start_path"] = "upload"
     app.session_state["pue_upload_admission"] = admission
     app.run()

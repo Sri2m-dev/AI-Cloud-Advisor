@@ -36,6 +36,7 @@ class EnterpriseAIOrchestrator:
         scenario_service=None,
         governed_ask=None,
         source_capabilities=None,
+        enterprise_capabilities=None,
     ):
         self.search = search
         self.intelligence = intelligence
@@ -43,6 +44,7 @@ class EnterpriseAIOrchestrator:
         self.scenario_service = scenario_service
         self.governed_ask = governed_ask
         self.source_capabilities = source_capabilities
+        self.enterprise_capabilities = enterprise_capabilities
 
     def explain_scenario(self, request: CopilotRequest, scenario_request) -> CopilotResponse:
         """Explain an explicit ScenarioRequest without silently changing its inputs."""
@@ -194,6 +196,9 @@ class EnterpriseAIOrchestrator:
             ),
         )
         handlers = {"enterprise_search": self._search_handler(request, None)}
+        if self.enterprise_capabilities is not None:
+            catalogue += self.enterprise_capabilities.catalogue()
+            handlers.update(self.enterprise_capabilities.handlers())
         if self.source_capabilities is not None:
             catalogue += self.source_capabilities.catalogue()
             handlers.update(self.source_capabilities.handlers())
@@ -245,9 +250,15 @@ class EnterpriseAIOrchestrator:
         generated = (
             ProviderResult("UNKNOWN. " + " ".join(context.unknowns))
             if authority_results and not supported
-            else provider.generate(system_prompt=system_prompt(), context=context)
+            else provider.generate(
+                system_prompt=system_prompt() + " Report supplied deterministic totals and ranks; "
+                "do not calculate allocations, totals or rankings from context.",
+                context=context,
+            )
         )
         answer = generated.text
+        if authority_results and context.unknowns:
+            answer += " Unknowns: " + "; ".join(context.unknowns)
         if context.evidence.citations:
             answer += " " + " ".join(f"[{item.citation_id}]" for item in context.evidence.citations)
         confidence = min(
