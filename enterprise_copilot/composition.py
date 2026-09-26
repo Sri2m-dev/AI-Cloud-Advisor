@@ -23,18 +23,34 @@ def enterprise_intelligence_capabilities(
         or financial_context.role != role
     ):
         raise PermissionError("Authenticated enterprise capability scope is required")
+
+    registry = enterprise_registry_service(
+        context,
+        role=role,
+        **configuration,
+    )
+    relationship_service = relationship_intelligence_service(
+        context,
+        role=role,
+        **configuration,
+    )
+
     return GovernedEnterpriseCapabilities(
         context,
         role=role,
         query_service=EnterpriseIntelligenceQueryService(
             financial_service=enterprise_spend_service(financial_context),
             financial_context=financial_context,
+            relationship_service=relationship_service,
+            registry=registry,
             attribution_provider=attribution_provider,
         ),
-        search=enterprise_search_service(context, role=role, **configuration),
+        search=enterprise_search_service(
+            context,
+            role=role,
+            **configuration,
+        ),
     )
-
-
 def enterprise_ai_copilot(context, *, role, providers=None, **configuration):
     financial_context = configuration.pop("financial_context", context)
     attribution_provider = configuration.pop("attribution_provider", None)

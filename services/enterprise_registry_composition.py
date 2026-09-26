@@ -15,6 +15,7 @@ from repositories.enterprise_registry_source import (
     SupabaseEnterpriseRegistrySource,
     SupabaseEntityFinancialContext,
 )
+from services.demo_enterprise_topology import demo_enterprise_topology
 from services.runtime_configuration import is_valid_supabase_configuration
 from services.supabase_client import supabase
 
@@ -80,8 +81,10 @@ def enterprise_registry_service(
     identities = InMemoryIdentityResolver()
     relationships = InMemoryRelationshipRegistry()
     versions = InMemoryVersionStore()
+    demo_entities, _ = demo_enterprise_topology(context)
+
     seen = set()
-    for entity in source.entities(context):
+    for entity in (*source.entities(context), *demo_entities):
         if entity.canonical_id in seen:
             continue
         seen.add(entity.canonical_id)

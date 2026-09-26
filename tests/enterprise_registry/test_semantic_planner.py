@@ -211,3 +211,137 @@ def test_plan_question_binds_current_assessment_and_conversation():
     assert result.scope == assessment.scope
     assert observed["question"].endswith("actually?")
     assert observed["conversation"] == (("user", "Which account did I mean?"),)
+def test_enterprise_context_execution_prefers_single_planned_entity_over_verbose_query():
+    """A resolved governed entity must survive verbose relationship wording."""
+    from data_fabric.foundation import TenantContext
+    from enterprise_copilot.semantic_planner import (
+        SemanticPlan,
+        SemanticPlanStep,
+        execute_semantic_plan,
+    )
+
+    scope = TenantContext(
+        organization_id="org-test",
+        tenant_id="tenant-test",
+    )
+
+    plan = SemanticPlan(
+        interpretation="Find technologies supporting the governed service.",
+        entities=("Global Digital Checkout",),
+        measures=(),
+        dimensions=(),
+        filters=(),
+        time_range=None,
+        grouping=(),
+        ordering=None,
+        steps=(
+            SemanticPlanStep(
+                step_id="step_1",
+                capability_id="enterprise_context",
+                operation="LOOKUP",
+                parameters={
+                    "query": "technologies supporting Global Digital Checkout",
+                },
+                depends_on=(),
+            ),
+        ),
+        synthesis="Return governed context only.",
+        scope=scope,
+    )
+
+    captured = {}
+
+    def handler(*, operation, parameters, dependencies, scope, constraints):
+        captured["operation"] = operation
+        captured["parameters"] = dict(parameters)
+        captured["dependencies"] = dependencies
+        captured["scope"] = scope
+        captured["constraints"] = constraints
+        return {
+            "records": (),
+            "evidence_references": (),
+            "unknowns": (),
+        }
+
+    execute_semantic_plan(
+        plan,
+        handlers={
+            "enterprise_context": handler,
+        },
+    )
+
+    assert captured["operation"] == "LOOKUP"
+    assert captured["parameters"]["query"] == "Global Digital Checkout"
+    assert captured["scope"] == scope
+
+
+def test_enterprise_context_execution_does_not_guess_between_multiple_entities():
+    """Ambiguous entity candidates must not be silently collapsed."""
+    from data_fabric.foundation import TenantContext
+    from enterprise_copilot.semantic_planner import (
+        SemanticPlan,
+        SemanticPlanStep,
+        execute_semantic_plan,
+    )
+
+    scope = TenantContext(
+        organization_id="org-test",
+        tenant_id="tenant-test",
+    )
+
+    original_query = "technologies supporting checkout"
+
+    plan = SemanticPlan(
+        interpretation="Find technologies supporting checkout.",
+        entities=("Checkout A", "Checkout B"),
+        measures=(),
+        dimensions=(),
+        filters=(),
+        time_range=None,
+        grouping=(),
+        ordering=None,
+        steps=(
+            SemanticPlanStep(
+                step_id="step_1",
+                capability_id="enterprise_context",
+                operation="LOOKUP",
+                parameters={
+                    "query": original_query,
+                },
+                depends_on=(),
+            ),
+        ),
+        synthesis="Return governed context only.",
+        scope=scope,
+    )
+
+    captured = {}
+
+    def handler(*, operation, parameters, dependencies, scope, constraints):
+        captured["parameters"] = dict(parameters)
+        return {
+            "records": (),
+            "evidence_references": (),
+            "unknowns": (),
+        }
+
+    execute_semantic_plan(
+        plan,
+        handlers={
+            "enterprise_context": handler,
+        },
+    )
+
+    assert captured["parameters"]["query"] == original_query
+
+
+def test_openai_planner_summary_instruction_preserves_enterprise_spend_boundary():
+    """Planner guidance must not encode cloud as a redundant SUMMARY filter."""
+    from enterprise_copilot.providers import OpenAIProvider
+
+    source = __import__("inspect").getsource(OpenAIProvider.plan)
+
+    assert "enterprise_spend SUMMARY" in source
+    assert "total cloud spend" in source
+    assert "must not add" in source
+    assert "domain=cloud" in source

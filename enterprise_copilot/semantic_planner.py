@@ -325,10 +325,25 @@ def execute_semantic_plan(
         handler = handlers.get(step.capability_id)
         if handler is None or not callable(handler):
             raise SemanticPlanError("capability handler is not registered")
+        parameters = dict(step.parameters)
+
+        # Enterprise entity lookup plans already carry the planner's resolved
+        # canonical entity candidates separately from the free-form lookup
+        # phrase. Prefer the single resolved entity for enterprise context
+        # execution so natural-language relationship wording does not hide an
+        # otherwise governed canonical entity. Multiple or absent candidates
+        # remain untouched rather than guessing.
+        if (
+            step.capability_id == "enterprise_context"
+            and step.operation == "LOOKUP"
+            and len(plan.entities) == 1
+        ):
+            parameters["query"] = plan.entities[0]
+
         results.append(
             handler(
                 operation=step.operation,
-                parameters=dict(step.parameters),
+                parameters=parameters,
                 dependencies=tuple(
                     results[index]
                     for index, previous in enumerate(plan.steps[: len(results)])

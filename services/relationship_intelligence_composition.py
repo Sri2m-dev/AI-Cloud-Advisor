@@ -9,6 +9,7 @@ from repositories.relationship_intelligence_repository import (
     SQLiteRelationshipIntelligenceRepository,
     SupabaseRelationshipIntelligenceRepository,
 )
+from services.demo_enterprise_topology import demo_enterprise_topology
 from services.enterprise_registry_composition import enterprise_registry_service
 from services.runtime_configuration import is_valid_supabase_configuration
 from services.supabase_client import supabase
@@ -57,9 +58,14 @@ def relationship_intelligence_service(
     else:
         kwargs = {"connection_factory": connection_factory} if connection_factory else {}
         repository = SQLiteRelationshipIntelligenceRepository(**kwargs)
+    _, demo_relationships = demo_enterprise_topology(context)
+
     return RelationshipIntelligenceService(
         context,
         role=role,
         entities=registry.list_entities(),
-        relationships=repository.list_relationships(context),
+        relationships=(
+            *repository.list_relationships(context),
+            *demo_relationships,
+        ),
     )

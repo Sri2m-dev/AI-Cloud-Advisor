@@ -212,8 +212,18 @@ class DemoAskNexoraService:
         )
         answer = (
             provider.generate(
-                system_prompt=system_prompt() + " Report supplied deterministic totals and ranks; "
-                "do not calculate allocations, totals or rankings from context.",
+                system_prompt=system_prompt() + (
+                    " Report supplied deterministic totals and ranks; "
+                    "do not calculate allocations, totals or rankings from context. "
+                    "Respect evidence scope exactly. Cloud-only spend evidence is not "
+                    "a complete technology-spend total. When a question asks for total "
+                    "technology spend and the governed evidence covers only cloud spend, "
+                    "state that complete technology spend is UNKNOWN and report the "
+                    "governed cloud spend only as a known component. "
+                    "For enterprise entity questions, report recorded governed journey "
+                    "impact when supplied by the evidence, but distinguish recorded "
+                    "business impact from inferred dependency or outage impact."
+                ),
                 context=context,
             ).text
             if facts

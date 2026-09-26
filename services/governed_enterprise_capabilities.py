@@ -53,9 +53,11 @@ class GovernedEnterpriseCapabilities:
             descriptors.append(
                 CapabilityDescriptor(
                     "enterprise_spend",
-                    "Canonical enterprise spend. SUMMARY returns the governed total "
-                    "without dimensional allocation constraints; GROUP and RANK "
-                    "operations use an evidenced allocation dimension.",
+                    "Governed spend from the active financial evidence authority. "
+                    "SUMMARY returns the governed observed total without claiming "
+                    "complete enterprise technology coverage when the authority reports "
+                    "partial or cloud-only coverage. GROUP and RANK operations require "
+                    "an evidenced allocation dimension with sufficient coverage.",
                     "financial",
                     ("spend",),
                     SPEND_DIMENSIONS,
@@ -124,7 +126,97 @@ class GovernedEnterpriseCapabilities:
         references = []
         records = []
         for item in response.results:
-            records.append(asdict(item))
+            record = asdict(item)
+
+            registry = getattr(
+                self.query_service,
+                "registry",
+                None,
+            )
+
+            if registry is not None:
+                try:
+                    entity = registry.get_entity(
+                        item.canonical_id
+                    )
+                except (KeyError, LookupError, ValueError):
+                    entity = None
+
+                if entity is not None and entity.metadata:
+                    record["governed_metadata"] = dict(
+                        entity.metadata
+                    )
+
+            relationship_service = getattr(
+                self.query_service,
+                "relationship_service",
+                None,
+            )
+
+            if relationship_service is not None:
+                try:
+                    paths = relationship_service.traverse(
+                        item.canonical_id,
+                        max_hops=3,
+                    )
+                except (KeyError, LookupError, ValueError):
+                    paths = ()
+
+                if paths:
+                    record["governed_relationship_paths"] = tuple(
+                        {
+                            "entities": tuple(
+                                {
+                                    "canonical_id": entity.canonical_id,
+                                    "name": entity.display_name,
+                                    "type": entity.entity_type.value,
+                                }
+                                for entity in path.entities
+                            ),
+                            "relationships": tuple(
+                                {
+                                    "type": (
+                                        relationship
+                                        .relationship_type
+                                        .value
+                                    ),
+                                    "evidence": tuple(
+                                        relationship.evidence
+                                    ),
+                                    "provenance_reference": (
+                                        relationship
+                                        .provenance_reference
+                                    ),
+                                }
+                                for relationship
+                                in path.relationships
+                            ),
+                        }
+                        for path in paths
+                    )
+
+                try:
+                    impact = relationship_service.get_impact(
+                        item.canonical_id,
+                        max_hops=3,
+                    )
+                except (KeyError, LookupError, ValueError):
+                    impact = None
+
+                if impact is not None:
+                    record["governed_impact"] = {
+                        "narrative": impact.narrative,
+                        "impacted": tuple(
+                            {
+                                "canonical_id": entity.canonical_id,
+                                "name": entity.display_name,
+                                "type": entity.entity_type.value,
+                            }
+                            for entity in impact.impacted
+                        ),
+                    }
+
+            records.append(record)
             references.extend(
                 ref
                 for ref in (
