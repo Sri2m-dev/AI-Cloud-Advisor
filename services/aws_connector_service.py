@@ -3,7 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from config import DEFAULT_ORG_ID
+from connectors.aws.aws_credential_manager import (
+    AWSConnectedModeConfigurationError,
+    validate_external_id,
+    validate_role_arn,
+)
 from connectors.aws.aws_production_connector import AWSProductionConnector
 from connectors.common.normalization import (
     resources_to_discovered_assets,
@@ -17,10 +21,10 @@ from connectors.common.persistence import (
     upsert_discovered_assets,
     upsert_relationship_graph,
     upsert_rows,
-    upsert_technology_inventory,
     upsert_technology_relationships,
 )
 from connectors.common.tenant_guard import resolve_organization_id, with_organization
+from services.aws_onboarding_template_service import AWSOnboardingTemplateService
 from services.supabase_client import supabase
 
 
@@ -35,7 +39,12 @@ class AWSConnectorService:
         organization_id: str | None = None,
     ):
         try:
-            connector = AWSProductionConnector(role_arn, external_id, region)
+            connector = AWSProductionConnector(
+                role_arn,
+                external_id,
+                region,
+                commercial_mode=True,
+            )
             result = connector.test_connection()
         except Exception as exc:
             result = {
@@ -56,7 +65,12 @@ class AWSConnectorService:
     @staticmethod
     def validate_permissions(role_arn=None, external_id=None, region="us-east-1"):
         try:
-            connector = AWSProductionConnector(role_arn, external_id, region)
+            connector = AWSProductionConnector(
+                role_arn,
+                external_id,
+                region,
+                commercial_mode=True,
+            )
             return connector.validate_permissions()
         except Exception as exc:
             return [
@@ -74,7 +88,9 @@ class AWSConnectorService:
         organization_id = AWSConnectorService._resolve_organization_id(organization_id)
         config = AWSConnectorService.get_config(organization_id)
         effective_role_arn = role_arn if role_arn is not None else config.get("role_arn")
-        effective_external_id = external_id if external_id is not None else config.get("external_id")
+        effective_external_id = (
+            external_id if external_id is not None else config.get("external_id")
+        )
         effective_region = region or config.get("region") or "us-east-1"
 
         try:
@@ -85,7 +101,12 @@ class AWSConnectorService:
                 organization_id=organization_id,
             )
 
-            connector = AWSProductionConnector(effective_role_arn, effective_external_id, effective_region)
+            connector = AWSProductionConnector(
+                effective_role_arn,
+                effective_external_id,
+                effective_region,
+                commercial_mode=True,
+            )
 
             accounts = connector.sync_accounts()
             costs = connector.sync_costs()
@@ -99,7 +120,9 @@ class AWSConnectorService:
                 on_conflict="cloud,account_name,service_name,usage_date",
             )
             technology_rows = AWSConnectorService._resources_to_technology_inventory(resources)
-            technology_rows = AWSConnectorService._with_organization(technology_rows, organization_id)
+            technology_rows = AWSConnectorService._with_organization(
+                technology_rows, organization_id
+            )
             AWSConnectorService._upsert_rows(
                 "technology_inventory",
                 technology_rows,
@@ -122,16 +145,9 @@ class AWSConnectorService:
             AWSConnectorService._upsert_discovered_assets(assets)
 
             completed_at = datetime.now(timezone.utc)
-            duration_seconds = (
-                completed_at - started_at
-            ).total_seconds()
+            duration_seconds = (completed_at - started_at).total_seconds()
 
-            objects_synced = (
-                len(accounts)
-                + len(costs)
-                + len(resources)
-                + len(recommendations)
-            )
+            objects_synced = len(accounts) + len(costs) + len(resources) + len(recommendations)
 
             AWSConnectorService._insert_sync_history(
                 sync_status="SUCCESS",
@@ -167,9 +183,7 @@ class AWSConnectorService:
 
         except Exception as exc:
             completed_at = datetime.now(timezone.utc)
-            duration_seconds = (
-                completed_at - started_at
-            ).total_seconds()
+            duration_seconds = (completed_at - started_at).total_seconds()
 
             error_message = str(exc)
 
@@ -264,7 +278,12 @@ class AWSConnectorService:
 
     @staticmethod
     def preview_live_sync(role_arn=None, external_id=None, region="us-east-1"):
-        connector = AWSProductionConnector(role_arn, external_id, region)
+        connector = AWSProductionConnector(
+            role_arn,
+            external_id,
+            region,
+            commercial_mode=True,
+        )
 
         accounts = connector.sync_accounts()
         costs = connector.sync_costs(days=7)
@@ -274,6 +293,24 @@ class AWSConnectorService:
             "cost_rows_7_days": len(costs),
             "sample_account": accounts[0] if accounts else {},
             "sample_cost": costs[0] if costs else {},
+        }
+
+    @staticmethod
+    def generate_external_id() -> str:
+        return AWSOnboardingTemplateService.generate_external_id()
+
+    @staticmethod
+    def validate_connected_mode_config(
+        role_arn: str | None,
+        external_id: str | None,
+    ) -> dict[str, str]:
+        validated_role_arn, account_id = validate_role_arn(role_arn)
+        validated_external_id = validate_external_id(external_id)
+
+        return {
+            "role_arn": validated_role_arn,
+            "account_id": account_id,
+            "external_id": validated_external_id,
         }
 
     @staticmethod
@@ -290,6 +327,21 @@ class AWSConnectorService:
         existing = AWSConnectorService.get_config(organization_id)
         role_arn = role_arn if role_arn is not None else existing.get("role_arn")
         external_id = external_id if external_id is not None else existing.get("external_id")
+
+        try:
+            validated = AWSConnectorService.validate_connected_mode_config(
+                role_arn,
+                external_id,
+            )
+        except AWSConnectedModeConfigurationError as exc:
+            return {
+                "status": "FAILED",
+                "error": str(exc),
+            }
+
+        role_arn = validated["role_arn"]
+        external_id = validated["external_id"]
+
         payload = {
             "connector_name": AWSConnectorService.CONNECTOR_NAME,
             "organization_id": organization_id,
@@ -309,8 +361,7 @@ class AWSConnectorService:
 
         try:
             (
-                supabase
-                .table("connector_registry")
+                supabase.table("connector_registry")
                 .upsert(payload, on_conflict="organization_id,connector_name")
                 .execute()
             )
@@ -368,8 +419,7 @@ class AWSConnectorService:
         try:
             organization_id = AWSConnectorService._resolve_organization_id(organization_id)
             response = (
-                supabase
-                .table("connector_registry")
+                supabase.table("connector_registry")
                 .select("*")
                 .eq("connector_name", AWSConnectorService.CONNECTOR_NAME)
                 .eq("organization_id", organization_id)
@@ -386,8 +436,7 @@ class AWSConnectorService:
         try:
             organization_id = AWSConnectorService._resolve_organization_id(organization_id)
             response = (
-                supabase
-                .table("connector_sync_history")
+                supabase.table("connector_sync_history")
                 .select("*")
                 .eq("connector_name", AWSConnectorService.CONNECTOR_NAME)
                 .eq("organization_id", organization_id)
@@ -465,8 +514,7 @@ class AWSConnectorService:
 
         try:
             (
-                supabase
-                .table("connector_registry")
+                supabase.table("connector_registry")
                 .upsert(payload, on_conflict="organization_id,connector_name")
                 .execute()
             )
@@ -488,13 +536,19 @@ class AWSConnectorService:
         return resolve_organization_id(organization_id)
 
     @staticmethod
-    def _with_organization(rows: list[dict[str, Any]], organization_id: str) -> list[dict[str, Any]]:
+    def _with_organization(
+        rows: list[dict[str, Any]], organization_id: str
+    ) -> list[dict[str, Any]]:
         return with_organization(rows, organization_id)
 
     @staticmethod
     def _write_failure_alert(result: dict[str, Any]) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        message = result.get("error") or result.get("retry_error") or "AWS scheduled sync failed after retry."
+        message = (
+            result.get("error")
+            or result.get("retry_error")
+            or "AWS scheduled sync failed after retry."
+        )
         payload_variants = [
             {
                 "source": "AWS Connector",
@@ -550,12 +604,7 @@ class AWSConnectorService:
             return
 
         try:
-            (
-                supabase
-                .table("cloud_accounts")
-                .upsert(rows, on_conflict="account_id")
-                .execute()
-            )
+            (supabase.table("cloud_accounts").upsert(rows, on_conflict="account_id").execute())
             return
         except Exception as exc:
             print("CLOUD_ACCOUNTS ACCOUNT_ID UPSERT FAILED:", exc)
@@ -569,8 +618,7 @@ class AWSConnectorService:
             }
             try:
                 existing = (
-                    supabase
-                    .table("cloud_accounts")
+                    supabase.table("cloud_accounts")
                     .select("id")
                     .eq("cloud_provider", "AWS")
                     .eq("account_name", account_name)
@@ -580,8 +628,7 @@ class AWSConnectorService:
                 existing_rows = existing.data or []
                 if existing_rows:
                     (
-                        supabase
-                        .table("cloud_accounts")
+                        supabase.table("cloud_accounts")
                         .update(payload)
                         .eq("id", existing_rows[0]["id"])
                         .execute()
@@ -609,7 +656,9 @@ class AWSConnectorService:
 
         try:
             organization_id = rows[0].get("organization_id") if rows else None
-            upsert_technology_relationships(rows, AWSConnectorService._resolve_organization_id(organization_id))
+            upsert_technology_relationships(
+                rows, AWSConnectorService._resolve_organization_id(organization_id)
+            )
         except Exception as exc:
             print("TECHNOLOGY_RELATIONSHIPS UPSERT FAILED:", exc)
 
@@ -620,7 +669,9 @@ class AWSConnectorService:
 
         try:
             organization_id = rows[0].get("organization_id") if rows else None
-            upsert_relationship_graph(rows, AWSConnectorService._resolve_organization_id(organization_id), "AWS Connector")
+            upsert_relationship_graph(
+                rows, AWSConnectorService._resolve_organization_id(organization_id), "AWS Connector"
+            )
         except Exception as exc:
             print("RELATIONSHIP_GRAPH UPSERT FAILED:", exc)
 
@@ -698,6 +749,8 @@ class AWSConnectorService:
 
         try:
             organization_id = assets[0].get("organization_id") if assets else None
-            upsert_discovered_assets(assets, AWSConnectorService._resolve_organization_id(organization_id))
+            upsert_discovered_assets(
+                assets, AWSConnectorService._resolve_organization_id(organization_id)
+            )
         except Exception as exc:
             print("DISCOVERED_ASSETS UPSERT FAILED:", exc)

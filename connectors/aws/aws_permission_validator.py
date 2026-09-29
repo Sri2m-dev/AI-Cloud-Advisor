@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from connectors.aws.aws_credential_manager import safe_aws_error
+
 
 class AWSPermissionValidator:
     def __init__(self, session, region: str = "us-east-1"):
@@ -13,7 +15,11 @@ class AWSPermissionValidator:
 
     def validate_all(self) -> list[dict[str, Any]]:
         checks: list[tuple[str, str, Callable[[], None]]] = [
-            ("sts:GetCallerIdentity", "Account identity validation unavailable", self._check_sts_identity),
+            (
+                "sts:GetCallerIdentity",
+                "Account identity validation unavailable",
+                self._check_sts_identity,
+            ),
             ("ce:GetCostAndUsage", "Cost Explorer sync unavailable", self._check_cost_explorer),
             ("ec2:DescribeInstances", "EC2 discovery unavailable", self._check_ec2_instances),
             ("ec2:DescribeVpcs", "VPC discovery unavailable", self._check_vpcs),
@@ -37,7 +43,7 @@ class AWSPermissionValidator:
             return {
                 "permission": permission,
                 "status": "FAILED",
-                "error": str(exc),
+                "error": safe_aws_error(exc),
                 "impact": impact,
             }
 
@@ -73,4 +79,3 @@ class AWSPermissionValidator:
 
     def _check_eks_clusters(self) -> None:
         self.session.client("eks", region_name=self.region).list_clusters(maxResults=10)
-

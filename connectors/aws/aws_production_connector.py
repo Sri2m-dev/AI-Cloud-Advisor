@@ -11,10 +11,23 @@ from connectors.aws.aws_resource_discovery import AWSResourceDiscovery
 
 
 class AWSProductionConnector:
-    def __init__(self, role_arn=None, external_id=None, region="us-east-1"):
-        self.credential_manager = AWSCredentialManager(role_arn, external_id, region)
+    def __init__(
+        self,
+        role_arn=None,
+        external_id=None,
+        region="us-east-1",
+        *,
+        commercial_mode: bool = False,
+    ):
+        self.credential_manager = AWSCredentialManager(
+            role_arn,
+            external_id,
+            region,
+            require_assume_role=commercial_mode,
+        )
         self.session = self.credential_manager.session()
         self.region = region
+        self.commercial_mode = commercial_mode
 
     def test_connection(self) -> dict[str, Any]:
         return self.credential_manager.test_connection()

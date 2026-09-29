@@ -124,8 +124,8 @@ class AWSResourceDiscovery:
                 details = {}
                 try:
                     details = eks.describe_cluster(name=cluster_name).get("cluster", {})
-                except (BotoCoreError, ClientError) as exc:
-                    print(f"AWS EKS DETAIL DISCOVERY SKIPPED for {cluster_name}:", exc)
+                except (BotoCoreError, ClientError):
+                    print(f"AWS EKS DETAIL DISCOVERY SKIPPED for {cluster_name}")
                 resources.append(
                     self._row(
                         name=cluster_name,
@@ -140,8 +140,8 @@ class AWSResourceDiscovery:
     def _safe_discover(self, discover: Callable[[], list[dict[str, Any]]]) -> list[dict[str, Any]]:
         try:
             return discover()
-        except (BotoCoreError, ClientError) as exc:
-            print(f"AWS {discover.__name__.replace('discover_', '').upper()} DISCOVERY SKIPPED:", exc)
+        except (BotoCoreError, ClientError):
+            print(f"AWS {discover.__name__.replace('discover_', '').upper()} DISCOVERY SKIPPED")
             return []
 
     def _bucket_region(self, s3, bucket_name: str) -> str:
@@ -173,4 +173,3 @@ class AWSResourceDiscovery:
             "source_system": "AWS Connector",
             "raw_payload": raw_payload,
         }
-

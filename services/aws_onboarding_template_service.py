@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+import secrets
 from copy import deepcopy
 from typing import Any
-
 
 NEXORA_AWS_ACCOUNT_ARN = "<NEXORA_AWS_ACCOUNT_ARN>"
 CUSTOMER_EXTERNAL_ID = "<CUSTOMER_EXTERNAL_ID>"
@@ -72,6 +72,11 @@ TRUST_POLICY_TEMPLATE: dict[str, Any] = {
 
 class AWSOnboardingTemplateService:
     @staticmethod
+    def generate_external_id() -> str:
+        """Generate a high-entropy External ID for one AWS connection."""
+        return "nexora-" + secrets.token_urlsafe(32)
+
+    @staticmethod
     def get_iam_policy() -> dict[str, Any]:
         return deepcopy(IAM_POLICY_TEMPLATE)
 
@@ -81,8 +86,12 @@ class AWSOnboardingTemplateService:
         external_id: str = CUSTOMER_EXTERNAL_ID,
     ) -> dict[str, Any]:
         policy = deepcopy(TRUST_POLICY_TEMPLATE)
-        policy["Statement"][0]["Principal"]["AWS"] = nexora_aws_account_arn or NEXORA_AWS_ACCOUNT_ARN
-        policy["Statement"][0]["Condition"]["StringEquals"]["sts:ExternalId"] = external_id or CUSTOMER_EXTERNAL_ID
+        policy["Statement"][0]["Principal"]["AWS"] = (
+            nexora_aws_account_arn or NEXORA_AWS_ACCOUNT_ARN
+        )
+        policy["Statement"][0]["Condition"]["StringEquals"]["sts:ExternalId"] = (
+            external_id or CUSTOMER_EXTERNAL_ID
+        )
         return policy
 
     @staticmethod
@@ -129,20 +138,61 @@ class AWSOnboardingTemplateService:
     @staticmethod
     def get_setup_steps() -> list[dict[str, str]]:
         return [
-            {"Step": "1", "Action": "Create IAM role", "Detail": "Create a customer-managed role in the AWS account that Nexora will read."},
-            {"Step": "2", "Action": "Attach policy", "Detail": "Attach the Nexora IAM permissions policy from this page."},
-            {"Step": "3", "Action": "Add trust relationship", "Detail": "Use the trust policy and external ID to allow Nexora to assume the role."},
+            {
+                "Step": "1",
+                "Action": "Create IAM role",
+                "Detail": (
+                    "Create a customer-managed role in the AWS account "
+                    "that Nexora will read."
+                ),
+            },
+            {
+                "Step": "2",
+                "Action": "Attach policy",
+                "Detail": "Attach the Nexora IAM permissions policy from this page.",
+            },
+            {
+                "Step": "3",
+                "Action": "Add trust relationship",
+                "Detail": (
+                    "Use the trust policy and external ID to allow Nexora "
+                    "to assume the role."
+                ),
+            },
             {"Step": "4", "Action": "Copy Role ARN", "Detail": "Copy the role ARN from AWS IAM."},
-            {"Step": "5", "Action": "Configure in Nexora", "Detail": "Paste the Role ARN and External ID into AWS Connector Setup."},
-            {"Step": "6", "Action": "Test IAM readiness", "Detail": "Run AWS IAM Readiness to confirm every required capability."},
-            {"Step": "7", "Action": "Run sync", "Detail": "Run the first AWS sync to populate costs, assets, relationships, and recommendations."},
+            {
+                "Step": "5",
+                "Action": "Configure in Nexora",
+                "Detail": (
+                    "Paste the Role ARN into Nexora. Use the Nexora-generated "
+                    "External ID shown during onboarding."
+                ),
+            },
+            {
+                "Step": "6",
+                "Action": "Test IAM readiness",
+                "Detail": "Run AWS IAM Readiness to confirm every required capability.",
+            },
+            {
+                "Step": "7",
+                "Action": "Run sync",
+                "Detail": (
+                    "Run the first AWS sync to populate costs, assets, "
+                    "relationships, and recommendations."
+                ),
+            },
         ]
 
     @staticmethod
     def get_role_configuration_fields() -> list[dict[str, str]]:
         return [
-            {"Field": "Role ARN", "Purpose": "Nexora assumes this role to read AWS cost and inventory data."},
-            {"Field": "External ID", "Purpose": "Customer-specific confused-deputy protection for cross-account access."},
+            {
+                "Field": "Role ARN",
+                "Purpose": "Nexora assumes this role to read AWS cost and inventory data.",
+            },
+            {
+                "Field": "External ID",
+                "Purpose": "Customer-specific confused-deputy protection for cross-account access.",
+            },
             {"Field": "Region", "Purpose": "Default discovery region for regional AWS services."},
         ]
-
