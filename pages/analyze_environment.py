@@ -29,6 +29,7 @@ from services.enterprise_spend_composition import (  # noqa: E402
 from services.prospect_data_intake_service import (  # noqa: E402
     DEFAULT_RETENTION_DAYS,
     PROSPECT_WATERMARK,
+    STORE_ROOT,
     SUPPORTED_PROFILES,
     ProspectIntakeError,
     confirm_analysis_currency,
@@ -62,6 +63,16 @@ from universal_evidence.pilot.dev_harness import (  # noqa: E402
     bootstrap_dev_pilot_session,
     harness_enabled,
     publish_active_prospect_scope,
+)
+from universal_evidence.pilot.evidence_package import (  # noqa: E402
+    EvidencePackageError,
+    validate_evidence_package,
+)
+from universal_evidence.pilot.evidence_package_persistence import (  # noqa: E402
+    persist_validated_evidence_package,
+)
+from universal_evidence.pilot.evidence_package_runtime import (  # noqa: E402
+    analyze_certified_package,
 )
 from universal_evidence.pilot.production_render import (  # noqa: E402
     render_enterprise_context,
@@ -138,6 +149,8 @@ def _step_header(step: int, title: str, detail: str) -> None:
 
 def _reset_journey() -> None:
     for key in (
+        "evidence_package_result",
+        "evidence_package_id",
         "analysis_start_path",
         "environment_analysis_result",
         "prospect_analysis",
@@ -447,10 +460,83 @@ organization_id = str(st.session_state.get("organization_id") or "")
 demo_available = demo_mode_enabled() and is_demo_tenant(organization_id)
 selected_path = st.session_state.get("analysis_start_path")
 cloud_result = st.session_state.get("environment_analysis_result")
+package_result = st.session_state.get("evidence_package_result")
+if package_result is not None and selected_path == "upload":
+    from dataclasses import asdict
+
+    current = authenticated_tenant_context(st.session_state)
+    package_authorization = WorkspaceAuthorizationContext.from_authenticated(current)
+    try:
+        for package_admission in package_result.admissions:
+            package_authorization.authorize_scope(package_admission.scope)
+        if package_result.owner_id != current.user_id:
+            raise PermissionError("Package owner boundary mismatch")
+        if (
+            package_result.admissions[0].scope.prospect_id
+            != st.session_state["prospect_tenant"].tenant_id
+        ):
+            raise PermissionError("Package prospect boundary mismatch")
+    except PermissionError:
+        st.session_state.pop("evidence_package_result", None)
+        st.error("Package results are unavailable in this workspace.")
+        st.stop()
+    _step_header(
+        4,
+        "Certified evidence package analyzed",
+        "All declared sources contribute to this assessment.",
+    )
+    st.write("Package: " + package_result.package_id)
+    st.dataframe(
+        [asdict(item) for item in package_result.intelligence.source_coverage], hide_index=True
+    )
+    st.metric(
+        "Governed concepts evidenced",
+        f"{package_result.coverage.evidenced_concept_count} / "
+        f"{package_result.coverage.governed_concept_count}",
+    )
+    st.metric(
+        "SourceFacts published",
+        sum(p.published_fact_count for p in package_result.runtime.publications),
+    )
+    intelligence = package_result.intelligence
+    if intelligence.governed_cost is not None:
+        st.metric(
+            "Evidence-derived cost",
+            f"{intelligence.governed_cost} {' / '.join(intelligence.currencies)}",
+        )
+    else:
+        st.info("Governed cost is UNKNOWN: a single evidence currency is required.")
+    st.caption(
+        "Unsupported capabilities remain UNKNOWN or blocked; "
+        "observed concept coverage does not certify every capability."
+    )
+    st.dataframe(
+        [asdict(item) for item in package_result.coverage.concept_coverage], hide_index=True
+    )
+    st.subheader("Cross-source findings and provenance")
+    st.dataframe([asdict(item) for item in intelligence.findings], hide_index=True)
+    with st.expander("Reconciliation and source provenance"):
+        st.write(package_result.runtime.reconciliation)
+        st.dataframe(
+            [
+                {
+                    "source_type": source.source_type,
+                    "file_id": source.file_id,
+                    "mapping_decision_ids": list(source.mapping_decision_ids),
+                    "normalization_references": list(source.normalization_references),
+                }
+                for source in package_result.sources
+            ],
+            hide_index=True,
+        )
+    if st.button("Analyze another environment", key="restart_package_complete"):
+        _reset_journey()
+        st.rerun()
+
 prospect_result = st.session_state.get("prospect_analysis")
 active_upload_admission = st.session_state.get("pue_upload_admission")
 
-if selected_path and (cloud_result or prospect_result or active_upload_admission):
+if selected_path and (cloud_result or prospect_result or active_upload_admission or package_result):
     if st.button("← Choose another source", key="leave_active_workspace"):
         _leave_active_workspace()
         st.rerun()
@@ -592,6 +678,7 @@ if (
     selected_path
     and not cloud_result
     and not prospect_result
+    and not st.session_state.get("evidence_package_result")
     and not st.session_state.get("pue_upload_admission")
 ):
     if st.button("← Choose another source", key="restart_analysis"):
@@ -784,6 +871,7 @@ if selected_path in {"aws", "azure"} and not cloud_result:
 if (
     selected_path == "upload"
     and not prospect_result
+    and not st.session_state.get("evidence_package_result")
     and not st.session_state.get("pue_upload_admission")
 ):
     _step_header(
@@ -816,8 +904,9 @@ if (
                 )
                 profile = st.selectbox("Input profile", SUPPORTED_PROFILES)
                 upload = st.file_uploader(
-                    "Drag and drop CSV, Excel, or PDF evidence here, or browse files",
-                    type=["csv", "xlsx", "pdf"],
+                    "Drag and drop CSV, Excel, PDF, or Nexora evidence-package manifest "
+                    "here, or browse files",
+                    type=["csv", "xlsx", "pdf", "json"],
                     accept_multiple_files=True,
                 )
                 if upload:
@@ -828,7 +917,8 @@ if (
                 st.caption(
                     "Accepted now: AWS CUR-derived CSV, Azure/GCP billing export, SaaS or "
                     "technology-cost CSV/XLSX, and native-text PDF invoices. Scanned PDF is "
-                    "not supported. JSON and standalone ZIP are not yet supported."
+                    "not supported. Certified packages require manifest.json and all declared "
+                    "sources; standalone ZIP is not supported."
                 )
                 run_upload = st.form_submit_button(
                     "Continue Analysis", type="primary", use_container_width=True
@@ -855,85 +945,161 @@ if (
                             key=key,
                         )
                         bundle = tuple((item.name, item.getvalue()) for item in upload)
-                        primary_name, content = next(
-                            (
-                                item
-                                for item in bundle
-                                if item[0].lower().endswith((".csv", ".xlsx"))
-                            ),
-                            bundle[0],
+
+                        json_names = tuple(
+                            name for name, _content in bundle
+                            if name.lower().endswith(".json")
                         )
+                        manifest_names = tuple(
+                            name for name, _content in bundle
+                            if name.lower() == "manifest.json"
+                        )
+
+                        if json_names and (
+                            len(json_names) != 1
+                            or len(manifest_names) != 1
+                            or json_names[0].lower() != "manifest.json"
+                        ):
+                            raise ProspectIntakeError(
+                                "JSON is accepted only as manifest.json "
+                                "for a Nexora evidence package."
+                            )
+
+                        package = None
+                        if manifest_names:
+                            try:
+                                package = validate_evidence_package(bundle)
+                            except EvidencePackageError as exc:
+                                raise ProspectIntakeError(
+                                    f"Evidence package validation failed: {exc}"
+                                ) from exc
+
+                        if package is not None:
+                            cost_source = package.manifest.source("cost")
+                            primary_name = cost_source.filename
+                            content = package.content("cost")
+                        else:
+                            primary_name, content = next(
+                                (
+                                    item
+                                    for item in bundle
+                                    if item[0].lower().endswith((".csv", ".xlsx"))
+                                ),
+                                bundle[0],
+                            )
                         st.session_state["prospect_tenant"] = tenant
                         st.session_state["prospect_name"] = prospect_name.strip()
-                        try:
-                            authenticated = authenticated_tenant_context(st.session_state)
-                            workspace_authorization = (
-                                WorkspaceAuthorizationContext.from_authenticated(authenticated)
-                            )
-                            admission = admit_uploaded_evidence(
+
+                        if package is not None:
+                            persist_validated_evidence_package(
                                 tenant,
-                                filename=primary_name,
-                                content=content,
-                                tenant_context=authenticated,
-                            )
-                            persist_production_workspace(
-                                admission,
-                                prospect_tenant=tenant,
-                                prospect_name=prospect_name.strip(),
-                                input_profile=profile,
-                                authorization=workspace_authorization,
-                            )
-                            closure_context = EvidenceAnalysisContext(
-                                admission.scope.analysis_id,
-                                admission.source_id,
-                                admission.scope.prospect_id,
-                                admission.scope.organization_id,
-                                admission.scope.tenant_id,
-                            )
-                            closure = analyze_document_bundle(context=closure_context, files=bundle)
-                            persist_document_closure(
-                                admission,
-                                closure,
-                                prospect_tenant=tenant,
                                 files=bundle,
                                 input_profile=profile,
-                                authorization=workspace_authorization,
+                                actor=actor,
+                                key=key,
                             )
-                            st.session_state["document_closure_result"] = closure
-                            st.session_state["pue_upload_admission"] = admission
+                            st.session_state["evidence_package_id"] = package.package_id
+                        else:
+                            st.session_state.pop("evidence_package_id", None)
+
+                        st.session_state.pop("evidence_package_result", None)
+                        if package is not None:
+                            st.session_state.pop("prospect_analysis", None)
+                            st.session_state.pop("pue_upload_admission", None)
+                            st.session_state.pop("document_closure_result", None)
+                            try:
+                                result = analyze_certified_package(
+                                    package=package,
+                                    prospect_tenant=tenant,
+                                    authenticated=authenticated_tenant_context(st.session_state),
+                                    source_fact_root=(
+                                        STORE_ROOT / tenant.tenant_id / "package_facts"
+                                    ),
+                                )
+                            except Exception as exc:
+                                raise ProspectIntakeError(
+                                    "Certified package analysis failed; "
+                                    "no completed result is available."
+                                ) from exc
+                            st.session_state["evidence_package_result"] = result
                             activate_prospect_workspace(
                                 st.session_state,
-                                expected_fingerprint=admission.fingerprint,
+                                expected_fingerprint=result.admissions[0].fingerprint,
                             )
-                            activate_production_workflow(admission)
-                            st.session_state.pop("pue_upload_admission_error", None)
-                        except Exception:  # noqa: BLE001 - shadow admission is isolated
-                            st.session_state.pop("pue_upload_admission", None)
-                            st.session_state["pue_upload_admission_error"] = (
-                                "Additional governed evidence analysis is temporarily unavailable."
-                            )
-                        if primary_name.lower().endswith((".csv", ".xlsx")):
+                            st.session_state.pop("prospect_analysis_error", None)
+                        else:
                             try:
-                                prospect_analysis = ingest_upload(
+                                authenticated = authenticated_tenant_context(st.session_state)
+                                workspace_authorization = (
+                                    WorkspaceAuthorizationContext.from_authenticated(authenticated)
+                                )
+                                admission = admit_uploaded_evidence(
                                     tenant,
-                                    profile=profile,
                                     filename=primary_name,
                                     content=content,
-                                    actor=actor,
-                                    role=role,
-                                    key=key,
+                                    tenant_context=authenticated,
                                 )
-                                st.session_state["prospect_analysis"] = prospect_analysis
-                                st.session_state.pop("prospect_analysis_error", None)
-                            except ProspectIntakeError as exc:
+                                persist_production_workspace(
+                                    admission,
+                                    prospect_tenant=tenant,
+                                    prospect_name=prospect_name.strip(),
+                                    input_profile=profile,
+                                    authorization=workspace_authorization,
+                                )
+                                closure_context = EvidenceAnalysisContext(
+                                    admission.scope.analysis_id,
+                                    admission.source_id,
+                                    admission.scope.prospect_id,
+                                    admission.scope.organization_id,
+                                    admission.scope.tenant_id,
+                                )
+                                closure = analyze_document_bundle(
+                                    context=closure_context, files=bundle
+                                )
+                                persist_document_closure(
+                                    admission,
+                                    closure,
+                                    prospect_tenant=tenant,
+                                    files=bundle,
+                                    input_profile=profile,
+                                    authorization=workspace_authorization,
+                                )
+                                st.session_state["document_closure_result"] = closure
+                                st.session_state["pue_upload_admission"] = admission
+                                activate_prospect_workspace(
+                                    st.session_state,
+                                    expected_fingerprint=admission.fingerprint,
+                                )
+                                activate_production_workflow(admission)
+                                st.session_state.pop("pue_upload_admission_error", None)
+                            except Exception:  # noqa: BLE001 - shadow admission is isolated
+                                st.session_state.pop("pue_upload_admission", None)
+                                st.session_state["pue_upload_admission_error"] = (
+                                    "Additional governed evidence analysis "
+                                    "is temporarily unavailable."
+                                )
+                            if primary_name.lower().endswith((".csv", ".xlsx")):
+                                try:
+                                    prospect_analysis = ingest_upload(
+                                        tenant,
+                                        profile=profile,
+                                        filename=primary_name,
+                                        content=content,
+                                        actor=actor,
+                                        role=role,
+                                        key=key,
+                                    )
+                                    st.session_state["prospect_analysis"] = prospect_analysis
+                                    st.session_state.pop("prospect_analysis_error", None)
+                                except ProspectIntakeError as exc:
+                                    st.session_state.pop("prospect_analysis", None)
+                                    st.session_state["prospect_analysis_error"] = str(exc)
+                            else:
                                 st.session_state.pop("prospect_analysis", None)
-                                st.session_state["prospect_analysis_error"] = str(exc)
-                        else:
-                            st.session_state.pop("prospect_analysis", None)
-                            st.session_state["prospect_analysis_error"] = (
-                                "Legacy billing compatibility is unavailable for PDF-only "
-                                "evidence; Document Intelligence completed successfully."
-                            )
+                                st.session_state["prospect_analysis_error"] = (
+                                    "Legacy billing compatibility is unavailable for PDF-only "
+                                    "evidence; Document Intelligence completed successfully."
+                                )
                         st.success(
                             "Document Intelligence scanned, encrypted, interpreted, and "
                             "analyzed the evidence."

@@ -52,10 +52,30 @@ def activate_demo_workspace(session: Any) -> None:
     session[ACTIVE_WORKSPACE_CONTEXT_KEY] = EvidenceContextKind.DEMO.value
 
 
+def _package_admission(session: Any):
+    """Keep retained package authority inside its owner and prospect workspace."""
+    package = session.get("evidence_package_result")
+    if package is None or not package.admissions:
+        return None
+    admission = package.admissions[0]
+    organization_id = str(session.get("organization_id") or session.get("org_id") or "")
+    prospect = session.get("prospect_tenant")
+    if (
+        package.owner_id != session.get("user_id")
+        or admission.scope.organization_id != organization_id
+        or admission.scope.tenant_id != organization_id
+        or admission.scope.prospect_id != getattr(prospect, "tenant_id", None)
+    ):
+        return None
+    return admission
+
+
 def activate_prospect_workspace(session: Any, *, expected_fingerprint: str | None = None) -> None:
     """Select only the exact governed analysis already authorized in this session."""
     prospect = session.get("prospect_analysis")
     admission = session.get("pue_upload_admission")
+    if admission is None:
+        admission = _package_admission(session)
     if prospect is None and admission is None:
         raise PermissionError("governed prospect workspace authority is required")
     fingerprint = str(getattr(admission, "fingerprint", "") or "")
@@ -80,6 +100,8 @@ def resolve_active_evidence_context(
     selected = str(session.get(ACTIVE_WORKSPACE_CONTEXT_KEY) or "").strip()
     prospect = session.get("prospect_analysis")
     admission = session.get("pue_upload_admission")
+    if admission is None:
+        admission = _package_admission(session)
     if selected == EvidenceContextKind.PROSPECT.value:
         if prospect is None and admission is None:
             return ActiveEvidenceContext(EvidenceContextKind.UNKNOWN)
@@ -127,6 +149,8 @@ def resolve_active_evidence_context(
 def clear_prospect_context(session: Any) -> None:
     """Explicitly leave the temporary prospect boundary without changing tenant data."""
     for key in (
+        "evidence_package_result",
+        "evidence_package_id",
         "prospect_tenant",
         "prospect_analysis",
         "prospect_name",

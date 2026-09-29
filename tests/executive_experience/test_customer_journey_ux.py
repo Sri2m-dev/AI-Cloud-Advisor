@@ -98,7 +98,8 @@ def test_analysis_exposes_only_certified_live_onboarding_capabilities():
     assert "Service Principal (Certified)" in source
     assert "Access Key and organization-wide authentication are not yet certified" in source
     assert "Managed Identity and management-group onboarding are not yet certified" in source
-    assert "JSON and standalone ZIP are not yet supported" in source
+    assert "Certified packages require manifest.json" in source
+    assert "standalone ZIP is not supported" in source
     assert "Start Discovery" in source
     assert "Continue Analysis" in source
 

@@ -60,8 +60,6 @@ def test_context_switch_clears_governed_and_conversation_state():
 
 
 def test_production_admission_activates_capabilities_without_user_stage_controls():
-    from datetime import datetime, timezone
-
     from tests.universal_evidence.test_pue_governed_measurement_pilot import _admission
     from universal_evidence.activation import (
         ActivationScope,
@@ -75,7 +73,7 @@ def test_production_admission_activates_capabilities_without_user_stage_controls
 
     admission = _admission()
     repository = InMemoryPueActivationRepository()
-    clock = lambda: datetime.now(timezone.utc)  # noqa: E731
+    clock = lambda: admission.created_at  # noqa: E731
     service = PueActivationService(
         repository=repository,
         audit_sink=InMemoryActivationAuditSink(),

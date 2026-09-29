@@ -60,6 +60,7 @@ def admit_uploaded_evidence(
     operations=None,
     operation_context=None,
     tenant_context=None,
+    analysis_id=None,
 ):
     """Admit authorized evidence independently of legacy schema normalization."""
     from universal_evidence.operations import GovernedEventType, Severity, observe
@@ -73,6 +74,7 @@ def admit_uploaded_evidence(
             legacy_analysis=legacy_analysis,
             now=now,
             tenant_context=tenant_context,
+            analysis_id=analysis_id,
         )
     except Exception as exc:
         observe(
@@ -125,15 +127,34 @@ def admit_uploaded_evidence(
 
 
 def _admit_uploaded_evidence(
-    tenant, *, filename, content, legacy_analysis=None, now=None, tenant_context=None
+    tenant,
+    *,
+    filename,
+    content,
+    legacy_analysis=None,
+    now=None,
+    tenant_context=None,
+    analysis_id=None,
 ):
     scan = scan_upload(filename, content)
     now = now or datetime.now(timezone.utc)
     evidence_fingerprint = scan["sha256"]
-    analysis_id = (
-        "pue-upload-analysis-"
-        + fingerprint(tenant.tenant_id, tenant.audit_id, evidence_fingerprint)[:24]
-    )
+    if analysis_id is None:
+        analysis_id = (
+            "pue-upload-analysis-"
+            + fingerprint(
+                tenant.tenant_id,
+                tenant.audit_id,
+                evidence_fingerprint,
+            )[:24]
+        )
+    else:
+        analysis_id = str(analysis_id or "").strip()
+        if not analysis_id:
+            raise ValueError(
+                "analysis_id must be non-empty when supplied"
+            )
+
     source_id = "pue-upload-source-" + evidence_fingerprint[:24]
     organization_id = getattr(tenant_context, "organization_id", None)
     authorized_tenant_id = getattr(tenant_context, "tenant_id", None)

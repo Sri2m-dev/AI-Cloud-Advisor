@@ -110,7 +110,7 @@ def test_multiple_pdf_only_bundle_enters_document_pipeline_without_tabular_ancho
 
 def test_product_page_makes_document_intelligence_primary_and_has_no_anchor_rule():
     source = Path("pages/analyze_environment.py").read_text(encoding="utf-8")
-    assert 'type=["csv", "xlsx", "pdf"]' in source
+    assert 'type=["csv", "xlsx", "pdf", "json"]' in source
     assert "At least one CSV or XLSX file is required" not in source
     assert "Document Intelligence completed automatically" in source
     closure = source.index('closure = st.session_state.get("document_closure_result")')
