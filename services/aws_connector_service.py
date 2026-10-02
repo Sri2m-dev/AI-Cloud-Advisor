@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from connector_auth.aws_runtime import AWSRuntimeSessionProvider
+from connector_auth.runtime_identity import WebIdentityTokenFileSource
 from connectors.aws.aws_credential_manager import (
     AWSConnectedModeConfigurationError,
     validate_external_id,
@@ -32,6 +34,35 @@ class AWSConnectorService:
     CONNECTOR_NAME = "AWS"
 
     @staticmethod
+    def _build_connector(
+        role_arn=None,
+        external_id=None,
+        region="us-east-1",
+        *,
+        runtime_mode="default_chain",
+        bootstrap_role_arn=None,
+        web_identity_token=None,
+        web_identity_token_file=None,
+    ):
+        if runtime_mode == "web_identity" and web_identity_token_file:
+            web_identity_token = WebIdentityTokenFileSource(
+                web_identity_token_file
+            ).token()
+
+        bootstrap_session = AWSRuntimeSessionProvider(
+            mode=runtime_mode,
+            bootstrap_role_arn=bootstrap_role_arn,
+            web_identity_token=web_identity_token,
+        ).session(region=region)
+        return AWSProductionConnector(
+            role_arn,
+            external_id,
+            region,
+            commercial_mode=True,
+            bootstrap_session=bootstrap_session,
+        )
+
+    @staticmethod
     def test_connection(
         role_arn=None,
         external_id=None,
@@ -39,11 +70,10 @@ class AWSConnectorService:
         organization_id: str | None = None,
     ):
         try:
-            connector = AWSProductionConnector(
+            connector = AWSConnectorService._build_connector(
                 role_arn,
                 external_id,
                 region,
-                commercial_mode=True,
             )
             result = connector.test_connection()
         except Exception as exc:
@@ -65,11 +95,10 @@ class AWSConnectorService:
     @staticmethod
     def validate_permissions(role_arn=None, external_id=None, region="us-east-1"):
         try:
-            connector = AWSProductionConnector(
+            connector = AWSConnectorService._build_connector(
                 role_arn,
                 external_id,
                 region,
-                commercial_mode=True,
             )
             return connector.validate_permissions()
         except Exception as exc:
@@ -101,11 +130,10 @@ class AWSConnectorService:
                 organization_id=organization_id,
             )
 
-            connector = AWSProductionConnector(
+            connector = AWSConnectorService._build_connector(
                 effective_role_arn,
                 effective_external_id,
                 effective_region,
-                commercial_mode=True,
             )
 
             accounts = connector.sync_accounts()
@@ -278,11 +306,10 @@ class AWSConnectorService:
 
     @staticmethod
     def preview_live_sync(role_arn=None, external_id=None, region="us-east-1"):
-        connector = AWSProductionConnector(
+        connector = AWSConnectorService._build_connector(
             role_arn,
             external_id,
             region,
-            commercial_mode=True,
         )
 
         accounts = connector.sync_accounts()

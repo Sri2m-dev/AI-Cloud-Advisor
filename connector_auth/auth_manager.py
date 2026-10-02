@@ -1,4 +1,4 @@
-﻿"""Connector authentication manager."""
+"""Connector authentication manager."""
 
 from __future__ import annotations
 
@@ -59,9 +59,20 @@ class AuthenticationManager:
         if credential.auth_type in {ConnectorAuthType.API_KEY, ConnectorAuthType.BEARER_TOKEN}:
             return self.api_key_authenticator.authenticate(credential)
 
+        if credential.auth_type == ConnectorAuthType.AWS_ASSUME_ROLE:
+            return ConnectorAuthContext(
+                auth_type=credential.auth_type,
+                authenticated=False,
+                credential=credential,
+                metadata={
+                    "errors": (
+                        "AWS assume-role authentication requires a real AWS runtime authenticator.",
+                    )
+                },
+            )
+
         if credential.auth_type in {
             ConnectorAuthType.AWS_ACCESS_KEY,
-            ConnectorAuthType.AWS_ASSUME_ROLE,
             ConnectorAuthType.AZURE_SERVICE_PRINCIPAL,
             ConnectorAuthType.AZURE_MANAGED_IDENTITY,
             ConnectorAuthType.BASIC,

@@ -18,12 +18,14 @@ class AWSProductionConnector:
         region="us-east-1",
         *,
         commercial_mode: bool = False,
+        bootstrap_session=None,
     ):
         self.credential_manager = AWSCredentialManager(
             role_arn,
             external_id,
             region,
             require_assume_role=commercial_mode,
+            bootstrap_session=bootstrap_session,
         )
         self.session = self.credential_manager.session()
         self.region = region

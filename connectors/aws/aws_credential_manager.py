@@ -80,11 +80,13 @@ class AWSCredentialManager:
         region: str = "us-east-1",
         *,
         require_assume_role: bool = False,
+        bootstrap_session=None,
     ):
         self.role_arn = role_arn
         self.external_id = external_id
         self.region = region
         self.require_assume_role = require_assume_role
+        self.bootstrap_session = bootstrap_session
 
     def _assume_role_parameters(self) -> dict[str, Any]:
         role_arn, _ = validate_role_arn(self.role_arn)
@@ -109,7 +111,8 @@ class AWSCredentialManager:
 
         params = self._assume_role_parameters()
 
-        sts = boto3.client("sts", region_name=self.region)
+        sts_source = self.bootstrap_session or boto3
+        sts = sts_source.client("sts", region_name=self.region)
         response = sts.assume_role(**params)
         credentials = response["Credentials"]
 
