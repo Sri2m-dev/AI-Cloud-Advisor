@@ -32,5 +32,19 @@ FEATURE_FLAGS = {
 LICENSE_TYPE = os.getenv("CLOUD_ADVISOR_LICENSE", "community")
 LICENSE_KEY = os.getenv("CLOUD_ADVISOR_LICENSE_KEY", "")
 
+# AWS runtime identity
+AWS_RUNTIME_MODE = os.getenv(
+    "NEXORA_AWS_RUNTIME_MODE",
+    "default_chain",
+)
+AWS_BOOTSTRAP_ROLE_ARN = os.getenv(
+    "NEXORA_AWS_BOOTSTRAP_ROLE_ARN",
+    "",
+)
+AWS_WEB_IDENTITY_TOKEN_FILE = os.getenv(
+    "NEXORA_AWS_WEB_IDENTITY_TOKEN_FILE",
+    "",
+)
+
 # Add additional centralized config as needed
 

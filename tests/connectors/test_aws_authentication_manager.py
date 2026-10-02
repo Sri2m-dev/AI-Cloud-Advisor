@@ -387,3 +387,49 @@ def test_aws_connector_service_resolves_web_identity_token_file():
         ),
         web_identity_token="runtime-oidc-token",
     )
+
+def test_aws_connector_service_uses_deployment_runtime_defaults():
+    from unittest.mock import MagicMock, patch
+    from services.aws_connector_service import AWSConnectorService
+
+    bootstrap_session = MagicMock()
+
+    with patch(
+        "services.aws_connector_service.AWS_RUNTIME_MODE",
+        "web_identity",
+        create=True,
+    ), patch(
+        "services.aws_connector_service.AWS_BOOTSTRAP_ROLE_ARN",
+        "arn:aws:iam::123456789012:role/NexoraBootstrapRole",
+        create=True,
+    ), patch(
+        "services.aws_connector_service.AWS_WEB_IDENTITY_TOKEN_FILE",
+        "/var/run/secrets/nexora/token",
+        create=True,
+    ), patch(
+        "services.aws_connector_service.WebIdentityTokenFileSource"
+    ) as token_source_cls, patch(
+        "services.aws_connector_service.AWSRuntimeSessionProvider"
+    ) as runtime_cls, patch(
+        "services.aws_connector_service.AWSProductionConnector"
+    ):
+        token_source_cls.return_value.token.return_value = "runtime-oidc-token"
+        runtime_cls.return_value.session.return_value = bootstrap_session
+
+        AWSConnectorService._build_connector(
+            ROLE_ARN,
+            "nexora-test-external-id-1234567890",
+            "ap-south-1",
+        )
+
+    token_source_cls.assert_called_once_with(
+        "/var/run/secrets/nexora/token"
+    )
+
+    runtime_cls.assert_called_once_with(
+        mode="web_identity",
+        bootstrap_role_arn=(
+            "arn:aws:iam::123456789012:role/NexoraBootstrapRole"
+        ),
+        web_identity_token="runtime-oidc-token",
+    )

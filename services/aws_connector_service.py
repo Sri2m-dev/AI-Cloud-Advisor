@@ -5,6 +5,11 @@ from typing import Any
 
 from connector_auth.aws_runtime import AWSRuntimeSessionProvider
 from connector_auth.runtime_identity import WebIdentityTokenFileSource
+from config.settings import (
+    AWS_BOOTSTRAP_ROLE_ARN,
+    AWS_RUNTIME_MODE,
+    AWS_WEB_IDENTITY_TOKEN_FILE,
+)
 from connectors.aws.aws_credential_manager import (
     AWSConnectedModeConfigurationError,
     validate_external_id,
@@ -39,11 +44,20 @@ class AWSConnectorService:
         external_id=None,
         region="us-east-1",
         *,
-        runtime_mode="default_chain",
+        runtime_mode=None,
         bootstrap_role_arn=None,
         web_identity_token=None,
         web_identity_token_file=None,
     ):
+        runtime_mode = runtime_mode or AWS_RUNTIME_MODE
+        bootstrap_role_arn = (
+            bootstrap_role_arn or AWS_BOOTSTRAP_ROLE_ARN or None
+        )
+        web_identity_token_file = (
+            web_identity_token_file
+            or AWS_WEB_IDENTITY_TOKEN_FILE
+            or None
+        )
         if runtime_mode == "web_identity" and web_identity_token_file:
             web_identity_token = WebIdentityTokenFileSource(
                 web_identity_token_file
