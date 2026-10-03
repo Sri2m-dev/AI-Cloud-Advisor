@@ -279,6 +279,16 @@ def test_report_history_text_identifiers_are_not_converted() -> None:
     assert "alter column tenant_id" not in sql
 
 
+def test_normal_application_supabase_key_excludes_service_role_credentials() -> None:
+    settings = (ROOT / "config" / "settings.py").read_text(encoding="utf-8")
+    supabase_block = settings.split("# Supabase", 1)[1].split("# Feature Flags", 1)[0]
+
+    assert 'os.getenv("SUPABASE_KEY")' in supabase_block
+    assert 'os.getenv("SUPABASE_ANON_KEY")' in supabase_block
+    assert 'os.getenv("SUPABASE_SERVICE_ROLE_KEY")' not in supabase_block
+    assert 'os.getenv("SUPABASE_SERVICE_KEY")' not in supabase_block
+
+
 def test_required_backend_service_role_workflows_remain_present() -> None:
     data_client = (ROOT / "data" / "supabase_client.py").read_text(encoding="utf-8")
     report_service = (
