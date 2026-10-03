@@ -35,8 +35,8 @@ The bundled dataset is disabled by default. Enable it only in a demonstration en
 NEXORA_DEMO_MODE=true
 ```
 
-The authenticated organization ID must begin with `demo-`; the bundled tenant is
-`demo-nexora-global-retail`. The application rejects synthetic data for any other tenant.
+The authenticated organization ID must equal `de000000-0000-4000-8000-000000000020`.
+The application rejects synthetic data for any other tenant.
 The dataset is immutable JSON, is never written to production repositories or marts, and is
 labeled throughout the Executive Experience. Never enable demo mode in customer production.
 

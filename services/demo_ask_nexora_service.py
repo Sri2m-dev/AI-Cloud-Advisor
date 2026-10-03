@@ -115,7 +115,7 @@ class DemoAskNexoraService:
 
     def ask_semantic(self, question, *, organization_id, role, provider, conversation=()):
         payload = load_demo_tenant(organization_id)
-        if organization_id not in (DEMO_ORGANIZATION_ID, payload["organization_id"]):
+        if organization_id != DEMO_ORGANIZATION_ID:
             raise DemoTenantError("demonstration authority is outside the active tenant scope")
         scope = TenantContext(organization_id, organization_id)
         catalogue = self.semantic_catalogue(role)
@@ -319,7 +319,7 @@ class DemoAskNexoraService:
 
     def ask(self, question: str, *, organization_id: str) -> DemoAskResult:
         payload = load_demo_tenant(organization_id)
-        if organization_id not in (DEMO_ORGANIZATION_ID, payload["organization_id"]):
+        if organization_id != DEMO_ORGANIZATION_ID:
             raise DemoTenantError("demonstration authority is outside the active tenant scope")
         intent = self._intent(question)
         if intent == "attention":

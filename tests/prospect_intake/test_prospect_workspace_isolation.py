@@ -14,6 +14,7 @@ from shared.evidence_context import (
     resolve_active_evidence_context,
 )
 from shared.prospect_answers import prospect_evidence_answer
+from services.demo_tenant_service import DEMO_ORGANIZATION_ID
 
 ROOT = Path(__file__).parents[2]
 SYNTHETIC_MARKERS = (
@@ -38,7 +39,7 @@ def test_prospect_context_takes_precedence_over_demo_tenant() -> None:
     analysis = SimpleNamespace(tenant_id="prospect-123")
     context = resolve_active_evidence_context(
         {
-            "organization_id": "demo-nexora-global-retail",
+            "organization_id": DEMO_ORGANIZATION_ID,
             "prospect_analysis": analysis,
         },
         demo_enabled=True,
@@ -54,7 +55,7 @@ def test_resolver_distinguishes_demo_tenant_and_unknown() -> None:
     )
     assert (
         resolve_active_evidence_context(
-            {"organization_id": "demo-nexora-global-retail"}, demo_enabled=True
+            {"organization_id": DEMO_ORGANIZATION_ID}, demo_enabled=True
         ).kind
         is EvidenceContextKind.DEMO
     )
@@ -64,7 +65,7 @@ def test_explicit_demo_context_overrides_retained_prospect_presentation(monkeypa
     monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
     analysis = SimpleNamespace(tenant_id="prospect-retained")
     session = {
-        "organization_id": "demo-nexora-global-retail",
+        "organization_id": DEMO_ORGANIZATION_ID,
         "prospect_analysis": analysis,
     }
     activate_demo_workspace(session)
@@ -81,7 +82,7 @@ def test_explicit_prospect_resume_restores_exact_prospect_context() -> None:
         scope=SimpleNamespace(prospect_id="prospect-123"),
     )
     session = {
-        "organization_id": "demo-nexora-global-retail",
+        "organization_id": DEMO_ORGANIZATION_ID,
         "pue_upload_admission": admission,
         ACTIVE_WORKSPACE_CONTEXT_KEY: EvidenceContextKind.DEMO.value,
     }
@@ -106,7 +107,7 @@ def test_workspace_context_tampering_fails_closed(monkeypatch) -> None:
     assert (
         resolve_active_evidence_context(
             {
-                "organization_id": "demo-nexora-global-retail",
+                "organization_id": DEMO_ORGANIZATION_ID,
                 ACTIVE_WORKSPACE_CONTEXT_KEY: EvidenceContextKind.PROSPECT.value,
             }
         ).kind
@@ -134,12 +135,12 @@ def test_return_to_demo_clears_entire_prospect_boundary() -> None:
         "prospect_name": "ASN",
         "prospect_analysis_error": "old",
         "analysis_start_path": "upload",
-        "organization_id": "demo-nexora-global-retail",
+        "organization_id": DEMO_ORGANIZATION_ID,
     }
     clear_prospect_context(session)
     assert not any(key.startswith("prospect_") for key in session)
     assert "analysis_start_path" not in session
-    assert session["organization_id"] == "demo-nexora-global-retail"
+    assert session["organization_id"] == DEMO_ORGANIZATION_ID
 
 
 def test_every_named_surface_has_a_prospect_first_gate() -> None:

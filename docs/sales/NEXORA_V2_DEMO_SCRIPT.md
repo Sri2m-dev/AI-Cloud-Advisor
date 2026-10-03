@@ -4,7 +4,7 @@
 
 This 35-minute demonstration shows how Nexora turns fragmented technology, finance, risk,
 and architecture evidence into three accountable executive decisions. Use only the isolated
-`demo-nexora-global-retail` tenant with `NEXORA_DEMO_MODE=true`.
+`de000000-0000-4000-8000-000000000020` tenant with `NEXORA_DEMO_MODE=true`.
 
 ## Opening — 3 minutes
 

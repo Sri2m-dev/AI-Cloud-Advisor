@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-DEMO_TENANT_PREFIX = "demo-"
 DEMO_ORGANIZATION_ID = "de000000-0000-4000-8000-000000000020"
 DEMO_ORGANIZATION_NAME = "Nexora Global Retail (Synthetic Demo)"
 DEMO_DATA_PATH = Path(__file__).parents[1] / "data" / "demo" / "nexora_global_retail.json"
@@ -21,7 +20,7 @@ def demo_mode_enabled() -> bool:
 
 def is_demo_tenant(organization_id: str) -> bool:
     normalized = str(organization_id or "").strip().lower()
-    return normalized == DEMO_ORGANIZATION_ID or normalized.startswith(DEMO_TENANT_PREFIX)
+    return normalized == DEMO_ORGANIZATION_ID
 
 
 def load_demo_tenant(organization_id: str) -> dict[str, Any]:
@@ -34,6 +33,6 @@ def load_demo_tenant(organization_id: str) -> dict[str, Any]:
     payload = json.loads(DEMO_DATA_PATH.read_text(encoding="utf-8"))
     if payload.get("classification") != "SYNTHETIC_DEMONSTRATION_DATA":
         raise DemoTenantError("demo dataset classification is missing or invalid")
-    if not str(payload.get("organization_id", "")).startswith(DEMO_TENANT_PREFIX):
+    if str(payload.get("organization_id", "")).strip().lower() != DEMO_ORGANIZATION_ID:
         raise DemoTenantError("demo dataset tenant boundary is invalid")
     return payload

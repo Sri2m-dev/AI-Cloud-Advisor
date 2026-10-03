@@ -29,7 +29,7 @@ def test_attention_question_uses_certified_demo_decisions_with_provenance():
     assert all(
         item["classification"] == "SYNTHETIC_DEMONSTRATION_DATA"
         and item["type"] == "synthetic_demonstration_evidence"
-        and item["organization_id"].startswith("demo-")
+        and item["organization_id"] == DEMO_ORGANIZATION_ID
         for item in result.provenance
     )
 

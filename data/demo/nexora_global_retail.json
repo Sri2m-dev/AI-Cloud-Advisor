@@ -1,6 +1,6 @@
 {
   "classification": "SYNTHETIC_DEMONSTRATION_DATA",
-  "organization_id": "demo-nexora-global-retail",
+  "organization_id": "de000000-0000-4000-8000-000000000020",
   "organization_name": "Nexora Global Retail (Synthetic Demo)",
   "as_of": "2026-08-14T00:00:00Z",
   "source": "Nexora deterministic GA demonstration dataset v2.0",

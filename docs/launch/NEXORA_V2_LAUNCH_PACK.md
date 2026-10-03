@@ -16,7 +16,7 @@ approval evidence tracked in the Launch Readiness Dashboard.
 - [Executive Demo Script](../sales/NEXORA_V2_DEMO_SCRIPT.md)
 - [Buyer FAQ](../sales/NEXORA_V2_BUYER_FAQ.md)
 - [Executable ROI Calculator](../../tools/sales/nexora_roi_calculator.html)
-- Demo tenant: `demo-nexora-global-retail`
+- Demo tenant: `de000000-0000-4000-8000-000000000020`
 - Demo classification: `SYNTHETIC_DEMONSTRATION_DATA`
 
 The demonstration must preserve synthetic-data labeling, `UNKNOWN` semantics, evidence coverage,
