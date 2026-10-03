@@ -66,11 +66,12 @@ def run_executive_workspace(key: str, title: str) -> None:
     if tenant_id == "UNKNOWN":
         st.error("An authenticated tenant context is required.")
         st.stop()
-    render_sidebar_navigation(role)
     if evidence_context.is_prospect:
+        render_sidebar_navigation(role)
         _render_prospect_workspace(key, evidence_context.prospect_analysis)
         return
     authenticated = authenticated_tenant_context(st.session_state)
+    render_sidebar_navigation(role)
     spend_service = enterprise_spend_service()
     try:
         optimization_service = CanonicalOptimizationService()
