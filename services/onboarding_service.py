@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Any
 
 from auth.role_constants import ROLES, normalize_role
+from config import settings
 from database.db import get_db
 from services import audit_service
 
@@ -79,6 +80,15 @@ class OnboardingResult:
 
 
 _EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def local_onboarding_allowed() -> bool:
+    return settings.ENVIRONMENT.strip().lower() != "production"
+
+
+def _require_local_onboarding_allowed() -> None:
+    if not local_onboarding_allowed():
+        raise OnboardingError("Local organization onboarding is disabled in production")
 
 
 def _normalize_email(email: str) -> str:
@@ -209,6 +219,7 @@ def create_organization_and_onboard(
     conn=None,
 ) -> OnboardingResult:
     """Create a new tenant organization and provision the creator as tenant admin."""
+    _require_local_onboarding_allowed()
     normalized_email = _normalize_email(user_email)
     valid_name = _validate_org_name(organization_name)
     canonical_role = normalize_role(admin_role)
@@ -607,6 +618,7 @@ def accept_invitation(
     conn=None,
 ) -> OnboardingResult:
     """Accept an invitation, creating membership strictly in the invited organization."""
+    _require_local_onboarding_allowed()
     normalized_email = _normalize_email(user_email)
     invitation = get_invitation_by_token(token, conn=conn)
 

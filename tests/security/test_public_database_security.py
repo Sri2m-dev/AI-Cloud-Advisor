@@ -298,6 +298,7 @@ def test_required_backend_service_role_workflows_remain_present() -> None:
         ROOT / "scheduler" / "recommendation_jobs.py"
     ).read_text(encoding="utf-8")
 
+    assert 'os.getenv("SUPABASE_SERVICE_ROLE_KEY")' in data_client
     assert 'os.getenv("SUPABASE_SERVICE_KEY")' in data_client
     assert "supabase_admin = supabase" in data_client
     assert ".table(REPORT_HISTORY_TABLE).insert(payload).execute()" in report_service

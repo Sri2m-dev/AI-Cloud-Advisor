@@ -12,6 +12,7 @@ from services.onboarding_service import (
     OnboardingError,
     accept_invitation,
     create_organization_and_onboard,
+    local_onboarding_allowed,
 )
 from shared.session import init_session
 from utils.auth import login_user as supabase_login_user
@@ -153,9 +154,12 @@ if st.session_state.get("authenticated"):
     route_user(role)
 
 else:
-    tab_login, tab_onboard, tab_invite = st.tabs(
-        ["Sign In", "Create Organization", "Accept Invitation"]
-    )
+    if local_onboarding_allowed():
+        tab_login, tab_onboard, tab_invite = st.tabs(
+            ["Sign In", "Create Organization", "Accept Invitation"]
+        )
+    else:
+        (tab_login,) = st.tabs(["Sign In"])
 
     with tab_login:
         username = st.text_input("Username", placeholder="you@example.com", key="login_username")
@@ -203,93 +207,94 @@ else:
                     )
                 st.error("Invalid credentials")
 
-    with tab_onboard:
-        st.subheader("Onboard New Enterprise Organization")
-        st.caption("Create a clean tenant workspace and become organization administrator")
+    if local_onboarding_allowed():
+        with tab_onboard:
+            st.subheader("Onboard New Enterprise Organization")
+            st.caption("Create a clean tenant workspace and become organization administrator")
 
-        with st.form("create_org_form"):
-            onboard_email = st.text_input("Admin Work Email", placeholder="admin@enterprise.com")
-            onboard_org_name = st.text_input("Organization / Company Name", placeholder="Acme Corp")
-            onboard_password = st.text_input(
-                "Admin Password", type="password", placeholder="Enter secure password"
-            )
-            onboard_submit = st.form_submit_button("Create Organization & Workspace", type="primary")
+            with st.form("create_org_form"):
+                onboard_email = st.text_input("Admin Work Email", placeholder="admin@enterprise.com")
+                onboard_org_name = st.text_input("Organization / Company Name", placeholder="Acme Corp")
+                onboard_password = st.text_input(
+                    "Admin Password", type="password", placeholder="Enter secure password"
+                )
+                onboard_submit = st.form_submit_button("Create Organization & Workspace", type="primary")
 
-            if onboard_submit:
-                try:
-                    result = create_organization_and_onboard(
-                        user_email=onboard_email,
-                        organization_name=onboard_org_name,
-                        admin_role="client_admin",
-                        password=onboard_password,
-                    )
-                    if result.success and result.organization:
-                        set_login_session(
-                            email=result.user_email,
-                            role=result.role,
-                            org_id=result.organization.organization_id,
-                            user_id=result.user_email,
+                if onboard_submit:
+                    try:
+                        result = create_organization_and_onboard(
+                            user_email=onboard_email,
+                            organization_name=onboard_org_name,
+                            admin_role="client_admin",
+                            password=onboard_password,
                         )
-                        st.session_state["auth_backend"] = "local"
-                        st.session_state["authorized_organization_ids"] = [
-                            result.organization.organization_id
-                        ]
-                        st.session_state["organization_name"] = result.organization.organization_name
-                        st.success(
-                            f"✅ Organization **{result.organization.organization_name}** successfully created!"
+                        if result.success and result.organization:
+                            set_login_session(
+                                email=result.user_email,
+                                role=result.role,
+                                org_id=result.organization.organization_id,
+                                user_id=result.user_email,
+                            )
+                            st.session_state["auth_backend"] = "local"
+                            st.session_state["authorized_organization_ids"] = [
+                                result.organization.organization_id
+                            ]
+                            st.session_state["organization_name"] = result.organization.organization_name
+                            st.success(
+                                f"✅ Organization **{result.organization.organization_name}** successfully created!"
+                            )
+                            route_user(result.role)
+                        else:
+                            st.error(f"❌ Onboarding failed: {result.error}")
+                    except (OnboardingError, ValueError) as err:
+                        st.error(f"❌ {err}")
+                    except Exception as exc:
+                        st.error(f"❌ Unexpected error during onboarding: {exc}")
+
+        with tab_invite:
+            st.subheader("Join via Invitation")
+            st.caption("Accept a tenant invitation to join an existing organization")
+
+            invite_param = ""
+            try:
+                invite_param = str(st.query_params.get("invite", "")).strip()
+            except Exception:
+                pass
+
+            with st.form("accept_invite_form"):
+                invite_token = st.text_input(
+                    "Invitation Token", value=invite_param, placeholder="Paste invitation token"
+                )
+                invite_email = st.text_input("Your Email", placeholder="you@company.com")
+                invite_password = st.text_input(
+                    "Account Password", type="password", placeholder="Set or enter password"
+                )
+                invite_submit = st.form_submit_button("Accept & Join Organization", type="primary")
+
+                if invite_submit:
+                    try:
+                        result = accept_invitation(
+                            token=invite_token,
+                            user_email=invite_email,
+                            password=invite_password,
                         )
-                        route_user(result.role)
-                    else:
-                        st.error(f"❌ Onboarding failed: {result.error}")
-                except (OnboardingError, ValueError) as err:
-                    st.error(f"❌ {err}")
-                except Exception as exc:
-                    st.error(f"❌ Unexpected error during onboarding: {exc}")
-
-    with tab_invite:
-        st.subheader("Join via Invitation")
-        st.caption("Accept a tenant invitation to join an existing organization")
-
-        invite_param = ""
-        try:
-            invite_param = str(st.query_params.get("invite", "")).strip()
-        except Exception:
-            pass
-
-        with st.form("accept_invite_form"):
-            invite_token = st.text_input(
-                "Invitation Token", value=invite_param, placeholder="Paste invitation token"
-            )
-            invite_email = st.text_input("Your Email", placeholder="you@company.com")
-            invite_password = st.text_input(
-                "Account Password", type="password", placeholder="Set or enter password"
-            )
-            invite_submit = st.form_submit_button("Accept & Join Organization", type="primary")
-
-            if invite_submit:
-                try:
-                    result = accept_invitation(
-                        token=invite_token,
-                        user_email=invite_email,
-                        password=invite_password,
-                    )
-                    if result.success and result.organization:
-                        set_login_session(
-                            email=result.user_email,
-                            role=result.role,
-                            org_id=result.organization.organization_id,
-                            user_id=result.user_email,
-                        )
-                        st.session_state["auth_backend"] = "local"
-                        st.session_state["authorized_organization_ids"] = [
-                            result.organization.organization_id
-                        ]
-                        st.session_state["organization_name"] = result.organization.organization_name
-                        st.success(
-                            f"✅ Joined **{result.organization.organization_name}** as `{result.role}`!"
-                        )
-                        route_user(result.role)
-                    else:
-                        st.error(f"❌ Could not accept invitation: {result.error}")
-                except Exception as err:
-                    st.error(f"❌ {err}")
+                        if result.success and result.organization:
+                            set_login_session(
+                                email=result.user_email,
+                                role=result.role,
+                                org_id=result.organization.organization_id,
+                                user_id=result.user_email,
+                            )
+                            st.session_state["auth_backend"] = "local"
+                            st.session_state["authorized_organization_ids"] = [
+                                result.organization.organization_id
+                            ]
+                            st.session_state["organization_name"] = result.organization.organization_name
+                            st.success(
+                                f"✅ Joined **{result.organization.organization_name}** as `{result.role}`!"
+                            )
+                            route_user(result.role)
+                        else:
+                            st.error(f"❌ Could not accept invitation: {result.error}")
+                    except Exception as err:
+                        st.error(f"❌ {err}")
