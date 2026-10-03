@@ -95,7 +95,8 @@ def test_analysis_is_a_focused_four_step_wizard():
 def test_analysis_exposes_only_certified_live_onboarding_capabilities():
     source = (ROOT / "pages" / "analyze_environment.py").read_text(encoding="utf-8")
     assert "IAM Role (Certified)" in source
-    assert "Service Principal (Certified)" in source
+    assert "Nexora Runtime Identity" in source
+    assert "Client secrets are never stored" in source
     assert "Access Key and organization-wide authentication are not yet certified" in source
     assert "Managed Identity and management-group onboarding are not yet certified" in source
     assert "Certified packages require manifest.json" in source

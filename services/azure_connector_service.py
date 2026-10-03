@@ -4,6 +4,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config import DEFAULT_ORG_ID
+from connectors.azure.azure_credential_manager import (
+    AUTH_METHODS,
+    RUNTIME_IDENTITY,
+    SERVICE_PRINCIPAL,
+    AzureConnectionConfigurationError,
+)
 from connectors.azure.azure_production_connector import AzureProductionConnector
 from connectors.common.normalization import (
     resources_to_discovered_assets,
@@ -28,26 +34,59 @@ class AzureConnectorService:
     CONNECTOR_NAME = "Azure"
 
     @staticmethod
+    def _connector_for(
+        config: dict[str, Any],
+        tenant_id: str | None,
+        client_id: str | None,
+        client_secret: str | None,
+        subscription_id: str | None,
+        auth_method: str | None,
+        secret_ref: str | None,
+    ) -> AzureProductionConnector:
+        # Runtime identity never inherits saved service-principal values.
+        method = auth_method or config.get("auth_method") or SERVICE_PRINCIPAL
+        subscription = (
+            subscription_id if subscription_id is not None else config.get("subscription_id")
+        )
+        if method == RUNTIME_IDENTITY:
+            return AzureProductionConnector(
+                subscription_id=subscription, auth_method=RUNTIME_IDENTITY
+            )
+        return AzureProductionConnector(
+            tenant_id if tenant_id is not None else config.get("tenant_id"),
+            client_id if client_id is not None else config.get("client_id"),
+            client_secret,
+            subscription,
+            auth_method=method,
+            secret_ref=secret_ref if secret_ref is not None else config.get("secret_ref"),
+        )
+
+    @staticmethod
     def test_connection(
         tenant_id: str | None = None,
         client_id: str | None = None,
         client_secret: str | None = None,
         subscription_id: str | None = None,
         organization_id: str | None = None,
+        *,
+        auth_method: str | None = None,
+        secret_ref: str | None = None,
     ) -> dict[str, Any]:
+        """Read-only diagnostic; writes no registry, history, configuration or credentials."""
+        del organization_id
         try:
-            connector = AzureProductionConnector(tenant_id, client_id, client_secret, subscription_id)
-            result = connector.test_connection()
-        except Exception as exc:
-            result = {"status": "FAILED", "error": str(exc)}
-
-        AzureConnectorService._upsert_connector_registry(
-            status=result.get("status", "FAILED"),
-            objects_synced=0,
-            error_message=result.get("error"),
-            organization_id=organization_id,
-        )
-        return result
+            connector = AzureConnectorService._connector_for(
+                {}, tenant_id, client_id, client_secret, subscription_id, auth_method, secret_ref
+            )
+            return connector.test_connection()
+        except AzureConnectionConfigurationError as exc:
+            return {"status": "FAILED", "error": str(exc), "checks": {"authentication": "FAIL"}}
+        except Exception:  # noqa: BLE001 - never surface provider detail to the UI
+            return {
+                "status": "FAILED",
+                "error": "Azure connection could not be established.",
+                "checks": {"authentication": "FAIL"},
+            }
 
     @staticmethod
     def save_config(
@@ -59,13 +98,34 @@ class AzureConnectorService:
         subscription_id: str | None = None,
         sync_frequency: str = "DAILY",
         enabled: bool = True,
+        *,
+        auth_method: str | None = None,
+        secret_ref: str | None = None,
+        connection_name: str | None = None,
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
+        method = auth_method or SERVICE_PRINCIPAL
+        if method not in AUTH_METHODS:
+            return {"status": "FAILED", "error": "Unsupported Azure authentication method."}
         existing = AzureConnectorService.get_config(organization_id)
-        tenant_id = tenant_id if tenant_id is not None else existing.get("tenant_id")
-        client_id = client_id if client_id is not None else existing.get("client_id")
-        client_secret = client_secret if client_secret is not None else existing.get("client_secret")
-        subscription_id = subscription_id if subscription_id is not None else existing.get("subscription_id")
+        if subscription_id is None:
+            subscription_id = existing.get("subscription_id")
+        if connection_name is None:
+            connection_name = existing.get("connection_name")
+        if method == RUNTIME_IDENTITY:
+            tenant_id = client_id = secret_ref = None
+        else:
+            tenant_id = tenant_id if tenant_id is not None else existing.get("tenant_id")
+            client_id = client_id if client_id is not None else existing.get("client_id")
+            secret_ref = secret_ref if secret_ref is not None else existing.get("secret_ref")
+            if not secret_ref:
+                return {
+                    "status": "FAILED",
+                    "error": "Service principal onboarding requires a credential reference; "
+                    "raw client secrets are never stored.",
+                }
+        # client_secret is deliberately never persisted; only a reference is.
+        del client_secret
         payload = {
             "connector_name": AzureConnectorService.CONNECTOR_NAME,
             "organization_id": organization_id,
@@ -76,10 +136,12 @@ class AzureConnectorService:
             "sync_frequency": sync_frequency,
             "enabled": enabled,
             "metadata": {
+                "auth_method": method,
                 "tenant_id": tenant_id,
                 "client_id": client_id,
-                "client_secret": client_secret,
+                "secret_ref": secret_ref,
                 "subscription_id": subscription_id,
+                "connection_name": connection_name,
             },
             "updated_at": now,
         }
@@ -103,10 +165,13 @@ class AzureConnectorService:
             "status": status.get("status"),
             "enabled": status.get("enabled", False),
             "sync_frequency": status.get("sync_frequency", "DAILY"),
+            "auth_method": metadata.get("auth_method"),
             "tenant_id": metadata.get("tenant_id"),
             "client_id": metadata.get("client_id"),
-            "client_secret": metadata.get("client_secret"),
+            "secret_ref": metadata.get("secret_ref"),
+            "legacy_plaintext_secret_present": bool(metadata.get("client_secret")),
             "subscription_id": metadata.get("subscription_id"),
+            "connection_name": metadata.get("connection_name"),
             "last_sync_at": status.get("last_sync_at"),
             "last_error": status.get("last_error"),
             "objects_synced": status.get("objects_synced", 0),
@@ -119,22 +184,18 @@ class AzureConnectorService:
         client_secret: str | None = None,
         subscription_id: str | None = None,
         organization_id: str | None = None,
+        *,
+        auth_method: str | None = None,
+        secret_ref: str | None = None,
     ) -> dict[str, Any]:
         organization_id = AzureConnectorService._resolve_organization_id(organization_id)
         config = AzureConnectorService.get_config(organization_id)
-        effective_tenant_id = tenant_id if tenant_id is not None else config.get("tenant_id")
-        effective_client_id = client_id if client_id is not None else config.get("client_id")
-        effective_client_secret = client_secret if client_secret is not None else config.get("client_secret")
-        effective_subscription_id = subscription_id if subscription_id is not None else config.get("subscription_id")
         started_at = datetime.now(timezone.utc)
 
         try:
             AzureConnectorService._upsert_connector_registry("SYNCING", 0, None, organization_id=organization_id)
-            connector = AzureProductionConnector(
-                effective_tenant_id,
-                effective_client_id,
-                effective_client_secret,
-                effective_subscription_id,
+            connector = AzureConnectorService._connector_for(
+                config, tenant_id, client_id, client_secret, subscription_id, auth_method, secret_ref
             )
             accounts = connector.sync_accounts()
             costs = connector.sync_costs()
@@ -219,19 +280,15 @@ class AzureConnectorService:
         client_secret: str | None = None,
         subscription_id: str | None = None,
         organization_id: str | None = None,
+        *,
+        auth_method: str | None = None,
+        secret_ref: str | None = None,
     ) -> dict[str, Any]:
         config = AzureConnectorService.get_config(organization_id)
-        effective_tenant_id = tenant_id if tenant_id is not None else config.get("tenant_id")
-        effective_client_id = client_id if client_id is not None else config.get("client_id")
-        effective_client_secret = client_secret if client_secret is not None else config.get("client_secret")
-        effective_subscription_id = subscription_id if subscription_id is not None else config.get("subscription_id")
 
         try:
-            connector = AzureProductionConnector(
-                effective_tenant_id,
-                effective_client_id,
-                effective_client_secret,
-                effective_subscription_id,
+            connector = AzureConnectorService._connector_for(
+                config, tenant_id, client_id, client_secret, subscription_id, auth_method, secret_ref
             )
             accounts = connector.sync_accounts()
             costs = connector.sync_costs(days=7)

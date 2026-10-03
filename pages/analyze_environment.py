@@ -102,6 +102,20 @@ from universal_evidence.security import (  # noqa: E402
 )
 
 
+def _render_azure_checks(checks: dict[str, str] | None) -> None:
+    labels = (
+        ("authentication", "Authentication"),
+        ("subscription_access", "Subscription access"),
+        ("resource_discovery", "Resource discovery permission"),
+        ("cost_management", "Cost Management"),
+    )
+    marks = {"PASS": "✓", "FAIL": "✗"}
+    for key, label in labels:
+        state = (checks or {}).get(key, "NOT_TESTED")
+        suffix = " — not tested" if state == "NOT_TESTED" else ""
+        st.markdown(f"{marks.get(state, '○')} {label}{suffix}")
+
+
 def _pipeline(title: str, stages: tuple[tuple[str, str], ...]) -> None:
     st.subheader(title)
     st.markdown(
@@ -696,7 +710,7 @@ if selected_path in {"aws", "azure"} and not cloud_result:
     checks = (
         ("IAM role", "Billing", "Organizations", "Compute", "Storage")
         if selected_path == "aws"
-        else ("Service principal", "Cost Management", "Subscriptions", "Resources", "Advisor")
+        else ("Authentication", "Cost Management", "Subscriptions", "Resources", "Advisor")
     )
     with st.container(border=True):
         st.caption("READ-ONLY CONNECTION")
@@ -952,12 +966,31 @@ if selected_path in {"aws", "azure"} and not cloud_result:
 
                             st.rerun()
         else:
+            azure_method_label = st.radio(
+                "Authentication method",
+                ("Nexora Runtime Identity", "Service Principal"),
+                key="azure_auth_method",
+            )
+            azure_runtime = azure_method_label == "Nexora Runtime Identity"
+            if azure_runtime:
+                st.caption(
+                    "For environments where the Nexora runtime has already been granted "
+                    "read-only access to your Azure subscription."
+                )
+            else:
+                st.caption(
+                    "For customer-controlled Azure application access. Production service "
+                    "principal onboarding requires a governed secret provider; here the "
+                    "credential reference is resolved from the Nexora runtime configuration "
+                    "for local validation only. Client secrets are never stored."
+                )
             with st.form("guided_azure_connection"):
                 connection_name = st.text_input("Connection name", value="Production Azure")
-                st.radio("Authentication method", ("Service Principal (Certified)",))
-                tenant_id = st.text_input("Tenant ID")
-                client_id = st.text_input("Client ID")
-                client_secret = st.text_input("Client Secret", type="password")
+                tenant_id = client_id = secret_ref = ""
+                if not azure_runtime:
+                    tenant_id = st.text_input("Tenant ID")
+                    client_id = st.text_input("Client ID")
+                    secret_ref = st.text_input("Credential reference")
                 subscription_id = st.text_input("Subscription ID")
                 form_actions = st.columns(2)
                 test_azure = form_actions[0].form_submit_button(
@@ -984,26 +1017,36 @@ if selected_path in {"aws", "azure"} and not cloud_result:
                 )
             )
             if test_azure or connect_azure:
+                azure_auth_method = "runtime_identity" if azure_runtime else "service_principal"
                 with st.spinner("Verifying read-only Azure access..."):
                     connection = AzureConnectorService.test_connection(
-                        tenant_id or None,
-                        client_id or None,
-                        client_secret or None,
-                        subscription_id or None,
+                        tenant_id.strip() or None,
+                        client_id.strip() or None,
+                        None,
+                        subscription_id.strip() or None,
                         organization_id=get_current_organization_id(),
+                        auth_method=azure_auth_method,
+                        secret_ref=secret_ref.strip() or None,
                     )
+                _render_azure_checks(connection.get("checks"))
                 if connection.get("status") != "CONNECTED":
-                    st.error("Azure could not verify the supplied read-only identity.")
+                    st.error(
+                        connection.get("error")
+                        or "Azure could not verify the supplied read-only identity."
+                    )
                 else:
                     st.success("Azure connection verified.")
                     if connect_azure:
                         saved = AzureConnectorService.save_config(
                             get_current_organization_id(),
                             get_current_user_id(),
-                            tenant_id or None,
-                            client_id or None,
-                            client_secret or None,
-                            subscription_id or None,
+                            tenant_id.strip() or None,
+                            client_id.strip() or None,
+                            None,
+                            subscription_id.strip() or None,
+                            auth_method=azure_auth_method,
+                            secret_ref=secret_ref.strip() or None,
+                            connection_name=connection_name.strip() or None,
                         )
                         if saved.get("status") != "SAVED":
                             st.error("Azure configuration could not be saved.")

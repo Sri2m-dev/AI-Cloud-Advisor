@@ -16,8 +16,20 @@ class AzureProductionConnector:
         client_id: str | None = None,
         client_secret: str | None = None,
         subscription_id: str | None = None,
+        *,
+        auth_method: str | None = None,
+        secret_ref: str | None = None,
+        secret_provider=None,
     ):
-        self.credential_manager = AzureCredentialManager(tenant_id, client_id, client_secret, subscription_id)
+        self.credential_manager = AzureCredentialManager(
+            tenant_id,
+            client_id,
+            client_secret,
+            subscription_id,
+            auth_method=auth_method,
+            secret_ref=secret_ref,
+            secret_provider=secret_provider,
+        )
         self.credential = self.credential_manager.credential()
         self.subscription_id = subscription_id
 
