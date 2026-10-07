@@ -28,7 +28,7 @@ def test_analysis_journey_uses_certified_paths_and_truthful_gcp_limit():
     assert "AWSConnectorService.test_connection" in source
     assert "AWSConnectorService.sync_all" in source
     assert "AzureConnectorService.test_connection" in source
-    assert "AzureConnectorService.sync_all" in source
+    assert "AzureConnectorService.discover_to_data_fabric" in source
     assert "Live connection is not yet certified" in source
     assert "Nexora does not simulate progress" in source
 
@@ -71,7 +71,8 @@ def test_analysis_executes_existing_connector_and_intake_services_inline():
     assert "prospect_encryption_key" in source
     assert "AWSConnectorService.save_config" in source
     assert "AzureConnectorService.save_config" in source
-    assert source.count("organization_id=get_current_organization_id()") >= 4
+    assert "tenant_context = authenticated_tenant_context(st.session_state)" in source
+    assert "tenant_context.organization_id" in source
     assert '("Malware scan", "Passed")' in source
     assert '("Schema", "Validated")' in source
     assert "Business services completed" not in source
@@ -103,6 +104,15 @@ def test_analysis_exposes_only_certified_live_onboarding_capabilities():
     assert "standalone ZIP is not supported" in source
     assert "Start Discovery" in source
     assert "Continue Analysis" in source
+
+
+def test_azure_start_discovery_uses_authenticated_canonical_path_only():
+    source = (ROOT / "pages" / "analyze_environment.py").read_text(encoding="utf-8")
+    assert 'tenant_context = authenticated_tenant_context(st.session_state)' in source
+    assert 'disabled=not azure_runtime' in source
+    assert 'AzureConnectorService.discover_to_data_fabric(' in source
+    assert 'enabled=False' in source
+    assert 'AzureConnectorService.sync_all' not in source
 
 
 def test_analysis_completion_uses_returned_evidence_not_synthetic_progress():

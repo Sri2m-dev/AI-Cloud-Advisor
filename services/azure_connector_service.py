@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from config import DEFAULT_ORG_ID
+from auth.authenticated_tenant import AuthenticatedTenantContext
+from auth.connector_context import CONNECTOR_ADMIN_ROLES
+from connector_adapters.azure_source_fact_mapper import AzureSourceFactMapper
 from connectors.azure.azure_credential_manager import (
     AUTH_METHODS,
     RUNTIME_IDENTITY,
@@ -27,11 +31,144 @@ from connectors.common.persistence import (
     upsert_technology_relationships,
 )
 from connectors.common.tenant_guard import resolve_organization_id, with_organization
+from data_fabric.foundation import TenantContext
+from data_fabric.source_facts.models import (
+    FactType,
+    LifecycleState,
+    RunMode,
+    RunStatus,
+    SourceInstance,
+)
+from data_fabric.source_facts.persistence import SQLiteSourceFactRepository
+from data_fabric.source_facts.service import SourceFactService
+from enterprise_registry.source_fact_projection import (
+    GovernedCanonicalProjectionService,
+    configured_supabase_atomic_executor,
+)
+from services.demo_tenant_service import is_demo_tenant
 from services.supabase_client import supabase
 
 
 class AzureConnectorService:
     CONNECTOR_NAME = "Azure"
+
+    @staticmethod
+    def _build_canonical_projection_executor():
+        return configured_supabase_atomic_executor()
+
+    @staticmethod
+    def discover_to_data_fabric(
+        context: AuthenticatedTenantContext,
+        subscription_id: str,
+        *,
+        source_fact_repository=None,
+        canonical_executor=None,
+        connector_factory=None,
+    ) -> dict[str, Any]:
+        if not isinstance(context, AuthenticatedTenantContext):
+            raise PermissionError("An authenticated tenant context is required.")
+        if context.role not in CONNECTOR_ADMIN_ROLES:
+            raise PermissionError("Connector administrator authority is required.")
+        if is_demo_tenant(context.organization_id):
+            raise PermissionError("Live Azure discovery is unavailable in the synthetic demo tenant.")
+        subscription_id = str(subscription_id or "").strip()
+        if not subscription_id:
+            return {"status": "FAILED", "error": "An Azure Subscription ID is required."}
+
+        connector_factory = connector_factory or AzureProductionConnector
+        connector = connector_factory(
+            subscription_id=subscription_id,
+            auth_method=RUNTIME_IDENTITY,
+        )
+        connection = connector.test_connection()
+        if connection.get("status") != "CONNECTED":
+            return {
+                "status": "FAILED",
+                "error": connection.get("error") or "Azure subscription access was not verified.",
+                "checks": connection.get("checks", {}),
+            }
+
+        accounts = connector.sync_accounts()
+        resources = connector.sync_resources()
+        mapper = AzureSourceFactMapper()
+        mapped = mapper.map_resources(accounts, resources)
+        source_fact_repository = source_fact_repository or AzureConnectorService._source_fact_repository()
+        canonical_executor = (
+            canonical_executor or AzureConnectorService._build_canonical_projection_executor()
+        )
+
+        instance_id = str(
+            uuid5(
+                NAMESPACE_URL,
+                f"azure:{context.organization_id}:{context.tenant_id}:{subscription_id}",
+            )
+        )
+        instance = SourceInstance(
+            source_instance_id=instance_id,
+            organization_id=context.organization_id,
+            tenant_id=context.tenant_id,
+            source_type="cloud_api",
+            source_system="azure",
+            connector_type="azure_production",
+            connector_version="1.0",
+            configuration_reference=f"azure-subscription:{subscription_id}",
+            credential_reference=None,
+            enabled=True,
+        )
+        tenant_context = context.fabric_context
+        source_service = SourceFactService(tenant_context, source_fact_repository)
+        source_service.register(instance)
+        run_id = str(uuid4())
+        publication = source_service.publish(
+            instance,
+            tuple(item.source_fact for item in mapped),
+            run_id=run_id,
+            mode=RunMode.FULL,
+            status=RunStatus.SUCCESS,
+            schema={"azure_resource_identity": "1"},
+            correlation_id=run_id,
+        )
+        if publication.status is not RunStatus.SUCCESS or publication.quarantined:
+            return {"status": "FAILED", "error": "Azure SourceFact publication was rejected."}
+
+        current_facts = source_fact_repository.list_current_facts(
+            context.organization_id,
+            context.tenant_id,
+        )
+        candidates = tuple(
+            mapper.projection_candidate(fact)
+            for fact in current_facts
+            if fact.source_instance_id == instance_id
+            and fact.source_system == "azure"
+            and fact.fact_type is FactType.RESOURCE_IDENTITY
+            and fact.lifecycle is LifecycleState.ACTIVE
+        )
+        projector = GovernedCanonicalProjectionService(
+            tenant_context,
+            canonical_executor,
+            entity_rules=mapper.projection_rules(),
+        )
+        projected = projector.project_entities(candidates)
+        return {
+            "status": "SUCCESS",
+            "accounts": len(accounts),
+            "costs": 0,
+            "resources": len(resources),
+            "assets_discovered": len(projected),
+            "recommendations": 0,
+            "objects_synced": len(publication.facts),
+            "source_facts_published": len(publication.facts),
+            "canonical_entities_projected": len(projected),
+            "canonical_relationships_projected": 0,
+            "run_id": run_id,
+        }
+
+    @staticmethod
+    def _source_fact_repository():
+        database = os.getenv("NEXORA_UNIVERSAL_EVIDENCE_DB", "").strip()
+        if not database:
+            raise RuntimeError("The tenant-scoped SourceFact database is not configured.")
+        return SQLiteSourceFactRepository(database)
 
     @staticmethod
     def _connector_for(

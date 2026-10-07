@@ -42,11 +42,11 @@ class SupabaseDataFabricClient:
         return self._raw_client
 
     def table(self, table_name: str) -> SupabaseTableOperation:
-        qualified = f"{self.config.schema_name}.{table_name}"
-        return self.raw_client.table(qualified)
+        return self.raw_client.schema(self.config.schema_name).table(table_name)
 
     def rpc(self, function_name: str, params: dict[str, Any]) -> Any:
-        return self.raw_client.rpc(function_name, params).execute()
+        schema_client = self.raw_client.schema(self.config.schema_name)
+        return schema_client.rpc(function_name, params).execute()
 
     def execute(self, operation: Callable[[], Any]) -> Any:
         attempts = self.config.max_retries + 1

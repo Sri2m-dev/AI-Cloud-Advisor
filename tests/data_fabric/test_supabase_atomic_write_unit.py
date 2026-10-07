@@ -191,6 +191,7 @@ def relationship_request(operation: str = "create", expected_revision: int | Non
 
 def only_rpc(raw: FakeRawSupabaseClient) -> tuple[str, dict]:
     assert len(raw.rpc_calls) == 1
+    assert raw.rpc_schemas == ["data_fabric"]
     assert raw.executed_filters == []
     return raw.rpc_calls[0]
 
@@ -200,6 +201,7 @@ def test_entity_create_serialization_and_success_mapping():
     result = executor(raw).execute_entity_write(entity_request())
     name, params = only_rpc(raw)
     assert name == "data_fabric_atomic_entity_write"
+    assert raw.table_schemas == []
     request = params["p_request"]
     assert request["operation"] == "create"
     assert request["tenant_context"] == {"organization_id": "org-1", "tenant_id": "tenant-1"}

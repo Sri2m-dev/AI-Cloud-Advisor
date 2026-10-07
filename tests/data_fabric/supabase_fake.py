@@ -12,6 +12,20 @@ class FakeResponse:
         self.error = error
 
 
+class FakeSchemaClient:
+    def __init__(self, raw_client: "FakeRawSupabaseClient", schema_name: str) -> None:
+        self.raw_client = raw_client
+        self.schema_name = schema_name
+
+    def rpc(self, function_name: str, params: dict[str, Any]) -> "FakeRpcOperation":
+        self.raw_client.rpc_schemas.append(self.schema_name)
+        return self.raw_client.rpc(function_name, params)
+
+    def table(self, table_name: str) -> "FakeTable":
+        self.raw_client.table_schemas.append(self.schema_name)
+        return self.raw_client.table(f"{self.schema_name}.{table_name}")
+
+
 PRIMARY_KEYS = {
     "data_fabric.enterprise_relationships": "id",
     "data_fabric.entity_versions": "snapshot_id",
@@ -226,6 +240,8 @@ class FakeRawSupabaseClient:
         }
         self.executed_filters: list[tuple[str, tuple[tuple[str, Any], ...]]] = []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
+        self.rpc_schemas: list[str] = []
+        self.table_schemas: list[str] = []
         self.rpc_results: dict[str, Any] = {}
         self.rpc_errors: dict[str, Any] = {}
 
@@ -234,6 +250,9 @@ class FakeRawSupabaseClient:
 
     def rpc(self, function_name: str, params: dict[str, Any]) -> FakeRpcOperation:
         return FakeRpcOperation(self, function_name, params)
+
+    def schema(self, schema_name: str) -> FakeSchemaClient:
+        return FakeSchemaClient(self, schema_name)
 
     def insert_error(self, table_name: str, row: dict[str, Any]) -> str | None:
         rows = self.tables.setdefault(table_name, [])

@@ -5,7 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from data_fabric.adapters.supabase import (
+    DataFabricDatabaseConfig,
+    SupabaseDataFabricClient,
+    SupabaseEntityRepository,
+    SupabaseRelationshipRepository,
+)
 from data_fabric.foundation import TenantContext
+from data_fabric.persistence.models import PageRequest, RepositoryQuery
 from database.db import get_db
 from enterprise_registry.adapters import (
     ApplicationEnterpriseAdapter,
@@ -130,6 +137,73 @@ class SupabaseEnterpriseRegistrySource:
             return tuple(dict(row) for row in response.data or ())
         except Exception:
             return ()
+
+
+class CanonicalDataFabricRegistrySource:
+    """Read canonical entities and relationships within an explicit tenant scope."""
+
+    def __init__(
+        self,
+        entity_repository,
+        relationship_repository,
+        *,
+        page_size: int = 500,
+    ) -> None:
+        if page_size < 1:
+            raise ValueError("page_size must be positive")
+        self.entity_repository = entity_repository
+        self.relationship_repository = relationship_repository
+        self.page_size = page_size
+
+    @classmethod
+    def from_supabase(cls, url: str, service_role_key: str):
+        config = DataFabricDatabaseConfig(
+            url,
+            service_role_key,
+            enable_health_check=False,
+        )
+        client = SupabaseDataFabricClient(config)
+        return cls(
+            SupabaseEntityRepository(client),
+            SupabaseRelationshipRepository(client),
+        )
+
+    def entities(self, context: TenantContext):
+        if not isinstance(context, TenantContext):
+            raise PermissionError("Explicit Data Fabric tenant context is required")
+        records = self._records(self.entity_repository, context)
+        entities = []
+        for record in records:
+            entity = self.entity_repository.mapper.record_to_domain(record)
+            context.assert_record_matches(entity, "canonical entity")
+            entities.append(entity)
+        return tuple(entities)
+
+    def relationships(self, context: TenantContext):
+        if not isinstance(context, TenantContext):
+            raise PermissionError("Explicit Data Fabric tenant context is required")
+        records = self._records(self.relationship_repository, context)
+        relationships = []
+        for record in records:
+            relationship = self.relationship_repository.mapper.record_to_domain(record)
+            context.assert_record_matches(relationship, "canonical relationship")
+            relationships.append(relationship)
+        return tuple(relationships)
+
+    def _records(self, repository, context: TenantContext):
+        records = []
+        offset = 0
+        while True:
+            query = RepositoryQuery(
+                context,
+                page=PageRequest(offset=offset, limit=self.page_size),
+            )
+            page = repository.search(query)
+            records.extend(page.items)
+            if len(page.items) < self.page_size:
+                break
+            offset += self.page_size
+        return tuple(records)
 
 
 class SupabaseEntityFinancialContext:

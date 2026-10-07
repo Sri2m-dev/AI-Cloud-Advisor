@@ -710,7 +710,13 @@ if selected_path in {"aws", "azure"} and not cloud_result:
     checks = (
         ("IAM role", "Billing", "Organizations", "Compute", "Storage")
         if selected_path == "aws"
-        else ("Authentication", "Cost Management", "Subscriptions", "Resources", "Advisor")
+        else (
+            "Authentication",
+            "Subscription access",
+            "Resource discovery",
+            "SourceFacts",
+            "Canonical Data Fabric",
+        )
     )
     with st.container(border=True):
         st.caption("READ-ONLY CONNECTION")
@@ -997,23 +1003,26 @@ if selected_path in {"aws", "azure"} and not cloud_result:
                     "Test Connection", use_container_width=True
                 )
                 connect_azure = form_actions[1].form_submit_button(
-                    "Start Discovery", type="primary", use_container_width=True
+                    "Start Discovery",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not azure_runtime,
                 )
                 st.caption(
                     "Managed Identity and management-group onboarding are not yet certified "
                     "for this live onboarding path."
                 )
+                if not azure_runtime:
+                    st.caption(
+                        "Canonical discovery is currently available only with Nexora Runtime Identity."
+                    )
             _render_certified_scope(
                 (
                     "Subscription identity",
-                    "Cost Management",
                     "Resource groups",
                     "Virtual machines",
                     "Storage accounts",
                     "Virtual networks",
-                    "SQL databases",
-                    "AKS clusters",
-                    "Load balancers",
                 )
             )
             if test_azure or connect_azure:
@@ -1037,38 +1046,45 @@ if selected_path in {"aws", "azure"} and not cloud_result:
                 else:
                     st.success("Azure connection verified.")
                     if connect_azure:
-                        saved = AzureConnectorService.save_config(
-                            get_current_organization_id(),
-                            get_current_user_id(),
-                            tenant_id.strip() or None,
-                            client_id.strip() or None,
-                            None,
-                            subscription_id.strip() or None,
-                            auth_method=azure_auth_method,
-                            secret_ref=secret_ref.strip() or None,
-                            connection_name=connection_name.strip() or None,
-                        )
-                        if saved.get("status") != "SAVED":
-                            st.error("Azure configuration could not be saved.")
+                        tenant_context = authenticated_tenant_context(st.session_state)
+                        if is_demo_tenant(tenant_context.organization_id):
+                            st.error("Live Azure discovery is unavailable in the synthetic demo tenant.")
                         else:
-                            _step_header(
-                                3,
-                                "Analyze environment",
-                                "Only service-backed results are marked complete.",
+                            saved = AzureConnectorService.save_config(
+                                tenant_context.organization_id,
+                                tenant_context.user_id,
+                                subscription_id=subscription_id.strip() or None,
+                                auth_method="runtime_identity",
+                                connection_name=connection_name.strip() or None,
+                                enabled=False,
                             )
-                            with st.spinner(
-                                "Discovering Azure accounts, costs, resources, and "
-                                "recommendations..."
-                            ):
-                                result = AzureConnectorService.sync_all(
-                                    organization_id=get_current_organization_id()
+                            if saved.get("status") != "SAVED":
+                                st.error("Azure configuration could not be saved.")
+                            else:
+                                _step_header(
+                                    3,
+                                    "Analyze environment",
+                                    "Azure resources will be published as tenant-scoped evidence.",
                                 )
-                            st.session_state["environment_analysis_result"] = {
-                                "provider": "Azure",
-                                "connection_name": connection_name.strip() or "Azure",
-                                **result,
-                            }
-                            st.rerun()
+                                with st.spinner(
+                                    "Discovering Azure resources into SourceFacts and canonical Data Fabric..."
+                                ):
+                                    result = AzureConnectorService.discover_to_data_fabric(
+                                        tenant_context,
+                                        subscription_id.strip(),
+                                    )
+                                if result.get("status") != "SUCCESS":
+                                    st.error(
+                                        result.get("error")
+                                        or "Azure resources could not be published to canonical Data Fabric."
+                                    )
+                                else:
+                                    st.session_state["environment_analysis_result"] = {
+                                        "provider": "Azure",
+                                        "connection_name": connection_name.strip() or "Azure",
+                                        **result,
+                                    }
+                                    st.rerun()
 
 if (
     selected_path == "upload"
