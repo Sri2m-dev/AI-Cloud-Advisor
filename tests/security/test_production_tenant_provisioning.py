@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +23,10 @@ ORG_ID = "12345678-1234-4234-8234-123456789abc"
 REQUEST_ID = "CHANGE-PO2-001"
 ORG_NAME = "Northwind Retail"
 EMAIL = "admin@example.com"
+ROOT = Path(__file__).resolve().parents[2]
+LEGACY_AUTH_TRIGGER_MIGRATION = (
+    ROOT / "supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql"
+)
 
 
 @dataclass
@@ -199,6 +204,25 @@ def test_success_uses_org_profile_invite_order_and_keeps_profile_uuid_independen
     assert profile_payload == {"email": EMAIL, "org_id": ORG_ID, "role": "client_admin"}
     assert "id" not in profile_payload
     assert profiles.rows[EMAIL]["id"] != auth.pages[1][0].id
+
+
+def test_legacy_auth_trigger_migration_only_drops_the_trigger_transactionally():
+    import re
+
+    sql = LEGACY_AUTH_TRIGGER_MIGRATION.read_text(encoding="utf-8")
+    executable_sql = re.sub(r"--.*?$", "", sql, flags=re.MULTILINE)
+    normalized_sql = " ".join(executable_sql.lower().split())
+
+    assert normalized_sql == (
+        "begin; drop trigger if exists on_auth_user_created on auth.users; commit;"
+    )
+    assert not re.search(r"\bdrop\s+function\b", normalized_sql)
+    assert not re.search(
+        r"\b(?:insert\s+into|update|delete\s+from)\s+"
+        r"(?:public\.(?:users|organizations)|auth\.users)\b",
+        normalized_sql,
+    )
+    assert "71cf875a-2103-47a0-8886-41a97c5750ec" not in normalized_sql
 
 
 def test_complete_state_is_already_complete_without_mutations():
