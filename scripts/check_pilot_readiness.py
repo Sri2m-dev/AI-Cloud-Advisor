@@ -8,16 +8,14 @@ certification.
 from __future__ import annotations
 
 import hashlib
-import os
 import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_MANIFEST_SHA256 = (
-    "4D9E0DE8EF1E19FE600605E8DC9FEA61C226442111E4A27F6F1724290EF190C0"
+    "D315B6ABB89BDA4CAC5290FB90464B262082CA86CB6A82C275155216D1F721AC"
 )
 
 REQUIRED_FILES = (

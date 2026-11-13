@@ -166,6 +166,9 @@ def test_discovery_publishes_and_projects_explicit_tenant_without_legacy_writes(
     assert result["source_facts_published"] == 2
     assert result["canonical_entities_projected"] == 2
     assert result["canonical_relationships_projected"] == 0
+    assert result["discovery_status"] == "SUCCESS"
+    assert result["financial_ingestion_status"] == "NOT_PERFORMED"
+    assert result["dashboard_readiness"] == "UNKNOWN"
     assert repeated["source_facts_published"] == 0
     assert repeated["canonical_entities_projected"] == 2
     assert FakeConnector.calls == [

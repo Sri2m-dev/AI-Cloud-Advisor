@@ -177,6 +177,7 @@ def application_inventory(
 def build_inventory() -> dict:
     records, definitions = sql_inventory(sorted(set(tracked(".sql")) | {PREREQUISITES}))
     calls, dynamic, constants = application_inventory(tracked(".py"), definitions)
+    contract = bootstrap_contract()
     used = {c["object"] for c in constants}
     used.update(n for c in calls for n in c["definition_candidates"])
     dated = [r for r in records if r["path"].startswith("supabase/migrations/")]
@@ -255,7 +256,8 @@ def build_inventory() -> dict:
         )
         available.update(created)
     return {
-        "status": bootstrap_contract()["status"],
+        "status": contract["status"],
+        "blockers": contract["blockers"],
         "limitations": [
             (
                 "Lexical SQL and Python AST inventory, not PostgreSQL execution or "
@@ -320,8 +322,17 @@ def bootstrap_contract():
         numbers = [int(Path(p).name[:4]) for p in chains[prefix]]
         if numbers != list(range(1, max(expected, len(numbers)) + 1)):
             blockers.append("Missing or unordered chain: " + prefix)
-    if len(chains["supabase/migrations/"]) < 17:
-        blockers.append("Required dated v1 migration chain is incomplete")
+    public_migrations = chains["supabase/migrations/"]
+    expected_october_migrations = {
+        "supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql",
+        "supabase/migrations/202610110001_bind_user_profiles_to_auth_uid.sql",
+    }
+    if len(public_migrations) != 19 or not expected_october_migrations <= set(public_migrations):
+        blockers.append(
+            "Required dated public migration inventory must contain all 19 current migrations"
+        )
+    if public_migrations != sorted(public_migrations):
+        blockers.append("Dated public migrations are not in lexical timestamp order")
     missing = [p for p in paths if not (ROOT / p).is_file()]
     blockers.extend("Missing migration: " + p for p in missing)
     available = {"auth.jwt", "auth.uid", "auth.role", "auth.users"}
@@ -352,11 +363,28 @@ def bootstrap_contract():
     ):
         if not (ROOT / path).is_file():
             blockers.append("Missing local persistence initializer: " + path)
+    blockers.extend(
+        [
+            (
+                "The application schema contract is incomplete; Supabase runtime "
+                "verification is pending."
+            ),
+        ]
+    )
     return {
-        "status": "BLOCKED" if blockers else "READY_FOR_REPLAY",
+        "status": "BLOCKED",
         "blockers": blockers,
-        "validation": "Static ordered-definition and migration-completeness checks only",
-        "postgres_replay": "NOT_EXECUTED",
+        "validation": (
+            "Static ordered-definition and migration-inventory checks plus a "
+            "network-disabled test-only replay of all 43 PostgreSQL inputs; "
+            "not full application or Supabase runtime certification"
+        ),
+        "postgres_replay": "PASS_TEST_ONLY_LOCAL_NETWORK_DISABLED",
+        "prior_postgres_replay": (
+            "Current branch test-only replay passed all 43 PostgreSQL inputs, "
+            "catalog assertions, and synthetic tenant assertions; no Supabase "
+            "runtime or full application schema certification."
+        ),
         "external_prerequisites": [
             "Supabase auth schema/functions and roles",
             "Empty public application schema",
@@ -368,13 +396,15 @@ def build_manifest() -> dict:
     contract = bootstrap_contract()
     return {
         "defect": "V1_1_ACCEPTANCE_C",
-        "status": contract["status"],
-        "executable": not contract["blockers"],
+        "status": "BLOCKED",
+        "executable": False,
         "hash_format": (
             "SHA-256 of UTF-8 SQL text with LF newlines; portable across Git " "EOL conversion"
         ),
         "reason": (
-            "Current canonical authority chains; legacy inventory is not a " "deployment allowlist."
+            "The 43-file PostgreSQL chain passed only a disposable local test replay; "
+            "the application schema remains incomplete and Supabase runtime "
+            "verification is pending."
         ),
         "blockers": contract["blockers"],
         "contract": contract,
@@ -457,7 +487,8 @@ def main() -> None:
         ("schema_inventory.json", build_inventory()),
         ("migration_manifest.json", build_manifest()),
     ]:
-        (args.output_dir / name).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        serialized = json.dumps(data, indent=2, sort_keys=name == "schema_inventory.json")
+        (args.output_dir / name).write_text(serialized + "\n", encoding="utf-8")
     print(
         "Offline inventory written. Deployment status: "
         + build_manifest()["status"]

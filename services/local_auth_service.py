@@ -99,6 +99,8 @@ def local_auth_enabled(
     mode = str(auth_mode if auth_mode is not None else os.getenv("AUTH_MODE", "")).strip().lower()
     if mode in {"dev", "demo", "local"}:
         return True
+    if mode in {"supabase", "external"}:
+        return False
     url = os.getenv("SUPABASE_URL", "") if supabase_url is None else supabase_url
     key = (
         os.getenv("SUPABASE_SERVICE_ROLE_KEY")

@@ -12,6 +12,7 @@ Jobs:
 """
 
 import logging
+import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -23,6 +24,8 @@ scheduler = None
 def init_scheduler():
     """Initialize and start the background scheduler."""
     global scheduler
+    if os.getenv("ENVIRONMENT", "").lower() in {"prod", "production"}:
+        raise RuntimeError("Production application scheduling belongs to Celery Beat only")
 
     scheduler = BackgroundScheduler()
 

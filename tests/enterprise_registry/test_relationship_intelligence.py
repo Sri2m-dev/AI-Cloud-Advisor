@@ -54,6 +54,7 @@ def _edge(identifier, relationship_type, source, target, context=CTX, evidence=(
         target_entity_id=target.id,
         organization_id=context.organization_id,
         tenant_id=context.tenant_id,
+        decision_state="confirmed",  # Explicit synthetic authoritative fixture.
         source_system="cmdb",
         source_identifier=identifier,
         evidence=evidence,
@@ -187,8 +188,12 @@ def test_relationship_queries_use_half_open_effective_intervals():
         CTX, role="auditor", entities=(account, application, service), relationships=(first, second)
     )
 
-    assert [row.id for row in intelligence.get_relationships(application.canonical_id, effective_at=jan)] == ["owner-x"]
-    assert [row.id for row in intelligence.get_relationships(application.canonical_id, effective_at=jul)] == ["owner-y"]
+    assert [
+        row.id for row in intelligence.get_relationships(application.canonical_id, effective_at=jan)
+    ] == ["owner-x"]
+    assert [
+        row.id for row in intelligence.get_relationships(application.canonical_id, effective_at=jul)
+    ] == ["owner-y"]
 
 
 def test_search_and_performance_targets():

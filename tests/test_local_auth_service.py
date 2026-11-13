@@ -6,6 +6,31 @@ from auth.authenticated_tenant import AuthenticatedTenantError
 from services import enterprise_spend_composition, local_auth_service
 
 
+@pytest.mark.parametrize("auth_mode", ["supabase", "external"])
+def test_explicit_external_auth_mode_never_falls_back_to_local_auth(auth_mode):
+    assert (
+        local_auth_service.local_auth_enabled(
+            environment="development",
+            auth_mode=auth_mode,
+            supabase_url="http://auth-gateway:8000",
+            supabase_key="synthetic-local-anon-key",
+        )
+        is False
+    )
+
+
+def test_invalid_supabase_configuration_does_not_override_explicit_local_mode():
+    assert (
+        local_auth_service.local_auth_enabled(
+            environment="development",
+            auth_mode="dev",
+            supabase_url="",
+            supabase_key="",
+        )
+        is True
+    )
+
+
 def test_default_admin_is_seeded_once_with_hashed_password(monkeypatch, tmp_path):
     database_path = tmp_path / "auth.db"
 

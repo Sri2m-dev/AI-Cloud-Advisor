@@ -45,6 +45,25 @@ def _dedupe(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> list[dict[str,
 
 class ApplicationPortfolioService:
     @staticmethod
+    def get_portfolio(context, *, source=None):
+        """Read-only active page composition; never invokes financial materialization."""
+        from repositories.application_portfolio_repository import PortfolioUnavailable
+
+        try:
+            applications = ApplicationPortfolioRepository.get_applications(context, source=source)
+        except PortfolioUnavailable:
+            return {
+                "status": "NOT_AVAILABLE",
+                "applications": None,
+                "financial": ApplicationPortfolioRepository.get_application_spend(context),
+            }
+        return {
+            "status": "AVAILABLE",
+            "applications": applications,
+            "financial": ApplicationPortfolioRepository.get_application_spend(context),
+        }
+
+    @staticmethod
     def get_applications() -> list[dict[str, Any]]:
         return ApplicationPortfolioRepository.get_applications()
 
@@ -58,10 +77,7 @@ class ApplicationPortfolioService:
     @staticmethod
     def _active_applications() -> list[dict[str, Any]]:
         applications = ApplicationPortfolioService.get_applications()
-        return [
-            row for row in applications
-            if ApplicationPortfolioService._is_active(row)
-        ]
+        return [row for row in applications if ApplicationPortfolioService._is_active(row)]
 
     @staticmethod
     def get_application_spend() -> list[dict[str, Any]]:
@@ -217,7 +233,9 @@ class ApplicationPortfolioService:
                 )
             )
             if not registry_app and len(application_lookup) == 1:
-                registry_app = ApplicationPortfolioService._app_name(next(iter(application_lookup.values())))
+                registry_app = ApplicationPortfolioService._app_name(
+                    next(iter(application_lookup.values()))
+                )
             if spend_app and registry_app:
                 mapping[_lower(spend_app)] = registry_app
 
@@ -240,7 +258,9 @@ class ApplicationPortfolioService:
 
             spend_type = ApplicationPortfolioService._spend_type(row)
             totals.setdefault(registry_app, {})
-            totals[registry_app][spend_type] = totals[registry_app].get(spend_type, 0.0) + ApplicationPortfolioService._spend_value(row)
+            totals[registry_app][spend_type] = totals[registry_app].get(
+                spend_type, 0.0
+            ) + ApplicationPortfolioService._spend_value(row)
 
         return totals
 
@@ -249,30 +269,32 @@ class ApplicationPortfolioService:
         costs: dict[str, float] = {}
         for row in ApplicationPortfolioService.get_unallocated_spend():
             technology = ApplicationPortfolioService._technology_name(row)
-            costs[_lower(technology)] = costs.get(_lower(technology), 0.0) + ApplicationPortfolioService._spend_value(row)
+            costs[_lower(technology)] = costs.get(
+                _lower(technology), 0.0
+            ) + ApplicationPortfolioService._spend_value(row)
         return costs
 
     @staticmethod
     def _technology_display_lookup() -> dict[str, str]:
         return {
-            _lower(ApplicationPortfolioService._technology_name(row)): ApplicationPortfolioService._technology_name(row)
+            _lower(
+                ApplicationPortfolioService._technology_name(row)
+            ): ApplicationPortfolioService._technology_name(row)
             for row in ApplicationPortfolioService.get_unallocated_spend()
         }
 
     @staticmethod
     def get_application_summary() -> dict[str, Any]:
         applications = ApplicationPortfolioService.get_applications()
-        active_apps = [
-            row for row in applications
-            if ApplicationPortfolioService._is_active(row)
-        ]
+        active_apps = [row for row in applications if ApplicationPortfolioService._is_active(row)]
         allocation = ApplicationPortfolioService.get_application_cost_allocation()
         dependencies = ApplicationPortfolioService.get_dependency_graph()
         unallocated = ApplicationPortfolioService.get_unallocated_spend_analysis()
 
         critical_count = len(
             [
-                row for row in active_apps
+                row
+                for row in active_apps
                 if _lower(row.get("criticality")) in {"critical", "tier 1", "tier1", "high"}
             ]
         )
@@ -285,11 +307,7 @@ class ApplicationPortfolioService:
             "allocated_spend": allocated_spend,
             "unallocated_spend": unallocated_spend,
             "technology_dependencies": len(
-                {
-                    row["Target"]
-                    for row in dependencies
-                    if row["Target Type"] == "Technology"
-                }
+                {row["Target"] for row in dependencies if row["Target Type"] == "Technology"}
             ),
         }
 
@@ -335,13 +353,33 @@ class ApplicationPortfolioService:
         edges: list[dict[str, Any]] = []
 
         for row in ApplicationPortfolioService.get_application_dependencies():
-            source = _normalize(_first_existing(row, "source_name", "source", "from_name", "application_name", "application"))
-            target = _normalize(_first_existing(row, "target_name", "target", "to_name", "technology_name", "dependent_name"))
+            source = _normalize(
+                _first_existing(
+                    row, "source_name", "source", "from_name", "application_name", "application"
+                )
+            )
+            target = _normalize(
+                _first_existing(
+                    row, "target_name", "target", "to_name", "technology_name", "dependent_name"
+                )
+            )
             if not source or not target:
                 continue
 
-            source_type = "Application" if _lower(source) in app_lookup else _normalize(_first_existing(row, "source_type", "from_type", default="Business Service"))
-            target_type = "Technology" if _lower(target) in technology_rows else _normalize(_first_existing(row, "target_type", "to_type", default="Technology"))
+            source_type = (
+                "Application"
+                if _lower(source) in app_lookup
+                else _normalize(
+                    _first_existing(row, "source_type", "from_type", default="Business Service")
+                )
+            )
+            target_type = (
+                "Technology"
+                if _lower(target) in technology_rows
+                else _normalize(
+                    _first_existing(row, "target_type", "to_type", default="Technology")
+                )
+            )
 
             if source_type == "Business Service" and target_type == "Application":
                 continue
@@ -352,7 +390,9 @@ class ApplicationPortfolioService:
                     "Source Type": source_type,
                     "Target": target,
                     "Target Type": target_type,
-                    "Dependency Type": ApplicationPortfolioService._dependency_type(target, technology_rows.get(_lower(target))),
+                    "Dependency Type": ApplicationPortfolioService._dependency_type(
+                        target, technology_rows.get(_lower(target))
+                    ),
                 }
             )
 
@@ -441,17 +481,24 @@ class ApplicationPortfolioService:
         dependency_names = [row["Dependency"] for row in dependencies]
         dependency_text = ", ".join(dependency_names[:-1])
         if len(dependency_names) > 1:
-            dependency_text = f"{dependency_text} and {dependency_names[-1]}" if dependency_text else dependency_names[-1]
+            dependency_text = (
+                f"{dependency_text} and {dependency_names[-1]}"
+                if dependency_text
+                else dependency_names[-1]
+            )
         elif dependency_names:
             dependency_text = dependency_names[0]
         else:
             dependency_text = "no mapped technology dependencies"
 
         return (
-            f"{top_app} is currently the only registered business application and represents 100% of the application portfolio. "
+            f"{top_app} is currently the only registered business application "
+            "and represents 100% of the application portfolio. "
             f"The application depends on {dependency_text}. "
-            f"Approximately ${allocated:,.0f} of spend is allocated while ${unallocated:,.0f} remains unmapped, "
-            f"indicating a chargeback and governance opportunity. Allocation coverage is estimated at {coverage:.1f}%."
+            f"Approximately ${allocated:,.0f} of spend is allocated "
+            f"while ${unallocated:,.0f} remains unmapped, "
+            "indicating a chargeback and governance opportunity. "
+            f"Allocation coverage is estimated at {coverage:.1f}%."
         )
 
     @staticmethod
@@ -461,10 +508,20 @@ class ApplicationPortfolioService:
             rows.append(
                 {
                     "Application": ApplicationPortfolioService._app_name(row),
-                    "Owner": _normalize(_first_existing(row, "owner_name", "owner", "application_owner", default="Unassigned")),
-                    "Criticality": _normalize(_first_existing(row, "criticality", default="Standard")),
-                    "Business Unit": _normalize(_first_existing(row, "business_unit", default="Unassigned")),
-                    "Cost Center": _normalize(_first_existing(row, "cost_center", default="Unassigned")),
+                    "Owner": _normalize(
+                        _first_existing(
+                            row, "owner_name", "owner", "application_owner", default="Unassigned"
+                        )
+                    ),
+                    "Criticality": _normalize(
+                        _first_existing(row, "criticality", default="Standard")
+                    ),
+                    "Business Unit": _normalize(
+                        _first_existing(row, "business_unit", default="Unassigned")
+                    ),
+                    "Cost Center": _normalize(
+                        _first_existing(row, "cost_center", default="Unassigned")
+                    ),
                 }
             )
         return pd.DataFrame(rows)

@@ -378,6 +378,17 @@ ROLE_PAGES["sales_engineer"] = [
     "Prospect Data Intake",
 ]
 
+for _customer_workflow_role in (
+    "client_admin",
+    "executive",
+    "cio",
+    "finance",
+    "auditor",
+    "operations",
+):
+    if "Customer Workspace" not in ROLE_PAGES[_customer_workflow_role]:
+        ROLE_PAGES[_customer_workflow_role].append("Customer Workspace")
+
 PAGE_PATHS = {
     "Welcome": "pages/welcome.py",
     "Executive Overview": "pages/executive_command_center.py",
@@ -386,6 +397,7 @@ PAGE_PATHS = {
     "Strategic Risks": "pages/risk_governance.py",
     "Executive Decisions": "pages/decision_intelligence.py",
     "Prospect Data Intake": "pages/prospect_data_intake.py",
+    "Customer Workspace": "pages/customer_workspace.py",
     "Analyse Your Environment": "pages/analyze_environment.py",
     "Executive Command Center": "pages/executive_command_center.py",
     "CEO Workspace": "pages/ceo_workspace.py",

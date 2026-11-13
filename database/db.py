@@ -24,8 +24,8 @@ GLOBAL_ADMIN_ROLES = {"global_admin"}
 COMPANY_ADMIN_ROLES = {"company_admin"}
 RECOMMENDATION_MANAGER_ROLES = {"recommendation_manager"}
 INTERNAL_COMPANY = "internal"
-SQLITE_DB_PATH = "cloud_advisor.db"  # Update this if your DB file is different
-DB_INIT_LOCK_PATH = "db_init.lock"
+SQLITE_DB_PATH = os.getenv("NEXORA_APPLICATION_DB", "cloud_advisor.db")
+DB_INIT_LOCK_PATH = str(Path(SQLITE_DB_PATH).with_suffix(".init.lock")) if os.getenv("NEXORA_APPLICATION_DB") else "db_init.lock"
 REQUIRED_TABLES = []
 REQUIRED_CORE_TABLES = []
 SCHEMA_VERSION = "1.0"
@@ -1251,6 +1251,14 @@ def _normalize_fernet_key(raw_key):
 
 def _get_fernet():
     configured_key = os.getenv(FERNET_KEY_ENV)
+    production = os.getenv("ENVIRONMENT", "").strip().lower() in {"prod", "production"}
+    if production:
+        if not configured_key:
+            raise RuntimeError("Managed credential encryption key is required in production")
+        try:
+            return Fernet(configured_key.encode("ascii"))
+        except (ValueError, TypeError, UnicodeError):
+            raise RuntimeError("Managed credential encryption key is invalid") from None
     if configured_key:
         return Fernet(_normalize_fernet_key(configured_key))
     if not FERNET_KEY_FILE.exists():

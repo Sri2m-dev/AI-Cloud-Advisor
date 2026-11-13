@@ -1,0 +1,20 @@
+ARG BASE_IMAGE=nexora-sqapp-candidate:20261111-r5-auth-local
+
+FROM ${BASE_IMAGE} AS check
+WORKDIR /app
+ENV PYTHONPATH=/app
+COPY services/enterprise_spend_composition.py /app/services/enterprise_spend_composition.py
+COPY services/supabase_client.py /app/services/supabase_client.py
+COPY shared/executive_page.py /app/shared/executive_page.py
+COPY tests/security/test_streamlit_auth_isolation.py /app/tests/security/test_streamlit_auth_isolation.py
+COPY tests/financial_data_fabric/test_financial_data_client.py /app/tests/financial_data_fabric/test_financial_data_client.py
+RUN python -m pytest -q -p no:cacheprovider \
+    -k "not test_legacy_login_entrypoint_has_no_unconditional_admin_bypass" \
+    --confcutdir=/app/tests/security /app/tests/security/test_streamlit_auth_isolation.py
+RUN python -m pytest -q -p no:cacheprovider /app/tests/financial_data_fabric/test_financial_data_client.py
+
+FROM ${BASE_IMAGE} AS runtime
+WORKDIR /app
+COPY --from=check /app/services/enterprise_spend_composition.py /app/services/enterprise_spend_composition.py
+COPY --from=check /app/services/supabase_client.py /app/services/supabase_client.py
+COPY --from=check /app/shared/executive_page.py /app/shared/executive_page.py

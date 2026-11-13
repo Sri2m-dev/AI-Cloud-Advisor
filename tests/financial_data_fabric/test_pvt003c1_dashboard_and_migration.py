@@ -166,7 +166,7 @@ def test_unscoped_legacy_financial_read_is_safely_disabled():
     assert target.executed is False
 
 
-def test_scoped_legacy_compatibility_read_continues_to_rls():
+def test_supplied_tenant_filter_alone_does_not_authorize_legacy_read():
     target = FakeQuery()
     response = (
         _TenantGuardedQuery(target, table_name="mart_enterprise_spend_v2")
@@ -174,8 +174,8 @@ def test_scoped_legacy_compatibility_read_continues_to_rls():
         .eq("organization_id", ORG_A)
         .execute()
     )
-    assert response.data == [{"value": 1}]
-    assert target.executed is True
+    assert response.data == []
+    assert target.executed is False
 
 
 def test_unscoped_legacy_financial_write_is_rejected():

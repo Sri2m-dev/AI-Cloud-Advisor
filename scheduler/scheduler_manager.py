@@ -140,6 +140,9 @@ def run_scheduled_reports():
             logger.exception("scheduled_report_failed report_type=%s", report_type)
 
 def start_scheduler():
+    import os
+    if os.getenv("ENVIRONMENT", "").lower() in {"prod", "production"}:
+        raise RuntimeError("Production application scheduling belongs to Celery Beat only")
     scheduler = BackgroundScheduler()
 
     scheduler.add_job(run_recommendations, trigger="interval", minutes=1)

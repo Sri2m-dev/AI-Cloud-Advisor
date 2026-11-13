@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 from data_fabric.adapters.supabase.client import SupabaseDataFabricClient
 from data_fabric.adapters.supabase.exceptions import SupabaseAdapterOperationError
+from data_fabric.contracts import RelationshipDecisionState
 from data_fabric.foundation import (
     DataFabricConflictError,
     DataFabricIdempotencyError,
@@ -110,7 +111,9 @@ class AtomicEntityWriteRequest:
         for record in self.provenance_records:
             _validate_tenant_record(self.tenant_context, record, "provenance_record")
         if self.quality_assessment is not None:
-            _validate_tenant_record(self.tenant_context, self.quality_assessment, "quality_assessment")
+            _validate_tenant_record(
+                self.tenant_context, self.quality_assessment, "quality_assessment"
+            )
         object.__setattr__(self, "lineage_events", tuple(self.lineage_events))
         object.__setattr__(self, "provenance_records", tuple(self.provenance_records))
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
@@ -133,7 +136,9 @@ class AtomicRelationshipWriteRequest:
 
     def __post_init__(self) -> None:
         _validate_operation(self.operation)
-        _validate_tenant_record(self.tenant_context, self.relationship_record, "relationship_record")
+        _validate_tenant_record(
+            self.tenant_context, self.relationship_record, "relationship_record"
+        )
         _validate_revision_requirement(self.operation, self.expected_revision)
         if not self.idempotency_key:
             raise DataFabricValidationError("idempotency_key is required")
@@ -144,7 +149,9 @@ class AtomicRelationshipWriteRequest:
         for record in self.provenance_records:
             _validate_tenant_record(self.tenant_context, record, "provenance_record")
         if self.quality_assessment is not None:
-            _validate_tenant_record(self.tenant_context, self.quality_assessment, "quality_assessment")
+            _validate_tenant_record(
+                self.tenant_context, self.quality_assessment, "quality_assessment"
+            )
         object.__setattr__(self, "lineage_events", tuple(self.lineage_events))
         object.__setattr__(self, "provenance_records", tuple(self.provenance_records))
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
@@ -163,7 +170,17 @@ class SupabaseAtomicWriteExecutor:
         payload = _entity_request_payload(request)
         return self._execute(self.entity_rpc_name, {"p_request": payload})
 
-    def execute_relationship_write(self, request: AtomicRelationshipWriteRequest) -> AtomicWriteResult:
+    def execute_relationship_write(
+        self, request: AtomicRelationshipWriteRequest
+    ) -> AtomicWriteResult:
+        state = RelationshipDecisionState(
+            request.relationship_record.payload.get("decision_state", "candidate")
+        )
+        if state is RelationshipDecisionState.CONFIRMED and request.operation != "no_change":
+            raise PermissionError(
+                "Confirmed relationship writes unavailable: "
+                "approved authority-evidence contract is missing"
+            )
         payload = _relationship_request_payload(request)
         return self._execute(self.relationship_rpc_name, {"p_request": payload})
 
@@ -175,9 +192,14 @@ class SupabaseAtomicWriteExecutor:
         data = getattr(response, "data", None)
         row = data[0] if isinstance(data, list) and data else data
         if not isinstance(row, Mapping):
-            raise DataFabricTransactionError("atomic write failed [P3_ATOMIC_EMPTY_RESULT]: redacted")
+            raise DataFabricTransactionError(
+                "atomic write failed [P3_ATOMIC_EMPTY_RESULT]: redacted"
+            )
         result = _result_from_mapping(row)
-        if result.failure is not None or result.status in {AtomicWriteStatus.REJECTED, AtomicWriteStatus.FAILED}:
+        if result.failure is not None or result.status in {
+            AtomicWriteStatus.REJECTED,
+            AtomicWriteStatus.FAILED,
+        }:
             raise _result_failure_error(result)
         return result
 
@@ -188,15 +210,21 @@ def _entity_request_payload(request: AtomicEntityWriteRequest) -> dict[str, Any]
             "actor": request.actor,
             "correlation_id": request.correlation_id,
             "entity_record": _record_payload(request.entity_record),
-            "entity_version": _record_payload(request.entity_version) if request.entity_version else None,
+            "entity_version": _record_payload(request.entity_version)
+            if request.entity_version
+            else None,
             "expected_revision": request.expected_revision,
             "idempotency_key": request.idempotency_key,
             "lineage_events": [_record_payload(record) for record in request.lineage_events],
             "metadata": _plain_value(request.metadata),
             "operation": str(request.operation),
             "payload_hash": request.payload_hash,
-            "provenance_records": [_record_payload(record) for record in request.provenance_records],
-            "quality_assessment": _record_payload(request.quality_assessment) if request.quality_assessment else None,
+            "provenance_records": [
+                _record_payload(record) for record in request.provenance_records
+            ],
+            "quality_assessment": _record_payload(request.quality_assessment)
+            if request.quality_assessment
+            else None,
             "tenant_context": _tenant_payload(request.tenant_context),
         }
     )
@@ -213,8 +241,12 @@ def _relationship_request_payload(request: AtomicRelationshipWriteRequest) -> di
             "metadata": _plain_value(request.metadata),
             "operation": str(request.operation),
             "payload_hash": request.payload_hash,
-            "provenance_records": [_record_payload(record) for record in request.provenance_records],
-            "quality_assessment": _record_payload(request.quality_assessment) if request.quality_assessment else None,
+            "provenance_records": [
+                _record_payload(record) for record in request.provenance_records
+            ],
+            "quality_assessment": _record_payload(request.quality_assessment)
+            if request.quality_assessment
+            else None,
             "relationship_record": _record_payload(request.relationship_record),
             "tenant_context": _tenant_payload(request.tenant_context),
         }
@@ -222,7 +254,10 @@ def _relationship_request_payload(request: AtomicRelationshipWriteRequest) -> di
 
 
 def _tenant_payload(tenant_context: TenantContext) -> dict[str, str]:
-    return {"organization_id": tenant_context.organization_id, "tenant_id": tenant_context.tenant_id}
+    return {
+        "organization_id": tenant_context.organization_id,
+        "tenant_id": tenant_context.tenant_id,
+    }
 
 
 def _record_payload(record: MutableRecord | AppendOnlyRecord | None) -> dict[str, Any] | None:
@@ -253,7 +288,10 @@ def _result_from_mapping(row: Mapping[str, Any]) -> AtomicWriteResult:
     failure_value = row.get("failure")
     failure = None
     if isinstance(failure_value, Mapping):
-        failure = AtomicWriteFailure(str(failure_value.get("code", "P3_ATOMIC_FAILED")), str(failure_value.get("reason", "atomic write rejected")))
+        failure = AtomicWriteFailure(
+            str(failure_value.get("code", "P3_ATOMIC_FAILED")),
+            str(failure_value.get("reason", "atomic write rejected")),
+        )
     records = tuple(
         AtomicWriteRecordResult(
             record_type=str(item.get("record_type", "")),
@@ -283,7 +321,15 @@ def _result_from_mapping(row: Mapping[str, Any]) -> AtomicWriteResult:
     )
 
 
-def _result_failure_error(result: AtomicWriteResult) -> DataFabricValidationError | DataFabricConflictError | DataFabricIdempotencyError | DataFabricTenantBoundaryError | DataFabricTransactionError:
+def _result_failure_error(
+    result: AtomicWriteResult,
+) -> (
+    DataFabricValidationError
+    | DataFabricConflictError
+    | DataFabricIdempotencyError
+    | DataFabricTenantBoundaryError
+    | DataFabricTransactionError
+):
     code = result.failure.code if result.failure else "P3_ATOMIC_REJECTED"
     reason = result.failure.reason if result.failure else "atomic write rejected"
     return _error_for_code(code, reason)
@@ -311,7 +357,14 @@ def _error_for_code(code: str, reason: str) -> Exception:
 
 def _extract_code(message: str) -> str:
     upper = message.upper()
-    for marker in ("P3_TENANT_BOUNDARY", "P3_IDEMPOTENCY_CONFLICT", "P3_REVISION_CONFLICT", "P3_VALIDATION_ERROR", "P3_TRANSACTION_FAILED", "P3_DUPLICATE"):
+    for marker in (
+        "P3_TENANT_BOUNDARY",
+        "P3_IDEMPOTENCY_CONFLICT",
+        "P3_REVISION_CONFLICT",
+        "P3_VALIDATION_ERROR",
+        "P3_TRANSACTION_FAILED",
+        "P3_DUPLICATE",
+    ):
         if marker in upper:
             return marker
     if "TENANT" in upper:
@@ -327,7 +380,15 @@ def _extract_code(message: str) -> str:
 
 def _safe_reason(reason: str) -> str:
     lowered = reason.lower()
-    sensitive_markers = ("secret", "service_role", "apikey", "api_key", "password", "payload", "credential")
+    sensitive_markers = (
+        "secret",
+        "service_role",
+        "apikey",
+        "api_key",
+        "password",
+        "payload",
+        "credential",
+    )
     if any(marker in lowered for marker in sensitive_markers):
         return "redacted"
     return reason[:160]
@@ -341,12 +402,20 @@ def _validate_operation(operation: str) -> None:
 
 
 def _validate_revision_requirement(operation: str, expected_revision: int | None) -> None:
-    if operation in {AtomicWriteOperation.UPDATE.value, AtomicWriteOperation.DEACTIVATE.value} and expected_revision is None:
+    if (
+        operation in {AtomicWriteOperation.UPDATE.value, AtomicWriteOperation.DEACTIVATE.value}
+        and expected_revision is None
+    ):
         raise DataFabricValidationError("expected_revision is required")
 
 
-def _validate_tenant_record(tenant_context: TenantContext, record: MutableRecord | AppendOnlyRecord, label: str) -> None:
-    if record.organization_id != tenant_context.organization_id or record.tenant_id != tenant_context.tenant_id:
+def _validate_tenant_record(
+    tenant_context: TenantContext, record: MutableRecord | AppendOnlyRecord, label: str
+) -> None:
+    if (
+        record.organization_id != tenant_context.organization_id
+        or record.tenant_id != tenant_context.tenant_id
+    ):
         raise DataFabricTenantBoundaryError(f"{label} crosses tenant boundary")
 
 

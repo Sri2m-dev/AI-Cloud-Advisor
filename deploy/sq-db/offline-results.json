@@ -1,0 +1,11 @@
+{
+  "offline_contract": "PASS",
+  "compose_schema": "PASS_BASE_DRIVER_CLEAN_SYNTHETIC_REFERENCES_ONLY",
+  "retained_hashes_checked": 20,
+  "include_paths_checked": 12,
+  "migrations_ordered": 7,
+  "sql_executed": false,
+  "containers_started": false,
+  "image_qualified": false,
+  "external_identity_qualified": false
+}

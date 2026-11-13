@@ -169,6 +169,7 @@ with tabs[1]:
         }
     )
 with tabs[2]:
+    st.caption("Candidate relationships are unverified and do not establish decision authority.")
     st.json(_serializable(detail.relationships))
 with tabs[3]:
     st.json(_serializable(detail.classifications))

@@ -12,6 +12,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+from components.navigation.v1_page_link import v1_page_link
 from components.sidebar_navigation import render_sidebar_navigation
 from decision_intelligence import DecisionIntelligenceService
 from enterprise_intelligence import enterprise_intelligence_service
@@ -100,9 +101,9 @@ if demo_mode_enabled() and is_demo_tenant(organization_id):
                 st.caption("Decision context · " + " → ".join(item["entity"] for item in path))
             actions = st.columns(3)
             with actions[0]:
-                st.page_link("pages/business_services.py", label="View Impact")
+                v1_page_link("pages/business_services.py", label="View Impact")
             with actions[1]:
-                st.page_link(
+                v1_page_link(
                     "pages/twin_explorer.py",
                     label="Trace Evidence",
                     help=(
@@ -111,7 +112,7 @@ if demo_mode_enabled() and is_demo_tenant(organization_id):
                     ),
                 )
             with actions[2]:
-                st.page_link("pages/approval_center.py", label="Review Approval")
+                v1_page_link("pages/approval_center.py", label="Review Approval")
             with st.expander("Show evidence and assumptions"):
                 st.write(journey["evidence"])
                 st.write(journey["change"])

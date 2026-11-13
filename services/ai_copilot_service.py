@@ -246,12 +246,9 @@ class AICopilotService:
                 "enterprise": AICopilotService._minimal_enterprise_context(org_id),
                 "intent": intent,
                 "question": question,
-                "compliance": ComplianceService(org_id).run_compliance_assessment(persist=True),
-                "dr_readiness": DisasterRecoveryService(org_id).get_dr_readiness(persist=True),
-                "operational_readiness": OperationalReadinessService(org_id).get_operational_readiness(persist=True),
-                "release_readiness": release.validate_release(persist=True),
-                "production_readiness": release.validate_production_readiness(persist=True),
-                "version_readiness_report": release.version_1_readiness_report(persist=True),
+                "release_readiness": release.validate_release(persist=False),
+                "production_readiness": release.validate_production_readiness(persist=False),
+                "version_readiness_report": release.version_1_readiness_report(persist=False),
             }
         if intent == "scheduler":
             return {
@@ -1197,39 +1194,10 @@ class AICopilotService:
 
     @staticmethod
     def _enterprise_readiness_answer(context: dict[str, Any]) -> dict[str, Any]:
-        question = str(context.get("question") or "").lower()
-        compliance = context.get("compliance") or {}
-        dr = context.get("dr_readiness") or {}
-        operational = context.get("operational_readiness") or {}
-        release = context.get("release_readiness") or {}
-        production = context.get("production_readiness") or {}
-        report = context.get("version_readiness_report") or {}
-        if "audit evidence" in question:
-            package = compliance.get("audit_package") or {}
-            text = f"Audit evidence package is {package.get('status', 'Generated')} with {package.get('evidence_count', 10)} evidence items in PDF, Excel, and JSON formats."
-        elif "compliance report" in question or "compliance status" in question:
-            text = f"Compliance is {compliance.get('score', 0)}% and audit-ready. ISO 27001 is 99%, SOC 2 is 98.4%, NIST is 98.6%, PCI is 97.8%, HIPAA is 98.1%, and GDPR is 96.9%."
-        elif "dr" in question or "backup" in question:
-            kpis = dr.get("kpis") or {}
-            text = f"DR readiness is {dr.get('score', 0)}%. Backup health is {kpis.get('Backup Health', 'Healthy')}, RPO is {kpis.get('RPO', '15 minutes')}, RTO is {kpis.get('RTO', '60 minutes')}, and restore validation is {kpis.get('Restore Validation', 'Validated')}."
-        elif "release" in question or "version 1.0" in question:
-            text = f"Version 1.0 release is {release.get('status', 'Approved')} with release readiness {release.get('score', 0)}%. Known blockers: {(release.get('kpis') or {}).get('Known Blockers', 0)}."
-        elif "production" in question:
-            text = f"Production deployment is ready. Production readiness is {production.get('score', 0)}%, blockers are {(production.get('kpis') or {}).get('Blockers', 0)}, and safe execution remains mock-only outside approved adapters."
-        elif "operational" in question:
-            text = f"Operational readiness is {operational.get('score', 0)}% with status {operational.get('status', 'Ready')}. Connectors, scheduler, security, performance, data quality, compliance, AI, Knowledge Graph, and Digital Twin are ready."
-        else:
-            text = (
-                f"Nexora is enterprise ready. Version {report.get('Version', '1.0')} overall readiness is "
-                f"{report.get('Overall Readiness', 99.4)}%, release status is {report.get('Release Status', 'Approved')}, "
-                f"compliance is {compliance.get('score', 98.7)}%, DR readiness is {dr.get('score', 98.8)}%, "
-                f"operational readiness is {operational.get('score', 99.1)}%, and production readiness is {production.get('score', 99.0)}%."
-            )
         return AICopilotService._answer(
-            text,
-            context,
-            citations=["Enterprise Readiness Dashboard", "Compliance Dashboard", "Version 1.0 Readiness Report"],
-            used=["Compliance Engine", "Audit Evidence Engine", "DR Readiness", "Operational Readiness", "Release Readiness", "Production Readiness"],
+            "Release and production readiness are NOT_VERIFIED. "
+            "Reviewed validation evidence is unavailable; no approval or readiness score is claimed.",
+            context, citations=[], used=[],
         )
 
     @staticmethod

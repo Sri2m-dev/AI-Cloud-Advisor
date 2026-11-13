@@ -1,0 +1,19 @@
+{
+  "name": "nexora-synthetic-persistence",
+  "services": {
+    "write": {
+      "image": "${NEXORA_API_IMAGE:?Supply inspected local application digest}",
+      "network_mode": "none",
+      "command": ["python", "/probe/persistence_probe.py", "write", "/probe-data"],
+      "volumes": ["./persistence_probe.py:/probe/persistence_probe.py:ro", "synthetic_probe:/probe-data"]
+    },
+    "verify": {
+      "image": "${NEXORA_API_IMAGE:?Supply inspected local application digest}",
+      "network_mode": "none",
+      "command": ["python", "/probe/persistence_probe.py", "verify", "/probe-data"],
+      "volumes": ["./persistence_probe.py:/probe/persistence_probe.py:ro", "synthetic_probe:/probe-data:ro"],
+      "depends_on": {"write": {"condition": "service_completed_successfully"}}
+    }
+  },
+  "volumes": {"synthetic_probe": {}}
+}

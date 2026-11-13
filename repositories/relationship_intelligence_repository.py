@@ -30,18 +30,18 @@ def _relationship(row: dict[str, Any]) -> EnterpriseRelationship:
         quality_score=float(row.get("quality_score") or 0)
         / (100 if float(row.get("quality_score") or 0) > 1 else 1),
         metadata=dict(metadata),
-        evidence=tuple(metadata.get("evidence") or ()),
+        evidence=tuple(row.get("evidence", metadata.get("evidence")) or ()),
         discovery_timestamp=_datetime(metadata.get("discovery_timestamp")),
         last_validation=_datetime(metadata.get("last_validation")),
         lineage_reference=metadata.get("lineage_reference"),
         provenance_reference=metadata.get("provenance_reference"),
-        decision_state=row.get("decision_state") or metadata.get("decision_state") or "confirmed",
-        effective_from=_datetime(row.get("effective_from") or metadata.get("effective_from")),
-        effective_to=_datetime(row.get("effective_to") or metadata.get("effective_to")),
-        actor=row.get("actor") or metadata.get("actor"),
-        actor_role=row.get("actor_role") or metadata.get("actor_role"),
-        decision_reason=row.get("decision_reason") or metadata.get("decision_reason"),
-        superseded_by=row.get("superseded_by") or metadata.get("superseded_by"),
+        decision_state=row.get("decision_state") or "candidate",
+        effective_from=_datetime(row.get("effective_from", metadata.get("effective_from"))),
+        effective_to=_datetime(row.get("effective_to", metadata.get("effective_to"))),
+        actor=row.get("actor", metadata.get("actor")),
+        actor_role=row.get("actor_role", metadata.get("actor_role")),
+        decision_reason=row.get("decision_reason", metadata.get("decision_reason")),
+        superseded_by=row.get("superseded_by", metadata.get("superseded_by")),
     )
 
 

@@ -1,0 +1,375 @@
+{
+  "name": "nexora-sqapp-local-20261110",
+  "services": {
+    "frontend": {
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m,mode=1777"
+      ],
+      "networks": [
+        "private"
+      ],
+      "restart": "no",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "image": "${SQAPP_APPLICATION_IMAGE:?Supply qualified candidate digest}",
+      "environment": {
+        "ENVIRONMENT": "production",
+        "AUTH_MODE": "supabase",
+        "NEXORA_SQAPP_SCOPE": "nexora-sqapp-local-20261110:unauthenticated-only",
+        "API_USERS_JSON": "{}",
+        "SUPABASE_URL": "",
+        "SUPABASE_KEY": "",
+        "SUPABASE_ANON_KEY": "",
+        "SUPABASE_SERVICE_ROLE_KEY": "",
+        "HOME": "/tmp",
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "NEXORA_SCHEDULED_JOBS_ENABLED": "false",
+        "NEXORA_DEMO_MODE": "false",
+        "PUE_PILOT_DEV_MODE": "false",
+        "NEXORA_JOB_SCHEDULER": "celery",
+        "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
+        "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION": "true",
+        "STREAMLIT_SERVER_ENABLE_CORS": "true",
+        "NEXORA_APPLICATION_DB": "/var/lib/nexora/application/cloud_advisor.db",
+        "NEXORA_UNIVERSAL_EVIDENCE_DB": "/var/lib/nexora/evidence/lifecycle.db",
+        "NEXORA_PROSPECT_DATA_ROOT": "/var/lib/nexora/prospect",
+        "NEXORA_READINESS_FILE": "/var/lib/nexora/status/absent.json",
+        "FERNET_KEY_FILE": "/run/secrets/credential_key",
+        "NEXORA_PROSPECT_DATA_KEY_FILE": "/run/secrets/prospect_key"
+      },
+      "volumes": [
+        "application_data:/var/lib/nexora/application",
+        "evidence_data:/var/lib/nexora/evidence",
+        "prospect_data:/var/lib/nexora/prospect",
+        "../operations/runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "./unauthenticated_smoke.py:/opt/sqapp/launcher.py:ro"
+      ],
+      "secrets": [
+        "credential_key",
+        "prospect_key"
+      ],
+      "entrypoint": [
+        "python",
+        "/opt/sqapp/launcher.py",
+        "frontend"
+      ],
+      "depends_on": {
+        "init-storage": {
+          "condition": "service_completed_successfully"
+        },
+        "redis": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health',timeout=3).status==200"
+        ],
+        "interval": "5s",
+        "timeout": "4s",
+        "retries": 12,
+        "start_period": "20s"
+      }
+    },
+    "api": {
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m,mode=1777"
+      ],
+      "networks": [
+        "private"
+      ],
+      "restart": "no",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "image": "${SQAPP_APPLICATION_IMAGE:?Supply qualified candidate digest}",
+      "environment": {
+        "ENVIRONMENT": "production",
+        "AUTH_MODE": "supabase",
+        "NEXORA_SQAPP_SCOPE": "nexora-sqapp-local-20261110:unauthenticated-only",
+        "API_USERS_JSON": "{}",
+        "SUPABASE_URL": "",
+        "SUPABASE_KEY": "",
+        "SUPABASE_ANON_KEY": "",
+        "SUPABASE_SERVICE_ROLE_KEY": "",
+        "HOME": "/tmp",
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "NEXORA_SCHEDULED_JOBS_ENABLED": "false",
+        "NEXORA_DEMO_MODE": "false",
+        "PUE_PILOT_DEV_MODE": "false",
+        "NEXORA_JOB_SCHEDULER": "celery",
+        "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
+        "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION": "true",
+        "STREAMLIT_SERVER_ENABLE_CORS": "true",
+        "NEXORA_APPLICATION_DB": "/var/lib/nexora/application/cloud_advisor.db",
+        "NEXORA_UNIVERSAL_EVIDENCE_DB": "/var/lib/nexora/evidence/lifecycle.db",
+        "NEXORA_PROSPECT_DATA_ROOT": "/var/lib/nexora/prospect",
+        "NEXORA_READINESS_FILE": "/var/lib/nexora/status/absent.json",
+        "FERNET_KEY_FILE": "/run/secrets/credential_key",
+        "NEXORA_PROSPECT_DATA_KEY_FILE": "/run/secrets/prospect_key",
+        "JWT_SECRET_FILE": "/run/secrets/jwt",
+        "REDIS_URL_FILE": "/run/secrets/broker_url"
+      },
+      "volumes": [
+        "application_data:/var/lib/nexora/application",
+        "evidence_data:/var/lib/nexora/evidence",
+        "prospect_data:/var/lib/nexora/prospect",
+        "../operations/runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "./unauthenticated_smoke.py:/opt/sqapp/launcher.py:ro"
+      ],
+      "secrets": [
+        "credential_key",
+        "prospect_key",
+        "jwt",
+        "broker_url"
+      ],
+      "entrypoint": [
+        "python",
+        "/opt/sqapp/launcher.py",
+        "api"
+      ],
+      "depends_on": {
+        "init-storage": {
+          "condition": "service_completed_successfully"
+        },
+        "redis": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3).status==200"
+        ],
+        "interval": "5s",
+        "timeout": "4s",
+        "retries": 12,
+        "start_period": "20s"
+      }
+    },
+    "redis": {
+      "init": true,
+      "user": "999:999",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m,mode=1777"
+      ],
+      "networks": [
+        "private"
+      ],
+      "restart": "no",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "image": "redis@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7",
+      "volumes": [
+        "redis_data:/data",
+        "./redis-entrypoint.sh:/opt/redis-entrypoint.sh:ro"
+      ],
+      "secrets": [
+        "redis_password",
+        "redis_monitor_password"
+      ],
+      "entrypoint": [
+        "sh",
+        "/opt/redis-entrypoint.sh"
+      ],
+      "depends_on": {
+        "init-storage": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli --no-auth-warning ping | grep -qx PONG"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 10
+      }
+    },
+    "init-storage": {
+      "image": "${SQAPP_APPLICATION_IMAGE:?Supply qualified candidate digest}",
+      "user": "0:0",
+      "read_only": true,
+      "network_mode": "none",
+      "restart": "no",
+      "volumes": [
+        "application_data:/init/application",
+        "evidence_data:/init/evidence",
+        "prospect_data:/init/prospect",
+        "redis_data:/init/redis",
+        "./init_storage.py:/opt/init_storage.py:ro"
+      ],
+      "entrypoint": [
+        "python",
+        "/opt/init_storage.py"
+      ]
+    },
+    "nginx": {
+      "init": true,
+      "user": "101:101",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m,mode=1777"
+      ],
+      "networks": [
+        "private",
+        "ingress"
+      ],
+      "restart": "no",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "image": "docker.io/library/nginx@sha256:0dcc88822d45581e65ae329f8be769762bf628d3b2bb7d2a077d4aa5c98b30e3",
+      "entrypoint": [
+        "nginx"
+      ],
+      "command": [
+        "-c",
+        "/opt/nginx.conf",
+        "-g",
+        "daemon off;"
+      ],
+      "volumes": [
+        "./nginx.conf:/opt/nginx.conf:ro"
+      ],
+      "secrets": [
+        "tls_cert",
+        "tls_key"
+      ],
+      "ports": [
+        "127.0.0.1:18513:8443"
+      ],
+      "depends_on": {
+        "frontend": {
+          "condition": "service_healthy"
+        },
+        "api": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8080/health"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 10
+      }
+    }
+  },
+  "networks": {
+    "private": {
+      "name": "nexora-sqapp-local-20261110_private",
+      "internal": true
+    },
+    "ingress": {
+      "name": "nexora-sqapp-local-20261110_ingress"
+    }
+  },
+  "volumes": {
+    "application_data": {
+      "name": "nexora-sqapp-local-20261110_application_data",
+      "external": true
+    },
+    "evidence_data": {
+      "name": "nexora-sqapp-local-20261110_evidence_data",
+      "external": true
+    },
+    "prospect_data": {
+      "name": "nexora-sqapp-local-20261110_prospect_data",
+      "external": true
+    },
+    "redis_data": {
+      "name": "nexora-sqapp-local-20261110_redis_data",
+      "external": true
+    }
+  },
+  "secrets": {
+    "credential_key": {
+      "file": "${SQAPP_CREDENTIAL_KEY_FILE:?Supply unique external synthetic managed file}"
+    },
+    "prospect_key": {
+      "file": "${SQAPP_PROSPECT_KEY_FILE:?Supply unique external synthetic managed file}"
+    },
+    "jwt": {
+      "file": "${SQAPP_JWT_FILE:?Supply unique external synthetic managed file}"
+    },
+    "broker_url": {
+      "file": "${SQAPP_BROKER_URL_FILE:?Supply unique external synthetic managed file}"
+    },
+    "redis_password": {
+      "file": "${SQAPP_REDIS_PASSWORD_FILE:?Supply unique external synthetic managed file}"
+    },
+    "redis_monitor_password": {
+      "file": "${SQAPP_REDIS_MONITOR_PASSWORD_FILE:?Supply unique external synthetic managed file}"
+    },
+    "tls_cert": {
+      "file": "${SQAPP_TLS_CERT_FILE:?Supply unique external synthetic managed file}"
+    },
+    "tls_key": {
+      "file": "${SQAPP_TLS_KEY_FILE:?Supply unique external synthetic managed file}"
+    }
+  }
+}

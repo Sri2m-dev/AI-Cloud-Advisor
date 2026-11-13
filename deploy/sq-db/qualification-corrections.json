@@ -1,0 +1,12 @@
+{
+  "database/contracts/g08_m2b/A021_owner_integrity.sql": {
+    "original_sha256": "5ebefd61f1cd8829c307c4ee2bc5633b26e0b6805e6e34a9f2554566650082b0",
+    "corrected_sha256": "c188cc6b0ceba13b3a9592e5bad955f899ef1308dbc294755dcbc3b145e5e90b",
+    "preserved_original": "docs/release/nexora-sqdb-2026-11-10/A021_owner_integrity.before.sql"
+  },
+  "tests/owner_authorization/postgres_qualification.sql": {
+    "original_sha256": "979fce44c0dc9299b20f09d87f86dcbb2e87d06f5689f79d0c81efa1388d965a",
+    "corrected_sha256": "584aed4fa02dc5d7ea9c8d40d96a896e19f0bc2d30675e88275ddc0f5ec78947",
+    "preserved_original": "docs/release/nexora-sqdb-2026-11-10/owner-fixture.before.sql"
+  }
+}

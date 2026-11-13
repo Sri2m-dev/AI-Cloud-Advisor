@@ -20,6 +20,7 @@ from services.business_capability_service import BusinessCapabilityService
 from services.business_process_service import BusinessProcessService
 from services.business_service_service import BusinessServiceService
 from services.business_unit_service import BusinessUnitService
+from services.demo_tenant_service import load_demo_tenant
 from services.enterprise_financial_model import EnterpriseFinancialModel
 from shared.auth import require_role
 from shared.evidence_context import resolve_active_evidence_context
@@ -377,6 +378,18 @@ if evidence_context.is_prospect:
         "Service health, owners, applications, dependencies, and business impact remain "
         "UNKNOWN until those mappings are supplied as prospect evidence."
     )
+    st.stop()
+if evidence_context.is_demo:
+    demo = load_demo_tenant(str(evidence_context.organization_id or ""))
+    metrics = demo["metrics"]
+    st.title("Business Services")
+    st.caption("SYNTHETIC DEMONSTRATION DATA · IMMUTABLE SNAPSHOT")
+    st.metric("Business services", f"{metrics['business_services']:,}")
+    st.metric(
+        "Annual technology investment",
+        f"${metrics['annual_technology_spend'] / 1_000_000:,.0f}M",
+    )
+    st.info("Synthetic demonstration metrics only; no tenant financial repositories are queried.")
     st.stop()
 
 service_dashboard = BusinessServiceService.get_service_dashboard()

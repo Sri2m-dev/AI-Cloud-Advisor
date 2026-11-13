@@ -1,0 +1,41 @@
+name: nexora-g08-r5-reconciliation-20261111
+
+services:
+  database:
+    image: docker.io/library/postgres@sha256:73bedc9eaa0121b92b9b26bb52e5141b3f6f37479c7ef913c0160455763ca80a
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nexora_m2c_g08r5_20261111
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/g08_database_password
+      PGPORT: "5432"
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets:
+      - g08_database_password
+    volumes:
+      - g08_database:/var/lib/postgresql/data
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nexora_m2c_g08r5_20261111"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+networks:
+  database:
+    name: nexora-g08-r5-reconciliation-20261111_database
+    internal: true
+
+volumes:
+  g08_database:
+    name: nexora-g08-r5-reconciliation-20261111_database
+
+secrets:
+  g08_database_password:
+    file: ${NEXORA_G08_DATABASE_PASSWORD_FILE:?Set external G08 database password file}

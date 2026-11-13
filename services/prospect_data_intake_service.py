@@ -510,6 +510,19 @@ def ingest_upload(
     return analysis
 
 
+def analyze_upload(
+    tenant: ProspectTenant,
+    *,
+    profile: str,
+    filename: str,
+    content: bytes,
+) -> ProspectAnalysis:
+    """Validate and analyze an upload without storing it in the prospect vault."""
+    scan_upload(filename, content)
+    frame = normalize_upload(profile, filename, content)
+    return _analyze(tenant, frame)
+
+
 def store_governed_upload(
     tenant: ProspectTenant,
     *,

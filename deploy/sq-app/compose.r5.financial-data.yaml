@@ -1,0 +1,88 @@
+name: nexora-sqapp-data-r5-financial-20261111
+
+services:
+  financial-database:
+    image: docker.io/library/postgres@sha256:73bedc9eaa0121b92b9b26bb52e5141b3f6f37479c7ef913c0160455763ca80a
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/financial_database_password
+      PGPORT: "5432"
+    volumes:
+      - financial_application_data:/var/lib/postgresql/data
+      - ./financial-data-auth-bootstrap.sh:/docker-entrypoint-initdb.d/zz-financial-auth-bootstrap.sh:ro
+    secrets:
+      - financial_database_password
+      - financial_authenticator_password
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  financial-postgrest:
+    image: nexora-sqapp-financial-postgrest-r5:20261111
+    build:
+      context: ../..
+      dockerfile: deploy/sq-app/Dockerfile.financial-data-postgrest
+    restart: unless-stopped
+    depends_on:
+      financial-database:
+        condition: service_healthy
+    environment:
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,auth
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_PRE_REQUEST: public.validate_r5_auth_request
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_JWT_AUD: authenticated
+      PGRST_SERVER_HOST: 0.0.0.0
+      PGRST_SERVER_PORT: "3000"
+      PGRST_ADMIN_SERVER_HOST: 127.0.0.1
+      PGRST_ADMIN_SERVER_PORT: "3001"
+    secrets:
+      - financial_authenticator_password
+      - auth_jwt_secret
+    networks:
+      database: {}
+      r5_application:
+        aliases:
+          - r5-financial-data-postgrest
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+networks:
+  database:
+    name: nexora-sqapp-data-r5-financial-20261111_database
+    internal: true
+  r5_application:
+    external: true
+    name: nexora-sqapp-r5-auth-pending-20261111_private
+
+volumes:
+  financial_application_data:
+    name: nexora-sqapp-data-r5-financial-20261111_application_data
+
+secrets:
+  financial_database_password:
+    file: ${APPDATA_DATABASE_PASSWORD_FILE:?Set isolated financial database password file}
+  financial_authenticator_password:
+    file: ${APPDATA_AUTHENTICATOR_PASSWORD_FILE:?Set isolated PostgREST database password file}
+  auth_jwt_secret:
+    file: ${SUPABASE_AUTH_JWT_FILE:?Set isolated Auth JWT signing secret file}

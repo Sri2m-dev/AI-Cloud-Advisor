@@ -9,11 +9,7 @@ from auth.connector_context import get_current_organization_id
 from auth.guards import require_login
 from auth.role_constants import normalize_role
 from components.sidebar_navigation import render_sidebar_navigation
-from services.compliance_service import ComplianceService
-from services.disaster_recovery_service import DisasterRecoveryService
-from services.operational_readiness_service import OperationalReadinessService
 from services.release_readiness_service import ReleaseReadinessService
-
 
 st.set_page_config(page_title="Enterprise Readiness", layout="wide")
 
@@ -38,42 +34,16 @@ def main() -> None:
         st.stop()
 
     org_id = get_current_organization_id()
-    compliance = ComplianceService(org_id).run_compliance_assessment(persist=True)
-    dr = DisasterRecoveryService(org_id).get_dr_readiness(persist=True)
-    operational = OperationalReadinessService(org_id).get_operational_readiness(persist=True)
-    release_service = ReleaseReadinessService(org_id)
-    release = release_service.validate_release(persist=True)
-    production = release_service.validate_production_readiness(persist=True)
-    report = release_service.version_1_readiness_report(persist=True)
-
+    service = ReleaseReadinessService(org_id)
+    release = service.validate_release(persist=False)
+    production = service.validate_production_readiness(persist=False)
     st.title("Enterprise Readiness")
-    st.caption("Version 1.0 readiness gate across compliance, operations, DR, release, production, and platform foundations.")
-
-    cols = st.columns(8)
-    cols[0].metric("Enterprise Ready", f"{report['Overall Readiness']}%")
-    cols[1].metric("Compliance", f"{compliance['score']}%")
-    cols[2].metric("Security", "99.1%")
-    cols[3].metric("Performance", "98.6%")
-    cols[4].metric("Data Quality", "98.3%")
-    cols[5].metric("DR", f"{dr['score']}%")
-    cols[6].metric("Operational", f"{operational['score']}%")
-    cols[7].metric("Production Ready", production["kpis"]["Production Ready"])
-
-    tabs = st.tabs(["Version 1.0 Report", "Operational", "Release", "Production", "Compliance", "DR"])
-    with tabs[0]:
-        _table(report, "No Version 1.0 readiness report is available.")
-    with tabs[1]:
-        _table(operational["domains"], "No operational readiness data is available.")
-    with tabs[2]:
-        if st.button("Validate Release", use_container_width=True):
-            st.session_state["release_readiness"] = release_service.validate_release(persist=True)
-        _table(st.session_state.get("release_readiness", release)["checks"], "No release readiness checks are available.")
-    with tabs[3]:
-        _table(production["domains"], "No production readiness data is available.")
-    with tabs[4]:
-        _table(compliance["frameworks"], "No compliance framework data is available.")
-    with tabs[5]:
-        _table(dr["checks"], "No DR readiness data is available.")
+    st.warning("NOT_VERIFIED: reviewed release and production validation evidence is unavailable.")
+    st.caption("This page does not grant technical acceptance or deployment approval.")
+    st.metric("Release status", release["status"])
+    st.metric("Production status", production["status"])
+    _table(release["checks"], "No verified release evidence.")
+    _table(production["domains"], "No verified production evidence.")
 
 
 if __name__ == "__main__":

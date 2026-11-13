@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 import streamlit as st
@@ -263,6 +263,26 @@ SIMPLIFIED_ROLE_NAVIGATION["auditor"] = [
 
     {"label": "Reports", "page_label": "Reports", "section": "Administration", "icon": "reports"},
 ]
+
+for _customer_workflow_role in (
+    "client_admin",
+    "executive",
+    "cio",
+    "finance",
+    "operations",
+    "auditor",
+):
+    home_item = next(
+        (
+            item
+            for item in SIMPLIFIED_ROLE_NAVIGATION[_customer_workflow_role]
+            if item["label"] == "Home"
+        ),
+        None,
+    )
+    if home_item is not None:
+        home_item["page_label"] = "Customer Workspace"
+
 PERSONA_PAGE_PATH_FALLBACKS = {
     "Business Architecture": "pages/business_architecture.py",
     "Business Units": "pages/business_units.py",
@@ -410,6 +430,39 @@ def filter_navigation_by_role(
     return filtered
 
 
+def filter_navigation_by_v1_scope(
+    items: Iterable[dict[str, Any]],
+    role: str,
+    *,
+    page_paths: dict[str, str],
+    role_pages: Mapping[str, Sequence[str]],
+) -> list[dict[str, Any]]:
+    from auth.v1_route_policy import is_v1_page_allowed
+
+    filtered = []
+    for item in items:
+        children = filter_navigation_by_v1_scope(
+            item.get("children", []),
+            role,
+            page_paths=page_paths,
+            role_pages=role_pages,
+        )
+        page = item.get("page")
+        if page and not is_v1_page_allowed(
+            page,
+            role,
+            page_paths=page_paths,
+            role_pages=role_pages,
+        ):
+            continue
+        if not page and not children:
+            continue
+        cloned = dict(item)
+        cloned["children"] = children
+        filtered.append(cloned)
+    return filtered
+
+
 def _render_page_button(item: dict[str, Any], current_page: str) -> None:
     label = item["label"]
     page = item.get("page")
@@ -553,6 +606,17 @@ def render_enterprise_sidebar(
         if not navigation_items:
             navigation_items = build_navigation_items(page_paths=page_paths or {}, role_pages=role_pages or {})
     visible_items = filter_navigation_by_role(navigation_items, role)
+    if page_paths is None or role_pages is None:
+        from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
+
+        page_paths = page_paths or PAGE_PATHS
+        role_pages = role_pages or ROLE_PAGES
+    visible_items = filter_navigation_by_v1_scope(
+        visible_items,
+        role,
+        page_paths=page_paths,
+        role_pages=role_pages,
+    )
     current_page = active_page or st.session_state.get("current_page", "")
 
     with st.sidebar:
@@ -574,8 +638,13 @@ def render_enterprise_sidebar(
 
         st.divider()
         if show_logout and st.button("Logout", key="sidebar_logout", use_container_width=True):
-            st.session_state.clear()
-            st.switch_page("pages/login.py")
+            from utils.auth import logout_user
+
+            try:
+                logout_user()
+            except Exception:
+                st.warning("Local session cleared, but Supabase sign-out could not be confirmed.")
+            st.rerun()
 
     return visible_items
 

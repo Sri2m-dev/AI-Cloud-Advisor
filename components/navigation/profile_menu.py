@@ -16,5 +16,10 @@ def render_profile_menu(*, show_logout: bool = True) -> None:
         st.caption(f"Role: {role}")
         st.caption(f"Workspace: {organization}")
         if show_logout and st.button("Logout", key="profile_logout", use_container_width=True):
-            st.session_state.clear()
-            st.switch_page("pages/login.py")
+            from utils.auth import logout_user
+
+            try:
+                logout_user()
+            except Exception:
+                st.warning("Local session cleared, but Supabase sign-out could not be confirmed.")
+            st.rerun()

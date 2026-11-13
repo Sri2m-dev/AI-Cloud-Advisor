@@ -1,0 +1,51 @@
+groups:
+  - name: nexora-operations
+    rules:
+      - alert: NexoraScrapeUnavailable
+        expr: up == 0
+        for: 3m
+        labels: {severity: critical}
+        annotations: {summary: 'Operational scrape unavailable; inspect private service and network'}
+      - alert: NexoraDependencyUnavailable
+        expr: nexora_dependency_up == 0
+        for: 3m
+        labels: {severity: critical}
+        annotations: {summary: 'Required application, Auth, Redis or PostgreSQL dependency unavailable/unverified'}
+      - alert: NexoraProbeStale
+        expr: time() - nexora_probe_observed_timestamp > 120
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: 'Probe collector stale; last-known status must not imply readiness'}
+      - alert: NexoraInfrastructureNotReady
+        expr: nexora_infrastructure_ready == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: 'Infrastructure readiness remains blocked; inspect dependency, storage and backup checks'}
+      - alert: NexoraStorageCapacityLow
+        expr: nexora_storage_free_ratio < 0.15
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Durable volume free space below threshold'}
+      - alert: NexoraBackupMissingOrStale
+        expr: nexora_backup_last_success_timestamp == 0 or time() - nexora_backup_last_success_timestamp > 90000
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: 'No recent verified encrypted backup packaging success recorded'}
+      - alert: NexoraBackupFailed
+        expr: nexora_backup_last_attempt_success == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: 'Backup attempt failed or no successful attempt is available'}
+      - alert: NexoraApplicationErrors
+        expr: increase(nexora_application_errors_total[5m]) > 0
+        labels: {severity: warning}
+        annotations: {summary: 'Unhandled application errors detected; inspect bounded private logs'}
+      - alert: NexoraApiServerErrors
+        expr: sum(rate(aicloudadvisor_http_requests_total{status=~'5..'}[5m])) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'API server errors above configured threshold'}
+      - alert: NexoraAlertRouteUnavailable
+        expr: increase(alertmanager_notifications_failed_total[5m]) > 0
+        labels: {severity: critical}
+        annotations: {summary: 'Operational notification delivery failed'}

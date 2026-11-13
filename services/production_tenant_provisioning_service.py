@@ -143,6 +143,7 @@ class ProductionTenantProvisioningService:
             "organization": "NOT_RUN",
             "profile": "NOT_RUN",
             "auth_invitation": "NOT_RUN",
+            "auth_binding": "NOT_RUN",
             "verification": "NOT_RUN",
         }
         try:
@@ -245,6 +246,7 @@ class ProductionTenantProvisioningService:
                 "AUTH_INVITATION_OUTCOME_UNCERTAIN",
             )
         invited_email = str(_field(_field(invitation, "user"), "email") or "").strip().lower()
+        invited_user = _field(invitation, "user")
         if invited_email != request.admin_email:
             steps["auth_invitation"] = "UNCERTAIN"
             return self._result(
@@ -254,6 +256,29 @@ class ProductionTenantProvisioningService:
                 "AUTH_INVITATION_IDENTITY_MISMATCH",
             )
         steps["auth_invitation"] = "SENT"
+
+        try:
+            auth_user_id = str(UUID(str(_field(invited_user, "id"))))
+        except (TypeError, ValueError, AttributeError):
+            steps["auth_binding"] = "FAILED"
+            return self._result(
+                request,
+                "PARTIAL_RECONCILIATION_REQUIRED",
+                steps,
+                "AUTH_IDENTITY_ID_INVALID",
+            )
+
+        try:
+            self.profiles.bind_auth_user(request.admin_email, auth_user_id)
+            steps["auth_binding"] = "BOUND"
+        except Exception:
+            steps["auth_binding"] = "UNCERTAIN"
+            return self._result(
+                request,
+                "PARTIAL_RECONCILIATION_REQUIRED",
+                steps,
+                "AUTH_PROFILE_BINDING_UNCERTAIN",
+            )
 
         state = self._safe_progress_read(request, steps)
         if state is None:
@@ -296,9 +321,17 @@ class ProductionTenantProvisioningService:
         if profile is not None and not self._profile_matches(request, profile):
             return "HARD_CONFLICT", "PROFILE_TENANT_OR_ROLE_MISMATCH"
         if auth_user is not None:
-            if organization is not None and profile is not None:
+            if (
+                organization is not None
+                and profile is not None
+                and self._profile_matches(
+                    request,
+                    profile,
+                    auth_user_id=str(_field(auth_user, "id") or ""),
+                )
+            ):
                 return "ALREADY_COMPLETE", None
-            return "HARD_CONFLICT", "AUTH_IDENTITY_WITHOUT_EXPECTED_PROFILE"
+            return "HARD_CONFLICT", "AUTH_PROFILE_IDENTITY_MISMATCH"
         if organization is not None or profile is not None:
             return "PARTIAL_RECONCILIATION_REQUIRED", "EXISTING_PARTIAL_STATE"
         return "NOT_STARTED", None
@@ -313,12 +346,16 @@ class ProductionTenantProvisioningService:
         )
 
     @staticmethod
-    def _profile_matches(request, profile):
+    def _profile_matches(request, profile, *, auth_user_id=None):
         return bool(
             profile
             and str(_field(profile, "email") or "").strip().lower() == request.admin_email
             and str(_field(profile, "org_id") or "") == request.organization_id
             and str(_field(profile, "role") or "").strip().lower() == INITIAL_ADMIN_ROLE
+            and (
+                auth_user_id is None
+                or str(_field(profile, "auth_user_id") or "") == auth_user_id
+            )
         )
 
     def _result(self, request, classification, steps, reason_code=None):

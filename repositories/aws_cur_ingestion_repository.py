@@ -47,7 +47,10 @@ class SupabaseAwsCurIngestionRepository:
     def list_account_mappings(self, context: TenantContext) -> Iterable[AccountMapping]:
         response = (
             self._table("cloud_account_mapping")
-            .select("organization_id,tenant_id,payer_account_id,account_id,status")
+            .select(
+                "organization_id,tenant_id,payer_account_id,account_id,status,"
+                "effective_from,effective_to"
+            )
             .eq("organization_id", context.organization_id)
             .eq("tenant_id", context.tenant_id)
             .execute()

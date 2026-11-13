@@ -1,0 +1,59 @@
+{
+  "services": {
+    "qualification": {
+      "profiles": [
+        "qualification"
+      ],
+      "image": "${NEXORA_POSTGRES_IMAGE:?Supply inspected PostgreSQL 17 digest}",
+      "network_mode": "service:postgres",
+      "read_only": true,
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "environment": {
+        "PGHOST": "127.0.0.1",
+        "PGPORT": "5432",
+        "PGUSER": "postgres",
+        "PGDATABASE": "${NEXORA_POSTGRES_DATABASE:?Supply authorized isolated name}",
+        "PGPASSFILE": "/run/secrets/pgpass",
+        "PGSSLMODE": "verify-full",
+        "PGSSLROOTCERT": "/run/secrets/pg_ca",
+        "PGOPTIONS": "-c nexora.qualification_authorized=local-disposable"
+      },
+      "secrets": [
+        "pgpass",
+        "pg_ca"
+      ],
+      "volumes": [
+        "${NEXORA_SOURCE_ROOT:?Supply checked candidate source root}/database/contracts/g08_m2a:/qualification/database/contracts/g08_m2a:ro",
+        "${NEXORA_SOURCE_ROOT:?Supply checked candidate source root}/database/contracts/g08_m2b:/qualification/database/contracts/g08_m2b:ro",
+        "${NEXORA_SOURCE_ROOT:?Supply checked candidate source root}/database/contracts/g08_m2c:/qualification/database/contracts/g08_m2c:ro",
+        "${NEXORA_SOURCE_ROOT:?Supply checked candidate source root}/tests/database_integrity:/qualification/tests/database_integrity:ro",
+        "${NEXORA_SOURCE_ROOT:?Supply checked candidate source root}/tests/owner_authorization:/qualification/tests/owner_authorization:ro"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      },
+      "entrypoint": [
+        "psql"
+      ],
+      "command": [
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        "/qualification/database/contracts/g08_m2c/qualification/install_and_test.sql"
+      ]
+    }
+  },
+  "secrets": {
+    "pgpass": {
+      "file": "${NEXORA_PGPASS_FILE:?Supply local disposable fixture managed pgpass file}"
+    }
+  }
+}

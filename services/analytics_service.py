@@ -5,17 +5,38 @@ Centralized analytics service for dashboard analytics data access.
 from __future__ import annotations
 
 from datetime import datetime
+from functools import wraps
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-from config import DEFAULT_ORG_ID
-from services.supabase_client import supabase
+from auth.authenticated_tenant import AuthenticatedTenantError
+from services.enterprise_spend_composition import authenticated_tenant_context
+from services.supabase_client import TenantScopeRequiredError, supabase
+
+
+def _tenant_cache(function):
+    @st.cache_data(ttl=300, show_spinner=False)
+    def cached(context, args, kwargs):
+        return function(*args, **kwargs)
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        context = authenticated_tenant_context(st.session_state)
+        return cached(context, args, kwargs)
+
+    wrapper.clear = cached.clear
+    return wrapper
 
 
 def _effective_org_id(org_id: str | None = None) -> str:
-    return org_id or DEFAULT_ORG_ID
+    context = authenticated_tenant_context(st.session_state)
+    if org_id and str(org_id).strip() != context.organization_id:
+        raise AuthenticatedTenantError(
+            "requested organization is not the authenticated tenant"
+        )
+    return context.organization_id
 
 
 def _success(data: Any, message: str = "", errors: Any = None) -> dict[str, Any]:
@@ -42,10 +63,16 @@ def _rows(
     org_id: str | None = None,
     org_column: str = "org_id",
 ) -> list[dict[str, Any]]:
-    query = supabase.table(table_name).select(select_columns)
-
-    if org_id:
-        query = query.eq(org_column, org_id)
+    context = authenticated_tenant_context(st.session_state)
+    if org_id and str(org_id).strip() != context.organization_id:
+        raise AuthenticatedTenantError(
+            "requested organization is not the authenticated tenant"
+        )
+    query = (
+        supabase.tenant_table(table_name, context)
+        .select(select_columns)
+        .eq(org_column, context.organization_id)
+    )
 
     response = query.execute()
     return response.data or []
@@ -60,20 +87,22 @@ def _numeric_series(df: pd.DataFrame, column: str) -> pd.Series:
 
 class AnalyticsService:
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_all_resources(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_all_resources(org_id: str | None = None):
         try:
             return _rows(
                 "unified_cloud_costs",
                 "resource_id,cloud,service_name,usage_quantity,cost,labels,tag",
                 _effective_org_id(org_id),
             )
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_total_spend(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_total_spend(org_id: str | None = None):
         try:
             rows = _rows(
                 "unified_cloud_costs",
@@ -86,44 +115,54 @@ class AnalyticsService:
                 return 0
 
             return round(float(_numeric_series(df, "cost").sum()), 2)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return 0
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_spend_by_cloud(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_spend_by_cloud(org_id: str | None = None):
         try:
             return get_spend_by_cloud(org_id)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_top_services(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_top_services(org_id: str | None = None):
         try:
             return get_top_services(org_id=org_id)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_recommendations(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_recommendations(org_id: str | None = None):
         try:
             return _rows("recommendations", "*", _effective_org_id(org_id))
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_anomalies(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_anomalies(org_id: str | None = None):
         try:
             return _rows("cost_anomaly_org_view", "*", _effective_org_id(org_id))
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return []
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_tagging_compliance_score(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_tagging_compliance_score(org_id: str | None = None):
         try:
             rows = _rows(
                 "unified_cloud_costs",
@@ -140,12 +179,14 @@ class AnalyticsService:
                 & (df["labels"].astype(str).str.len() > 2)
             ]
             return round(len(tagged) / max(len(df), 1) * 100, 2)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return 100
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_security_compliance_score(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_security_compliance_score(org_id: str | None = None):
         try:
             rows = _rows(
                 "security_findings",
@@ -162,12 +203,14 @@ class AnalyticsService:
             ]
             penalty = min(len(critical) * 10, 100)
             return max(0, 100 - penalty)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return 100
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_cost_optimization_score(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_cost_optimization_score(org_id: str | None = None):
         try:
             rows = _rows(
                 "recommendations",
@@ -185,12 +228,14 @@ class AnalyticsService:
                 )
             ]
             return round(len(completed) / max(len(df), 1) * 100, 2)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return 100
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_sla_compliance_score(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_sla_compliance_score(org_id: str | None = None):
         try:
             rows = _rows(
                 "approval_queue",
@@ -214,12 +259,14 @@ class AnalyticsService:
 
             within_sla = completed[completed["approval_time"] <= completed["sla_due"]]
             return round(len(within_sla) / max(len(completed), 1) * 100, 2)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return 100
 
     @staticmethod
-    @st.cache_data(ttl=300, show_spinner=False)
-    def get_idle_resource_score(org_id=DEFAULT_ORG_ID):
+    @_tenant_cache
+    def get_idle_resource_score(org_id: str | None = None):
         try:
             rows = _rows(
                 "unified_cloud_costs",
@@ -234,28 +281,34 @@ class AnalyticsService:
             usage = _numeric_series(df, "usage_quantity")
             idle = usage[usage == 0]
             return round((1 - len(idle) / max(len(df), 1)) * 100, 2)
+        except (AuthenticatedTenantError, TenantScopeRequiredError):
+            raise
         except Exception:
             return 100
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_recommendations(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_recommendations(org_id: str | None = None):
     try:
         return _rows("recommendations", "*", _effective_org_id(org_id))
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception:
         return []
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_anomalies(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_anomalies(org_id: str | None = None):
     try:
         return _rows("cost_anomaly_org_view", "*", _effective_org_id(org_id))
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception:
         return []
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_total_cloud_spend(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_total_cloud_spend(org_id: str | None = None):
     try:
         rows = _rows(
             "unified_cloud_costs",
@@ -276,12 +329,14 @@ def get_total_cloud_spend(org_id=DEFAULT_ORG_ID):
                 "cloud_count": cloud_count,
             }
         )
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception as exc:
         return _failure({"total_spend": 0.0, "cloud_count": 0}, exc)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_spend_by_cloud(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_spend_by_cloud(org_id: str | None = None):
     try:
         rows = _rows(
             "unified_cloud_costs",
@@ -302,12 +357,14 @@ def get_spend_by_cloud(org_id=DEFAULT_ORG_ID):
         )
 
         return grouped.to_dict("records")
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception:
         return []
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_top_services(limit=10, org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_top_services(limit=10, org_id: str | None = None):
     try:
         if not isinstance(limit, int):
             org_id, limit = limit, 10
@@ -333,12 +390,14 @@ def get_top_services(limit=10, org_id=DEFAULT_ORG_ID):
         )
 
         return grouped.to_dict("records")
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception:
         return []
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_governance_score(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_governance_score(org_id: str | None = None):
     try:
         tagging_score = AnalyticsService.get_tagging_compliance_score(org_id)
         security_score = AnalyticsService.get_security_compliance_score(org_id)
@@ -380,12 +439,14 @@ def get_governance_score(org_id=DEFAULT_ORG_ID):
                 },
             }
         )
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception as exc:
         return _failure({"score": 0, "status": "UNKNOWN", "breakdown": {}}, exc)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_governance_trends(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_governance_trends(org_id: str | None = None):
     try:
         score_response = get_governance_score(org_id)
         score_data = score_response.get("data", {})
@@ -407,12 +468,14 @@ def get_governance_trends(org_id=DEFAULT_ORG_ID):
                 }
             ]
         )
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception as exc:
         return _failure([], exc)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_open_recommendations(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_open_recommendations(org_id: str | None = None):
     try:
         rows = _rows(
             "recommendations",
@@ -426,12 +489,14 @@ def get_open_recommendations(org_id=DEFAULT_ORG_ID):
             not in {"completed", "implemented", "closed", "rejected"}
         ]
         return _success(open_rows)
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception as exc:
         return _failure([], exc)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_active_anomalies(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_active_anomalies(org_id: str | None = None):
     try:
         rows = get_anomalies(org_id)
         active_rows = [
@@ -441,12 +506,14 @@ def get_active_anomalies(org_id=DEFAULT_ORG_ID):
             not in {"closed", "resolved", "dismissed"}
         ]
         return _success(active_rows)
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception as exc:
         return _failure([], exc)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_savings_opportunities(org_id=DEFAULT_ORG_ID):
+@_tenant_cache
+def get_savings_opportunities(org_id: str | None = None):
     try:
         rows = _rows(
             "recommendations",
@@ -465,6 +532,8 @@ def get_savings_opportunities(org_id=DEFAULT_ORG_ID):
             > 0
         ]
         return _success(savings_rows)
+    except (AuthenticatedTenantError, TenantScopeRequiredError):
+        raise
     except Exception as exc:
         return _failure([], exc)
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from uuid import uuid4
 
 from core.permissions.decorators import PermissionDenied
 from core.permissions.permission_matrix import has_permission
@@ -17,7 +16,6 @@ from repositories.v1_approval_repository import V1ApprovalRepository
 from services.enterprise_spend_composition import authenticated_tenant_context
 from services.supabase_client import supabase
 from services.v1_approval_authority import SupabaseApprovalAuthority
-
 
 _V1_APPROVAL_REPOSITORY = V1ApprovalRepository(SupabaseApprovalAuthority(supabase))
 
@@ -87,10 +85,10 @@ def _approval_action_result(
     if not user_role or not has_permission(user_role, action):
         raise PermissionDenied(f"Role '{user_role}' lacks permission for '{action}'")
 
-    return ApprovalActionResult(
-        success=True,
-        data={"trace_id": str(uuid4()), "request_id": str(approval_id)},
-    )
+    # A role check and random trace ID are not a committed approval decision.
+    from auth.authenticated_tenant import require_protected_workflow
+
+    require_protected_workflow("approval_compatibility_action")
 
 
 def approve_request(
@@ -130,19 +128,24 @@ class ApprovalService:
     @staticmethod
     def get_dashboard_metrics() -> dict[str, Any]:
         rows = ApprovalService.get_all_approvals()
-        return {"pending": sum(row.get("status") == "PENDING" for row in rows),
-                "approved": sum(row.get("status") == "APPROVED" for row in rows),
-                "rejected": sum(row.get("status") == "REJECTED" for row in rows),
-                "escalated": sum(row.get("status") == "ESCALATED" for row in rows),
-                "total": len(rows)}
+        return {
+            "pending": sum(row.get("status") == "PENDING" for row in rows),
+            "approved": sum(row.get("status") == "APPROVED" for row in rows),
+            "rejected": sum(row.get("status") == "REJECTED" for row in rows),
+            "escalated": sum(row.get("status") == "ESCALATED" for row in rows),
+            "total": len(rows),
+        }
 
     @staticmethod
     def get_workflow_stage_metrics():
         rows = ApprovalService.get_all_approvals()
-        return {stage.lower(): sum(row.get("workflow_stage") == stage and row.get("status") == "PENDING" for row in rows)
-                for stage in ("FINANCE", "CIO", "CEO")} | {
-                    "pmo": 0, "completed": sum(row.get("status") == "COMPLETED" for row in rows)
-                }
+        return {
+            stage.lower(): sum(
+                row.get("workflow_stage") == stage and row.get("status") == "PENDING"
+                for row in rows
+            )
+            for stage in ("FINANCE", "CIO", "CEO")
+        } | {"pmo": 0, "completed": sum(row.get("status") == "COMPLETED" for row in rows)}
 
     @staticmethod
     def get_overdue_approvals():
@@ -184,7 +187,11 @@ class ApprovalService:
     ):
         context = _approval_context()
         return _V1_APPROVAL_REPOSITORY.transition(
-            context, approval_id, target="APPROVED", actor=context.user_id, reason=comments,
+            context,
+            approval_id,
+            target="APPROVED",
+            actor=context.user_id,
+            reason=comments,
             actor_role=context.role,
         )
 
@@ -196,7 +203,11 @@ class ApprovalService:
     ):
         context = _approval_context()
         return _V1_APPROVAL_REPOSITORY.transition(
-            context, approval_id, target="REJECTED", actor=context.user_id, reason=comments,
+            context,
+            approval_id,
+            target="REJECTED",
+            actor=context.user_id,
+            reason=comments,
             actor_role=context.role,
         )
 
@@ -208,15 +219,49 @@ class ApprovalService:
     ):
         context = _approval_context()
         return _V1_APPROVAL_REPOSITORY.transition(
-            context, approval_id, target="ESCALATED", actor=context.user_id,
-            actor_role=context.role, escalated_to=str(escalated_to), reason=comments,
+            context,
+            approval_id,
+            target="ESCALATED",
+            actor=context.user_id,
+            actor_role=context.role,
+            escalated_to=str(escalated_to),
+            reason=comments,
         )
 
     @staticmethod
     def get_sla_metrics():
-        return {"total_requests": len(ApprovalService.get_all_approvals()), "completed_within_sla": 0,
-                "breached_sla": 0, "pending_overdue": 0, "unknown_sla": 0,
-                "sla_compliance_percent": 100, "sla_compliance": 100}
+        # The canonical v1 authority has no deadline/policy binding. Escalation
+        # aging thresholds are not a completion SLA and must not be substituted.
+        result = {
+            "status": "UNKNOWN",
+            "total_requests": None,
+            "completed_within_sla": None,
+            "breached_sla": None,
+            "pending_overdue": None,
+            "pending_within_sla": None,
+            "unknown_sla": None,
+            "measured_requests": 0,
+            "sla_compliance_percent": None,
+            "sla_compliance": None,
+            "reason": (
+                "Canonical v1 approvals have no authoritative deadline or SLA policy binding "
+                "defining the measurement clock, eligible states and completion event. "
+                "created_at and decision_at alone cannot establish compliance."
+            ),
+        }
+        try:
+            requests = _V1_APPROVAL_REPOSITORY.sla_requests(_approval_context())
+        except Exception:
+            result.update(
+                status="NOT_AVAILABLE",
+                measured_requests=None,
+                reason="Authenticated canonical approval SLA evidence could not be read.",
+            )
+            return result
+        result.update(total_requests=len(requests), unknown_sla=len(requests))
+        if not requests:
+            result["reason"] = "No approvals: SLA compliance has no measured population."
+        return result
 
     @staticmethod
     def workflow_summary():

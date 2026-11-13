@@ -11,6 +11,10 @@ LOGGER = logging.getLogger("background-jobs")
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
+class TenantEnumerationError(RuntimeError):
+    """Raised when a tenant-scoped job cannot safely resolve its tenant set."""
+
+
 def _run_python_script(script_name: str) -> None:
     script_path = ROOT_DIR / script_name
     if not script_path.exists():
@@ -23,12 +27,17 @@ def _run_python_script(script_name: str) -> None:
         LOGGER.error("Script failed (%s): exit code %s", script_name, completed.returncode)
 
 
-def _get_tenant_ids() -> list[str]:
+def _get_tenant_ids(*, fail_on_error: bool = False) -> list[str]:
     try:
         rows = supabase.table("unified_cloud_costs").select("organization_id").execute().data or []
         tenants = sorted({str(r.get("organization_id")) for r in rows if r.get("organization_id")})
         return tenants
     except Exception as exc:
+        if fail_on_error:
+            LOGGER.error("Tenant enumeration failed; recommendation job cannot run")
+            raise TenantEnumerationError(
+                "Tenant enumeration failed; recommendation job was not run"
+            ) from None
         LOGGER.exception("Failed to resolve tenant ids: %s", exc)
         return []
 
@@ -114,12 +123,13 @@ def job_optimization_engine_daily() -> None:
         LOGGER.warning("Recommendation generation unavailable: %s", exc)
         return
 
-    tenants = _get_tenant_ids()
+    tenants = _get_tenant_ids(fail_on_error=True)
     if not tenants:
-        generate_recommendations()
-    else:
-        for tenant in tenants:
-            generate_recommendations(org_id=tenant)
+        LOGGER.warning("No tenants found; optimization recommendation job skipped")
+        return
+
+    for tenant in tenants:
+        generate_recommendations(org_id=tenant)
     LOGGER.info("[job] optimization_engine_daily completed")
 
 
@@ -277,4 +287,3 @@ def job_alert_processor_hourly() -> None:
         LOGGER.exception("Alert processor job failed: %s", exc)
 
     LOGGER.info("[job] alert_processor_hourly completed")
-

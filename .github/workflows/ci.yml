@@ -114,3 +114,16 @@ jobs:
             tests/data_fabric/test_supabase_relationship_history_integration.py \
             tests/data_fabric/test_supabase_governance_semantic_integration.py \
             tests/data_fabric/test_supabase_atomic_write_integration.py
+
+      - name: M1 release safety regressions (offline)
+        run: python scripts/run_m1_verification.py --output-dir .tmp/m1-ci
+
+      - name: Inspect allowlisted packaging context without Docker
+        run: python scripts/audit_release_packaging.py --output .tmp/m1-ci/context-inspection.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-offline-verification-${{ github.sha }}
+          path: .tmp/m1-ci/
+          if-no-files-found: error

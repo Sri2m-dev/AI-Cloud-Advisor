@@ -43,7 +43,7 @@ def test_production_local_onboarding_handlers_fail_before_database_access(
         lambda: pytest.fail("production local onboarding must not access SQLite"),
     )
 
-    with pytest.raises(OnboardingError, match="disabled in production"):
+    with pytest.raises(OnboardingError, match="disabled for this authentication mode"):
         handler(*args)
 
 
@@ -56,6 +56,16 @@ def test_nonproduction_local_onboarding_remains_available(monkeypatch, environme
 
 def test_explicit_synthetic_demo_keeps_nonproduction_onboarding(monkeypatch):
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.delenv("AUTH_MODE", raising=False)
     monkeypatch.setenv("NEXORA_DEMO_MODE", "true")
 
     assert onboarding_service.local_onboarding_allowed() is True
+
+
+def test_external_auth_mode_hides_local_onboarding_in_development(monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setenv("AUTH_MODE", "supabase")
+    monkeypatch.setenv("SUPABASE_URL", "https://auth.example.test")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "synthetic-public-key")
+
+    assert onboarding_service.local_onboarding_allowed() is False

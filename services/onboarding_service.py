@@ -18,6 +18,7 @@ from auth.role_constants import ROLES, normalize_role
 from config import settings
 from database.db import get_db
 from services import audit_service
+from services.local_auth_service import local_auth_enabled
 
 
 class OnboardingState(str, Enum):
@@ -83,12 +84,17 @@ _EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def local_onboarding_allowed() -> bool:
-    return settings.ENVIRONMENT.strip().lower() != "production"
+    return (
+        settings.ENVIRONMENT.strip().lower() != "production"
+        and local_auth_enabled(environment=settings.ENVIRONMENT)
+    )
 
 
 def _require_local_onboarding_allowed() -> None:
     if not local_onboarding_allowed():
-        raise OnboardingError("Local organization onboarding is disabled in production")
+        raise OnboardingError(
+            "Local organization onboarding is disabled for this authentication mode"
+        )
 
 
 def _normalize_email(email: str) -> str:

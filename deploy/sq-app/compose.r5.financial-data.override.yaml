@@ -1,0 +1,10 @@
+services:
+  frontend:
+    image: nexora-sqapp-r5-auth-financial:20261111
+    environment:
+      FINANCIAL_DATA_URL: http://r5-financial-data-postgrest:3000
+
+  api:
+    image: nexora-sqapp-r5-auth-financial:20261111
+    environment:
+      FINANCIAL_DATA_URL: http://r5-financial-data-postgrest:3000

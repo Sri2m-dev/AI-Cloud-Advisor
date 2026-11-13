@@ -15,6 +15,7 @@ from auth.connector_context import (  # noqa: E402
 )
 from auth.role_constants import normalize_role  # noqa: E402
 from components.navigation import render_enterprise_sidebar  # noqa: E402
+from components.navigation.v1_page_link import switch_to_v1_page  # noqa: E402
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES  # noqa: E402
 from services.aws_connector_service import AWSConnectorService  # noqa: E402
 from services.aws_onboarding_template_service import AWSOnboardingTemplateService  # noqa: E402
@@ -138,13 +139,23 @@ def _render_certified_scope(items: tuple[str, ...]) -> None:
 
 
 def _render_cloud_results(result: dict[str, object]) -> None:
-    metrics = (
-        ("Cloud accounts", result.get("accounts", 0)),
-        ("Cost records", result.get("costs", 0)),
-        ("Resources", result.get("resources", 0)),
-        ("Discovered assets", result.get("assets_discovered", 0)),
-        ("Recommendations", result.get("recommendations", 0)),
-    )
+    retrieved = result.get("retrieved_counts")
+    if not isinstance(retrieved, dict):
+        retrieved = result
+    if result.get("provider") == "Azure":
+        metrics = (
+            ("Azure accounts discovered", retrieved.get("accounts", 0)),
+            ("Azure resources discovered", retrieved.get("resources", 0)),
+            ("SourceFacts published", result.get("source_facts_published", 0)),
+            ("Canonical entities projected", result.get("canonical_entities_projected", 0)),
+        )
+    else:
+        metrics = (
+            ("AWS accounts retrieved", retrieved.get("accounts", 0)),
+            ("AWS cost records retrieved", retrieved.get("costs", 0)),
+            ("AWS resources retrieved", retrieved.get("resources", 0)),
+            ("AWS recommendations retrieved", retrieved.get("recommendations", 0)),
+        )
     columns = st.columns(len(metrics))
     for column, (label, value) in zip(columns, metrics, strict=True):
         column.metric(label, f"{int(value or 0):,}")
@@ -153,7 +164,7 @@ def _render_cloud_results(result: dict[str, object]) -> None:
 def _open_demo(organization_id: str) -> None:
     load_demo_tenant(organization_id)
     activate_demo_workspace(st.session_state)
-    st.switch_page("pages/welcome.py")
+    switch_to_v1_page("pages/welcome.py")
 
 
 def _step_header(step: int, title: str, detail: str) -> None:
@@ -1335,38 +1346,45 @@ if selected_path == "demo_unavailable":
 
 cloud_result = st.session_state.get("environment_analysis_result")
 if cloud_result:
-    if cloud_result.get("status") == "SUCCESS":
+    provider = cloud_result.get("provider")
+    if provider == "Azure" and cloud_result.get("status") == "SUCCESS":
         _step_header(
             4,
-            "Executive brief ready",
-            "The completed discovery results are ready for executive review.",
+            "Azure resource discovery complete",
+            "Azure resource evidence was published. Financial cost ingestion was not performed.",
         )
-        analysis_name = cloud_result.get("connection_name") or cloud_result.get("provider")
-        _pipeline(
-            f"{analysis_name} analysis complete",
-            (
-                ("Connection", "Verified"),
-                ("Accounts", f"{cloud_result.get('accounts', 0):,} discovered"),
-                ("Cost normalization", f"{cloud_result.get('costs', 0):,} records"),
-                ("Resource discovery", f"{cloud_result.get('resources', 0):,} resources"),
-                ("Technology inventory", "Persisted"),
-                ("Relationship graph", "Persisted"),
-                ("Recommendations", f"{cloud_result.get('recommendations', 0):,} findings"),
-                ("Executive Brief", "Ready"),
-            ),
+        st.success("Azure resource discovery completed.")
+        st.info(
+            "Financial cost ingestion: NOT PERFORMED. Dashboard financial readiness: UNKNOWN."
         )
-        st.subheader("Live discoveries")
-        _render_cloud_results(cloud_result)
-        st.page_link(
-            "pages/welcome.py",
-            label="Open Executive Operating System",
-            use_container_width=True,
+    elif provider == "AWS" and cloud_result.get("status") == "PARTIAL":
+        if cloud_result.get("discovery_status") == "SUCCESS":
+            _step_header(
+                4,
+                "AWS discovery completed; persistence blocked",
+                "Retrieved cloud data is not confirmed as persisted or available to the dashboard.",
+            )
+        else:
+            _step_header(
+                4,
+                "AWS discovery partially completed",
+                "Some data may not have been retrieved, and retrieved data was not persisted.",
+            )
+        st.warning(cloud_result.get("error") or "AWS persistence was not performed.")
+        st.info(
+            "Financial ingestion: BLOCKED. Persistence: NOT ATTEMPTED. "
+            "Dashboard financial readiness: UNKNOWN."
         )
-        if st.button("Analyze another environment", key="restart_cloud_complete"):
-            _reset_journey()
-            st.rerun()
-    else:
+    elif cloud_result.get("status") == "REJECTED":
+        st.error(cloud_result.get("error") or "Live discovery is unavailable for this tenant.")
+    elif cloud_result.get("status") == "FAILED":
         st.error("Analysis failed. No discovery stage is marked complete.")
+
+    if cloud_result.get("discovery_status") in {"SUCCESS", "PARTIAL", "FAILED"}:
+        _render_cloud_results(cloud_result)
+    if st.button("Analyze another environment", key="restart_cloud_complete"):
+        _reset_journey()
+        st.rerun()
 
 prospect_result = st.session_state.get("prospect_analysis")
 upload_admission = st.session_state.get("pue_upload_admission")
@@ -1472,7 +1490,7 @@ if prospect_result and selected_path == "upload":
             actor_role=role,
         )
         _render_enterprise_workflow(upload_admission)
-    st.page_link(
+    v1_page_link(
         "pages/prospect_data_intake.py",
         label="Open Results, Ask Nexora, and Board Pack",
         use_container_width=True,

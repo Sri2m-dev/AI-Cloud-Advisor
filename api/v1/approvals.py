@@ -1,353 +1,336 @@
-"""
-Approval API Endpoints
-Handles approval workflow operations via REST API
-"""
+"""Authenticated V1 approval API backed by append-only customer workflow events."""
 
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, Dict, Any
-from pydantic import BaseModel
+from dataclasses import asdict
+from functools import lru_cache
+from typing import Any
 
-from services import approval_service
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict
+
+from auth.authenticated_tenant import (
+    AuthenticatedTenantContext,
+    AuthenticatedTenantError,
+    api_application_account,
+)
+from backend.security import get_current_user
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
+_READ_ROLES = frozenset(
+    {"client_admin", "executive", "cio", "finance", "operations", "auditor"}
+)
 
 
-# ==============================================================================
-# Request/Response Models
-# ==============================================================================
+class ApprovalCreate(BaseModel):
+    workspace_id: str
+    decision_id: str
+    reason: str
 
-class CreateApprovalRequest(BaseModel):
-    """Request model for creating an approval"""
-    title: str
-    description: Optional[str] = None
-    type: Optional[str] = "general"
-    priority: Optional[str] = "medium"
-    assigned_to: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    model_config = ConfigDict(extra="forbid")
 
 
-class ApprovalResponse(BaseModel):
-    """Response model for approval data"""
-    id: str
-    title: str
-    description: Optional[str] = None
-    type: str
-    priority: str
-    status: str
-    created_by: str
-    created_at: str
-    updated_at: str
+class ApprovalCommand(BaseModel):
+    approved_by: str | None = None
+    rejected_by: str | None = None
+    escalated_by: str | None = None
+    comments: str | None = None
+    reason: str | None = None
+    escalate_to: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
-class ApproveRequestBody(BaseModel):
-    """Request body for approving an approval"""
-    approved_by: str
-    comments: Optional[str] = None
+def _request_context(request: Request, user: dict[str, Any]):
+    try:
+        account = api_application_account(user)
+        authorization = request.headers.get("authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise HTTPException(status_code=401, detail="A verified bearer token is required")
+        context = AuthenticatedTenantContext(
+            organization_id=account.organization_id,
+            organization_name=str(
+                user.get("organization_name")
+                or user.get("tenant_name")
+                or account.organization_id
+            ),
+            user_id=str(user.get("user_id") or user.get("sub") or account.user_id),
+            user_email=str(user.get("email") or account.user_id),
+            role=str(user.get("role") or ""),
+            authorization_claims=frozenset(),
+            tenant_id=account.organization_id,
+            auth_access_token=token.strip(),
+        )
+    except AuthenticatedTenantError as error:
+        raise HTTPException(status_code=403, detail="Approval scope denied") from error
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail="Approval scope denied") from error
+    return context, account
 
 
-class RejectRequestBody(BaseModel):
-    """Request body for rejecting an approval"""
-    rejected_by: str
-    reason: Optional[str] = None
+def _verify_selectors(
+    request: Request,
+    account,
+    context: AuthenticatedTenantContext,
+    *,
+    actor: str | None = None,
+    organization_id: str | None = None,
+) -> None:
+    organizations = request.query_params.getlist("org_id")
+    if organization_id is not None:
+        organizations.append(organization_id)
+    actors = request.query_params.getlist("created_by")
+    actors.extend(request.query_params.getlist("username"))
+    if actor is not None:
+        actors.append(actor)
+    if any(value != account.organization_id for value in organizations):
+        raise HTTPException(status_code=403, detail="Approval scope denied")
+    valid_actors = {account.user_id, context.user_id}
+    if any(value not in valid_actors for value in actors):
+        raise HTTPException(status_code=403, detail="Approval actor denied")
 
 
-class EscalateRequestBody(BaseModel):
-    """Request body for escalating an approval"""
-    escalated_by: str
-    escalate_to: str
-    reason: Optional[str] = None
+@lru_cache(maxsize=1)
+def _workflow_service():
+    from services.customer_workflow_service import (
+        CustomerWorkflowError,
+        CustomerWorkflowService,
+    )
+    from universal_evidence.persistence import LifecyclePersistenceError
+
+    try:
+        return CustomerWorkflowService.from_environment()
+    except (CustomerWorkflowError, LifecyclePersistenceError) as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer workflow persistence is unavailable",
+        ) from error
 
 
-class ApprovalListResponse(BaseModel):
-    """Response model for approval list"""
-    total: int
-    approvals: list
+def _run(operation):
+    from services.customer_workflow_service import CustomerWorkflowError
+    from universal_evidence.persistence import LifecyclePersistenceError
+
+    try:
+        return operation()
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail="Approval scope denied") from error
+    except CustomerWorkflowError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except LifecyclePersistenceError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer workflow persistence is unavailable",
+        ) from error
 
 
-# ==============================================================================
-# API Endpoints
-# ==============================================================================
+def _approval_records(service, context: AuthenticatedTenantContext) -> list[dict[str, Any]]:
+    records = []
+    for workspace in service.list_workspaces(context):
+        workflow = service.resume_workspace(context, workspace.workspace_id)
+        events = workflow["approvals"]
+        requests = [
+            event for event in events
+            if event["event_type"] == "APPROVAL_REQUESTED"
+        ]
+        transitions = [
+            event for event in events
+            if event["event_type"] == "APPROVAL_TRANSITIONED"
+        ]
+        for request_event in requests:
+            request_payload = request_event["payload"]
+            approval_id = request_payload["approval_id"]
+            history = []
+            approval = dict(request_payload["approval"])
+            for event in transitions:
+                payload = event["payload"]
+                if payload["approval_id"] != approval_id:
+                    continue
+                approval = dict(payload["approval"])
+                history.append(dict(payload["history"]))
+            records.append(
+                {
+                    **approval,
+                    "approval_id": approval_id,
+                    "workspace_id": workspace.workspace_id,
+                    "request_event_id": request_event["event_id"],
+                    "requested_at": request_event["occurred_at"],
+                    "decision_event_id": request_payload["decision_id"],
+                    "evidence_event_id": request_payload["evidence_id"],
+                    "history": history,
+                }
+            )
+    return records
+
+
+def _find_approval(service, context: AuthenticatedTenantContext, approval_id: str):
+    for record in _approval_records(service, context):
+        if record["approval_id"] == approval_id:
+            return record
+    raise HTTPException(status_code=404, detail="Approval was not found")
+
 
 @router.post("/create")
 def create_approval(
-    request: CreateApprovalRequest,
-    created_by: str = Query(..., description="User ID creating the approval"),
-    org_id: str = Query(..., description="Organization ID")
-) -> Dict[str, Any]:
-    """
-    Create a new approval request.
-    
-    **Parameters:**
-    - `title`: Approval title
-    - `description`: Detailed description (optional)
-    - `type`: Type of approval (general, cost, security, etc.)
-    - `priority`: Priority level (low, medium, high)
-    - `assigned_to`: Assign to a specific user (optional)
-    - `created_by`: User creating the approval
-    - `org_id`: Organization ID
-    
-    **Returns:**
-    Created approval record with ID
-    """
-    try:
-        approval_data = request.dict(exclude_none=True)
-        result = approval_service.create_approval(approval_data, created_by, org_id)
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return {"success": True, "approval": result}
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating approval: {str(e)}")
+    payload: ApprovalCreate,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    context, account = _request_context(request, user)
+    _verify_selectors(request, account, context)
+    service = _workflow_service()
+    event = _run(
+        lambda: service.request_approval(
+            context,
+            payload.workspace_id,
+            decision_id=payload.decision_id,
+            reason=payload.reason,
+        )
+    )
+    return asdict(event)
 
 
 @router.get("/list")
-def list_approvals(
-    org_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    assigned_to: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=500)
-) -> ApprovalListResponse:
-    """
-    List approvals with optional filtering.
-    
-    **Query Parameters:**
-    - `org_id`: Filter by organization ID
-    - `status`: Filter by status (PENDING, APPROVED, REJECTED, ESCALATED)
-    - `assigned_to`: Filter by assigned user
-    - `limit`: Maximum number of results (default: 100, max: 500)
-    
-    **Returns:**
-    List of approval records matching filters
-    """
-    try:
-        approvals = approval_service.get_approvals(
-            org_id=org_id,
-            status=status,
-            assigned_to=assigned_to,
-            limit=limit
-        )
-        
-        return ApprovalListResponse(
-            total=len(approvals),
-            approvals=approvals
-        )
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching approvals: {str(e)}")
-
-
-@router.get("/{approval_id}")
-def get_approval(approval_id: str) -> Dict[str, Any]:
-    """
-    Retrieve a single approval by ID.
-    
-    **Parameters:**
-    - `approval_id`: The approval ID to retrieve
-    
-    **Returns:**
-    Approval record or 404 if not found
-    """
-    try:
-        approval = approval_service.get_approval_by_id(approval_id)
-        
-        if not approval:
-            raise HTTPException(status_code=404, detail="Approval not found")
-        
-        return {"success": True, "approval": approval}
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching approval: {str(e)}")
-
-
-@router.post("/{approval_id}/approve")
-def approve(
-    approval_id: str,
-    request: ApproveRequestBody
-) -> Dict[str, Any]:
-    """
-    Approve an approval request.
-    
-    **Parameters:**
-    - `approval_id`: The approval ID to approve
-    - `approved_by`: User ID of the approver
-    - `comments`: Optional approval comments
-    
-    **Returns:**
-    Updated approval record with APPROVED status
-    """
-    try:
-        result = approval_service.approve_request(
-            approval_id=approval_id,
-            approved_by=request.approved_by,
-            comments=request.comments
-        )
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return {"success": True, "approval": result}
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error approving request: {str(e)}")
-
-
-@router.post("/{approval_id}/reject")
-def reject(
-    approval_id: str,
-    request: RejectRequestBody
-) -> Dict[str, Any]:
-    """
-    Reject an approval request.
-    
-    **Parameters:**
-    - `approval_id`: The approval ID to reject
-    - `rejected_by`: User ID of the rejector
-    - `reason`: Reason for rejection (optional)
-    
-    **Returns:**
-    Updated approval record with REJECTED status
-    """
-    try:
-        result = approval_service.reject_request(
-            approval_id=approval_id,
-            rejected_by=request.rejected_by,
-            reason=request.reason
-        )
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return {"success": True, "approval": result}
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error rejecting request: {str(e)}")
-
-
-@router.post("/{approval_id}/escalate")
-def escalate(
-    approval_id: str,
-    request: EscalateRequestBody
-) -> Dict[str, Any]:
-    """
-    Escalate an approval request to a higher level.
-    
-    **Parameters:**
-    - `approval_id`: The approval ID to escalate
-    - `escalated_by`: User ID of the escalator
-    - `escalate_to`: User ID to escalate to
-    - `reason`: Reason for escalation (optional)
-    
-    **Returns:**
-    Updated approval record with ESCALATED status
-    """
-    try:
-        result = approval_service.escalate_request(
-            approval_id=approval_id,
-            escalated_by=request.escalated_by,
-            escalate_to=request.escalate_to,
-            reason=request.reason
-        )
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return {"success": True, "approval": result}
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error escalating request: {str(e)}")
+@router.get("/metrics/queue")
+@router.get("/workflow/transitions")
+@router.get("/dashboard/snapshot")
+def list_approvals(request: Request, user=Depends(get_current_user)):
+    context, account = _request_context(request, user)
+    _verify_selectors(request, account, context)
+    if context.role not in _READ_ROLES:
+        raise HTTPException(status_code=403, detail="Approval role denied")
+    records = _run(lambda: _approval_records(_workflow_service(), context))
+    if request.url.path.endswith("/metrics/queue"):
+        return {
+            "total": len(records),
+            "pending": sum(record["state"] == "PENDING" for record in records),
+        }
+    if request.url.path.endswith("/workflow/transitions"):
+        return {
+            "transitions": [
+                {
+                    "approval_id": record["approval_id"],
+                    "workspace_id": record["workspace_id"],
+                    **history,
+                }
+                for record in records
+                for history in record["history"]
+            ]
+        }
+    return {"approvals": records}
 
 
 @router.get("/{approval_id}/history")
-def get_approval_history(approval_id: str) -> Dict[str, Any]:
-    """
-    Get the approval history and audit trail.
-    
-    **Parameters:**
-    - `approval_id`: The approval ID
-    
-    **Returns:**
-    List of audit log entries for the approval
-    """
-    try:
-        # TODO: Implement full audit trail retrieval
-        # For now, return a placeholder
-        return {
-            "success": True,
-            "approval_id": approval_id,
-            "history": []
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching approval history: {str(e)}")
+def get_approval_history(
+    approval_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    context, account = _request_context(request, user)
+    _verify_selectors(request, account, context)
+    if context.role not in _READ_ROLES:
+        raise HTTPException(status_code=403, detail="Approval role denied")
+    record = _run(lambda: _find_approval(_workflow_service(), context, approval_id))
+    return {
+        "approval_id": approval_id,
+        "workspace_id": record["workspace_id"],
+        "history": record["history"],
+    }
 
 
-@router.get("/metrics/queue")
-def get_queue_metrics() -> Dict[str, Any]:
-    """
-    Get approval queue metrics.
-    
-    **Returns:**
-    High-level metrics about pending, approved, and rejected approvals
-    """
-    try:
-        metrics = approval_service.get_approval_queue_metrics()
-        return {
-            "success": True,
-            "metrics": metrics
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching metrics: {str(e)}")
+@router.get("/{approval_id}")
+def get_approval(
+    approval_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    context, account = _request_context(request, user)
+    _verify_selectors(request, account, context)
+    if context.role not in _READ_ROLES:
+        raise HTTPException(status_code=403, detail="Approval role denied")
+    return _run(lambda: _find_approval(_workflow_service(), context, approval_id))
 
 
-@router.get("/workflow/transitions")
-def get_workflow_transitions() -> Dict[str, Any]:
-    """
-    Get workflow state transitions.
-    
-    **Returns:**
-    List of possible workflow transitions and state machine definition
-    """
-    try:
-        transitions = approval_service.get_workflow_transitions()
-        return {
-            "success": True,
-            "transitions": transitions
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching transitions: {str(e)}")
+@router.post("/{approval_id}/export")
+def export_approval_evidence(
+    approval_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    context, account = _request_context(request, user)
+    _verify_selectors(request, account, context)
+    record = _run(lambda: _find_approval(_workflow_service(), context, approval_id))
+    service = _workflow_service()
+    event = _run(
+        lambda: service.export_evidence(
+            context,
+            record["workspace_id"],
+            approval_id=approval_id,
+        )
+    )
+    return asdict(event)
 
 
-@router.get("/dashboard/snapshot")
-def get_approval_center_snapshot(
-    username: Optional[str] = Query(None)
-) -> Dict[str, Any]:
-    """
-    Get approval center dashboard snapshot.
-    
-    **Query Parameters:**
-    - `username`: Filter approvals for a specific user (optional)
-    
-    **Returns:**
-    Aggregated approval metrics and lists for dashboard display
-    """
-    try:
-        snapshot = approval_service.get_approval_center_snapshot(username)
-        return {
-            "success": True,
-            "snapshot": snapshot
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting snapshot: {str(e)}")
+def _transition(
+    approval_id: str,
+    payload: ApprovalCommand,
+    request: Request,
+    user: dict[str, Any],
+    *,
+    target: str,
+):
+    context, account = _request_context(request, user)
+    actors = [
+        value
+        for value in (payload.approved_by, payload.rejected_by, payload.escalated_by)
+        if value is not None
+    ]
+    _verify_selectors(
+        request,
+        account,
+        context,
+        actor=actors[0] if actors else None,
+    )
+    if any(actor not in {account.user_id, context.user_id} for actor in actors):
+        raise HTTPException(status_code=403, detail="Approval actor denied")
+    record = _run(lambda: _find_approval(_workflow_service(), context, approval_id))
+    event = _run(
+        lambda: _workflow_service().transition_approval(
+            context,
+            record["workspace_id"],
+            approval_id=approval_id,
+            target=target,
+            reason=payload.reason or payload.comments or "",
+            escalated_to=payload.escalate_to,
+        )
+    )
+    return asdict(event)
+
+
+@router.post("/{approval_id}/approve")
+def approve_approval(
+    approval_id: str,
+    payload: ApprovalCommand,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    return _transition(approval_id, payload, request, user, target="APPROVED")
+
+
+@router.post("/{approval_id}/reject")
+def reject_approval(
+    approval_id: str,
+    payload: ApprovalCommand,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    return _transition(approval_id, payload, request, user, target="REJECTED")
+
+
+@router.post("/{approval_id}/escalate")
+def escalate_approval(
+    approval_id: str,
+    payload: ApprovalCommand,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    return _transition(approval_id, payload, request, user, target="ESCALATED")

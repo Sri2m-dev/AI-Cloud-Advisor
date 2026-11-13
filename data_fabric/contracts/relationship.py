@@ -40,7 +40,7 @@ class EnterpriseRelationship:
     last_validation: datetime | None = None
     lineage_reference: str | None = None
     provenance_reference: str | None = None
-    decision_state: RelationshipDecisionState | str = RelationshipDecisionState.CONFIRMED
+    decision_state: RelationshipDecisionState | str = RelationshipDecisionState.CANDIDATE
     effective_from: datetime | None = None
     effective_to: datetime | None = None
     actor: str | None = None

@@ -1,70 +1,140 @@
 name: CD
 
+# Publication is explicit; deployment is a separate release-controlled activity.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full main commit already verified by CI
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful CI push run for this exact commit
+        required: true
+        type: string
+      publish_images:
+        description: Publish inspected images after release-publication approval
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  verify:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+    steps:
+      - name: Verify exact-commit CI provenance
+        id: candidate
+        uses: actions/github-script@v7
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        with:
+          script: |
+            const sha = process.env.RELEASE_SHA;
+            const runId = process.env.CI_RUN_ID;
+            if (!/^[0-9a-f]{40}$/.test(sha) || !/^[0-9]+$/.test(runId)) {
+              throw new Error('Invalid candidate identifiers');
+            }
+            const {owner, repo} = context.repo;
+            const {data: run} = await github.rest.actions.getWorkflowRun({owner, repo, run_id: runId});
+            const {data: workflow} = await github.rest.actions.getWorkflow({owner, repo, workflow_id: run.workflow_id});
+            const {data: main} = await github.rest.repos.getBranch({owner, repo, branch: 'main'});
+            if (run.head_sha !== sha || run.head_branch !== 'main' || run.event !== 'push' ||
+                run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.repository.full_name !== `${owner}/${repo}` ||
+                run.head_repository?.full_name !== `${owner}/${repo}` ||
+                workflow.path !== '.github/workflows/ci.yml' || main.commit.sha !== sha) {
+              throw new Error('Exact main candidate lacks successful trusted CI');
+            }
+            core.setOutput('sha', sha);
+
+  package:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release-publication
     permissions:
       contents: read
       packages: write
     strategy:
+      fail-fast: true
       matrix:
-        include:
-          - service: frontend
-            dockerfile: Dockerfile.frontend
-          - service: api
-            dockerfile: Dockerfile.api
-          - service: worker
-            dockerfile: Dockerfile.worker
-          - service: beat
-            dockerfile: Dockerfile.beat
-          - service: nginx
-            dockerfile: Dockerfile.nginx
+        service: [frontend, api, worker, beat, nginx]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: Build without publication
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.service }}
+          load: true
+          push: false
+          tags: nexora-inspected:${{ matrix.service }}
+      - name: Inspect application image paths without running it
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          container=$(docker create "nexora-inspected:$SERVICE")
+          docker export "$container" --output image.tar
+          if [ "$SERVICE" = "nginx" ]; then
+            python scripts/audit_release_packaging.py --image-tar image.tar --prefix etc/nginx/nginx.conf --output image-inspection.json
+          else
+            python scripts/audit_release_packaging.py --image-tar image.tar --output image-inspection.json
+          fi
+      - name: Normalize image name
+        run: echo "IMAGE_ROOT=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Login for explicitly enabled publication only
+        if: inputs.publish_images && vars.NEXORA_IMAGE_PUBLICATION_ENABLED == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Normalize GHCR image namespace
-        shell: bash
-        run: echo "IMAGE_ROOT=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: |
-            ${{ env.IMAGE_ROOT }}/${{ matrix.service }}:${{ github.sha }}
-            ${{ env.IMAGE_ROOT }}/${{ matrix.service }}:latest
-
-      - name: Trigger deployment webhook
+      - name: Publish inspected SHA image only
+        if: inputs.publish_images && vars.NEXORA_IMAGE_PUBLICATION_ENABLED == 'true'
         env:
-          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          SERVICE: ${{ matrix.service }}
+          RELEASE_SHA: ${{ needs.verify.outputs.sha }}
         run: |
-          if [ -n "$DEPLOY_WEBHOOK_URL" ]; then
-            curl -X POST "$DEPLOY_WEBHOOK_URL" \
-              -H "Content-Type: application/json" \
-              -d '{"service":"${{ matrix.service }}","image":"${{ env.IMAGE_ROOT }}/${{ matrix.service }}:${{ github.sha }}","ref":"${{ github.ref_name }}"}'
-          else
-            echo "DEPLOY_WEBHOOK_URL is not configured; skipping deployment trigger."
-          fi
-
-      - name: Deployment note
+          docker tag "nexora-inspected:$SERVICE" "$IMAGE_ROOT/$SERVICE:$RELEASE_SHA"
+          docker push "$IMAGE_ROOT/$SERVICE:$RELEASE_SHA"
+      - name: Record candidate and image identity
+        env:
+          SERVICE: ${{ matrix.service }}
+          RELEASE_SHA: ${{ needs.verify.outputs.sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
         run: |
-          echo "Published image: ${{ env.IMAGE_ROOT }}/${{ matrix.service }}:${{ github.sha }}"
-          echo "Set DEPLOY_WEBHOOK_URL secret to auto-trigger your deployment target."
+          docker image inspect "nexora-inspected:$SERVICE" > image-metadata.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          image = json.loads(Path('image-metadata.json').read_text())[0]
+          Path('release-image.json').write_text(json.dumps({
+              'release_sha': os.environ['RELEASE_SHA'], 'ci_run_id': os.environ['CI_RUN_ID'],
+              'service': os.environ['SERVICE'], 'image_id': image['Id'],
+              'repository_digests': image.get('RepoDigests', []),
+              'deployment_invoked': False,
+          }, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inspected-${{ matrix.service }}-${{ needs.verify.outputs.sha }}
+          path: |
+            release-image.json
+            image-inspection.json
+          if-no-files-found: error

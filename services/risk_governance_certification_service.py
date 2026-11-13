@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import streamlit as st
-
 import pandas as pd
+import streamlit as st
 
 from services.approval_service import ApprovalService
 from services.business_capability_service import BusinessCapabilityService
@@ -172,7 +171,7 @@ class RiskGovernanceCertificationService:
             )
 
         pending_count = _safe_int(approval_metrics.get("pending"), len(pending_approvals))
-        sla_compliance = _safe_float(sla_metrics.get("sla_compliance"))
+        sla_compliance = sla_metrics.get("sla_compliance")
         governance_score = RiskGovernanceCertificationService.governance_score(
             critical_risks,
             pending_count,
@@ -188,6 +187,7 @@ class RiskGovernanceCertificationService:
             "potential_savings": _safe_float(potential_savings),
             "pending_count": pending_count,
             "sla_compliance": sla_compliance,
+            "sla_status": sla_metrics.get("status", "UNKNOWN"),
             "governance_score": governance_score,
             "executive_action_required": executive_action_required,
             "approved_count": _safe_int(approval_metrics.get("approved")),
@@ -216,7 +216,13 @@ class RiskGovernanceCertificationService:
         )
 
     @staticmethod
+    def metric_percent(value):
+        return "UNKNOWN" if value is None else f"{value:.0f}%"
+
+    @staticmethod
     def governance_score(critical_risks: int, pending_count: int, sla_compliance: float) -> float:
+        if sla_compliance is None:
+            return None
         return max(
             0,
             min(
@@ -277,9 +283,14 @@ class RiskGovernanceCertificationService:
         reconciliation: dict[str, Any],
         business_context: dict[str, Any],
     ) -> str:
+        percent = RiskGovernanceCertificationService.metric_percent
         sentences = [
-            f"Risk & Governance shows {_safe_float(metrics.get('governance_score')):.0f}% governance confidence with {_safe_int(metrics.get('active_risks'))} active risk signals and {_safe_int(metrics.get('critical_risks'))} high-priority risks.",
-            f"The decision queue has {_safe_int(metrics.get('pending_count'))} pending approval item, while SLA compliance is {_safe_float(metrics.get('sla_compliance')):.0f}%.",
+            f"Risk & Governance shows {percent(metrics.get('governance_score'))} "
+            f"governance confidence with {_safe_int(metrics.get('active_risks'))} active risk "
+            f"signals and {_safe_int(metrics.get('critical_risks'))} high-priority risks.",
+            f"The decision queue has {_safe_int(metrics.get('pending_count'))} "
+            "pending approval item, "
+            f"while SLA compliance is {percent(metrics.get('sla_compliance'))}.",
             f"Governance-linked optimization includes {_safe_int(metrics.get('optimization_items'))} opportunities and {_money(metrics.get('potential_savings'))} in savings exposure.",
             f"Business architecture context includes {_safe_int(business_context.get('business_units'))} business units, {_safe_int(business_context.get('capabilities'))} capabilities, {_safe_int(business_context.get('business_services'))} services, {_safe_int(business_context.get('applications'))} applications, and {_safe_int(business_context.get('technologies'))} technologies.",
             f"Data reconciliation status is {reconciliation.get('status') or 'Unknown'} with {_safe_float(reconciliation.get('allocation_coverage')):.1f}% allocation coverage and {_money(financial_model.get('unallocated_spend'))} unallocated spend.",
@@ -348,7 +359,9 @@ class RiskGovernanceCertificationService:
                 },
                 {
                     "Coverage Area": "SLA Compliance",
-                    "Value": f"{_safe_float(metrics.get('sla_compliance')):.0f}%",
+                    "Value": RiskGovernanceCertificationService.metric_percent(
+                        metrics.get("sla_compliance")
+                    ),
                     "Status": "Tracked",
                 },
                 {
@@ -400,7 +413,9 @@ class RiskGovernanceCertificationService:
                 "Governance Metrics": [
                     {
                         "Metric": "Governance Confidence",
-                        "Value": f"{_safe_float(metrics.get('governance_score')):.0f}%",
+                        "Value": RiskGovernanceCertificationService.metric_percent(
+                            metrics.get("governance_score")
+                        ),
                     },
                     {
                         "Metric": "Active Risk Signals",
@@ -426,7 +441,9 @@ class RiskGovernanceCertificationService:
                     {"Metric": "Escalated", "Value": _safe_int(approval_metrics.get("escalated"))},
                     {
                         "Metric": "SLA Compliance",
-                        "Value": f"{_safe_float(sla_metrics.get('sla_compliance')):.0f}%",
+                        "Value": RiskGovernanceCertificationService.metric_percent(
+                            sla_metrics.get("sla_compliance")
+                        ),
                     },
                 ],
                 "Financial Model": [

@@ -5,17 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from backend.jobs.tasks import (
-    job_alert_engine_hourly,
-    job_alert_processor_hourly,
-    job_anomaly_scan_hourly,
-    job_cost_ingestion_hourly,
-    job_discovery_scheduler_hourly,
-    job_escalation_hourly,
-    job_kpi_refresh_15m,
-    job_optimization_engine_daily,
-    job_report_generation_daily,
-)
+
 
 LOGGER = logging.getLogger("background-jobs")
 SCHEDULER = BackgroundScheduler(timezone=os.getenv("SCHEDULER_TZ", "UTC"))
@@ -23,6 +13,19 @@ _STARTED = False
 
 
 def _register_jobs() -> None:
+    # Disabled production scheduling must not import legacy task dependencies.
+    from backend.jobs.tasks import (
+        job_alert_engine_hourly,
+        job_alert_processor_hourly,
+        job_anomaly_scan_hourly,
+        job_cost_ingestion_hourly,
+        job_discovery_scheduler_hourly,
+        job_escalation_hourly,
+        job_kpi_refresh_15m,
+        job_optimization_engine_daily,
+        job_report_generation_daily,
+    )
+
     SCHEDULER.add_job(
         job_cost_ingestion_hourly,
         trigger=IntervalTrigger(hours=1),
@@ -99,6 +102,8 @@ def _register_jobs() -> None:
 
 def start_scheduler() -> None:
     global _STARTED
+    if os.getenv("ENVIRONMENT", "").lower() in {"prod", "production"}:
+        raise RuntimeError("Production application scheduling belongs to Celery Beat only")
     if _STARTED:
         return
     _register_jobs()

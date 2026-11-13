@@ -1,0 +1,31 @@
+services:
+  postgres-qualification-app:
+    image: nexora-v1-customer-workflow-postgres-qual:20261113-route-freeze
+    build:
+      context: ../..
+      dockerfile: deploy/v1-customer-journey-qual/Dockerfile.route-freeze
+    ports: !override
+      - "127.0.0.1:18517:8501"
+
+  postgres-qualification-provisioner:
+    image: nexora-v1-customer-workflow-postgres-qual:20261113-route-freeze
+
+  seed:
+    image: nexora-v1-customer-workflow-postgres-qual:20261113-route-freeze
+    build:
+      context: ../..
+      dockerfile: deploy/v1-customer-journey-qual/Dockerfile.route-freeze
+
+networks:
+  private:
+    name: nexora-v1-route-freeze-20261113-r1_private
+  frontend_access:
+    name: nexora-v1-route-freeze-20261113-r1_frontend_access
+
+volumes:
+  identity_db:
+    name: nexora-v1-route-freeze-20261113-r1_identity_db
+  application_data:
+    name: nexora-v1-route-freeze-20261113-r1_application_data
+  postgres_qualification_data:
+    name: nexora-v1-route-freeze-20261113-r1_workflow_data

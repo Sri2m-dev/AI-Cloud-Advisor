@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-import streamlit as st
+import logging
 
+import httpx
+import streamlit as st
+from postgrest.exceptions import APIError
+
+from components.aws_financial_publication import render_aws_financial_publication
 from components.executive_experience import render_workspace
 from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES, render_sidebar_navigation
 from services.canonical_optimization_service import CanonicalOptimizationService
@@ -18,11 +23,13 @@ from shared.evidence_context import resolve_active_evidence_context
 from shared.session import init_session
 from shared.styles import configure_page
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _render_prospect_workspace(key: str, analysis: object) -> None:
     currency = getattr(analysis, "currency", None)
     unresolved = bool(getattr(analysis, "currency_resolution_required", True))
-    st.caption("TEMPORARY PROSPECT ANALYSIS · PROSPECT EVIDENCE ONLY")
+    st.caption("TEMPORARY PROSPECT ANALYSIS Â· PROSPECT EVIDENCE ONLY")
     if unresolved:
         st.warning("Currency could not be determined from the uploaded evidence.")
         st.page_link("pages/analyze_environment.py", label="Resolve currency")
@@ -72,23 +79,35 @@ def run_executive_workspace(key: str, title: str) -> None:
         return
     authenticated = authenticated_tenant_context(st.session_state)
     render_sidebar_navigation(role)
-    spend_service = enterprise_spend_service()
     try:
         optimization_service = CanonicalOptimizationService()
     except RuntimeError:
         optimization_service = None
-    query_service = EnterpriseIntelligenceQueryService(
-        financial_service=spend_service,
-        financial_context=authenticated,
-        optimization_service=optimization_service,
-    )
-    snapshot = ExecutiveWorkspaceCompositionService.get_snapshot(
-        key,
-        authenticated,
-        spend_service,
-        query_service=query_service,
-        role=role,
-    )
+    try:
+        spend_service = enterprise_spend_service(
+            authenticated,
+            auth_client=st.session_state.get("auth_client"),
+        )
+        query_service = EnterpriseIntelligenceQueryService(
+            financial_service=spend_service,
+            financial_context=authenticated,
+            optimization_service=optimization_service,
+        )
+        snapshot = ExecutiveWorkspaceCompositionService.get_snapshot(
+            key,
+            authenticated,
+            spend_service,
+            query_service=query_service,
+            role=role,
+        )
+    except (APIError, httpx.HTTPError, PermissionError, RuntimeError) as exc:
+        _LOGGER.warning("CFO canonical financial request failed (%s)", type(exc).__name__)
+        st.error("Canonical financial data is unavailable. No financial metrics were loaded.")
+        st.stop()
+    if key == "command":
+        # Resolve backend-owned read dependencies; absent authorities remain NOT_READY.
+        # Page rendering never ingests, refreshes or obtains capabilities from browser values.
+        render_aws_financial_publication(authenticated, ui=st)
     allowed_page_paths = frozenset(
         PAGE_PATHS[label] for label in ROLE_PAGES.get(role, ()) if label in PAGE_PATHS
     )

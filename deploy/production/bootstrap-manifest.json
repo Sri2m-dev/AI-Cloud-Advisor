@@ -2,16 +2,20 @@
     "contract_version":  1,
     "authority":  {
                       "generator":  "scripts/audit_database_bootstrap.py",
-                      "source_manifest":  ".tmp/pa003c-bootstrap-audit/migration_manifest.json",
+                      "source_manifest":  "docs/cmp/CMP-P6-DEF-001/migration_manifest.json",
                       "release_parent":  "e5365c14aaae7dc4aac56bc34f435ae173bc6b2e",
                       "defect":  "V1_1_ACCEPTANCE_C"
                   },
     "readiness":  {
-                      "status":  "READY_FOR_REPLAY",
-                      "executable":  true,
-                      "validation":  "Static ordered-definition and migration-completeness checks only",
-                      "postgres_replay":  "NOT_EXECUTED"
+                      "status":  "BLOCKED",
+                      "executable":  false,
+                      "validation":  "Static checks and disposable local test-only replay; full application schema and Supabase runtime remain unverified",
+                      "postgres_replay":  "PASS_TEST_ONLY_LOCAL_NETWORK_DISABLED"
                   },
+    "blockers":  [
+                     "The full application schema contract is incomplete; active application dependencies remain unresolved.",
+                     "Supabase Auth, hosted RLS/RPC behavior, and application startup have not been verified."
+                 ],
     "execution_policy":  "CANONICAL_SIX_STEP_ORDER_ONLY",
     "external_prerequisites":  [
                                    "Supabase auth schema/functions and roles",
@@ -100,6 +104,14 @@
                                     {
                                         "path":  "supabase/migrations/202608090007_p42_single_scan_batch_evidence.sql",
                                         "sha256":  "516dd304043c2af0c7881a304c996ef021ab1a45bd076404d10f15b0a02a68f5"
+                                    },
+                                    {
+                                        "path":  "supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql",
+                                        "sha256":  "83f50679db0a0cbbc07625af70c77b1fd2c23eb3946b2b4087cd87ece9eef459"
+                                    },
+                                    {
+                                        "path":  "supabase/migrations/202610110001_bind_user_profiles_to_auth_uid.sql",
+                                        "sha256":  "1017b73f77d78220a3df00f0bea4e39a61fdc0a18277f1bba96617c7e6600e30"
                                     }
                                 ]
                   },

@@ -1,11 +1,20 @@
 """Fail-closed release evidence; these tests do NOT certify a missing baseline."""
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 
-from scripts.audit_database_bootstrap import build_inventory, build_manifest, strip_comments
+from scripts.audit_database_bootstrap import (
+    build_inventory,
+    build_manifest,
+    digest,
+    strip_comments,
+)
+from scripts.audit_database_bootstrap import (
+    tracked as audit_tracked_sql,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "docs/cmp/CMP-P6-DEF-001"
@@ -20,11 +29,32 @@ def test_inventory_reproducible(inventory):
     assert inventory == json.loads((EVIDENCE / "schema_inventory.json").read_text())
 
 
+def test_inventory_includes_october_migrations_and_stays_blocked(inventory):
+    records = {record["path"]: record for record in inventory["sql_files"]}
+    for path in (
+        "supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql",
+        "supabase/migrations/202610110001_bind_user_profiles_to_auth_uid.sql",
+    ):
+        assert records[path]["sha256"] == digest(path)
+    assert inventory["status"] == "BLOCKED"
+    assert any("application schema" in blocker for blocker in inventory["blockers"])
+
+
 def test_manifest_covers_exact_current_chains_and_hashes():
     manifest = json.loads((EVIDENCE / "migration_manifest.json").read_text())
     assert manifest == build_manifest()
     steps = manifest["steps"]
-    assert len(steps[1]["files"]) == 17
+    public_paths = [item["path"] for item in steps[1]["files"]]
+    current_public_paths = [
+        path for path in audit_tracked_sql(".sql") if path.startswith("supabase/migrations/")
+    ]
+    assert len(public_paths) == 19
+    assert len(public_paths) == len(set(public_paths))
+    assert public_paths == current_public_paths
+    assert public_paths[-2:] == [
+        "supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql",
+        "supabase/migrations/202610110001_bind_user_profiles_to_auth_uid.sql",
+    ]
     assert len(steps[2]["files"]) == 23
     assert [Path(f["path"]).name[:4] for f in steps[2]["files"]] == [
         f"{n:04d}" for n in range(1, 24)
@@ -32,12 +62,40 @@ def test_manifest_covers_exact_current_chains_and_hashes():
     assert steps[3]["engine"] == "sqlite"
 
 
-def test_current_manifest_is_ready_for_replay_not_execution_certification():
+def test_production_bootstrap_manifest_tracks_current_chain_and_stays_blocked():
+    path = ROOT / "deploy/production/bootstrap-manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8-sig"))
+    public = manifest["steps"][1]["files"]
+    expected = [
+        item
+        for item in audit_tracked_sql(".sql")
+        if item.startswith("supabase/migrations/")
+    ]
+
+    assert manifest["readiness"]["status"] == "BLOCKED"
+    assert manifest["readiness"]["executable"] is False
+    assert manifest["readiness"]["postgres_replay"] == (
+        "PASS_TEST_ONLY_LOCAL_NETWORK_DISABLED"
+    )
+    assert [item["path"] for item in public] == expected
+    assert len(public) == 19
+    assert all(item["sha256"] == digest(item["path"]) for item in public)
+    assert any("schema contract is incomplete" in item for item in manifest["blockers"])
+    expected_hash = hashlib.sha256(path.read_bytes()).hexdigest().upper()
+    from scripts.check_pilot_readiness import EXPECTED_MANIFEST_SHA256
+
+    assert EXPECTED_MANIFEST_SHA256 == expected_hash
+
+
+def test_current_manifest_is_blocked_after_test_only_replay():
     manifest = build_manifest()
-    assert manifest["status"] == "READY_FOR_REPLAY"
-    assert manifest["executable"] is True
-    assert manifest["contract"]["postgres_replay"] == "NOT_EXECUTED"
-    assert not manifest["blockers"]
+    assert manifest["status"] == "BLOCKED"
+    assert manifest["executable"] is False
+    assert manifest["contract"]["postgres_replay"] == (
+        "PASS_TEST_ONLY_LOCAL_NETWORK_DISABLED"
+    )
+    assert "all 43 PostgreSQL inputs" in manifest["contract"]["prior_postgres_replay"]
+    assert any("application schema" in b and "Supabase runtime" in b for b in manifest["blockers"])
     assert len(manifest["steps"][5]["files"]) == 2
     assert manifest["steps"][5]["requires"] == ["source_fact_local_authority"]
     assert manifest["steps"][0]["status"] == "SCHEMA_ONLY_CURRENT_CHAIN_PREREQUISITES"
@@ -90,7 +148,7 @@ def test_missing_application_objects_not_silently_ignored(inventory):
         not {"application_registry", "application_spend_mapping", "technology_inventory"} & missing
     )
     assert inventory["dynamic_calls"]
-    assert inventory["status"] == "READY_FOR_REPLAY"
+    assert inventory["status"] == "BLOCKED"
 
 
 def test_unsafe_historical_files_not_deployment_inputs(inventory):

@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from auth.role_constants import ROLES, normalize_role
+from components.navigation.v1_page_link import switch_to_v1_page
 from components.sidebar_navigation import render_sidebar_navigation
 from services.onboarding_service import (
     AuthorizationError,
@@ -56,7 +57,7 @@ if is_clean_workspace(org_id):
         icon="ℹ️",
     )
     if st.button("Go to Data Sources & Connectors", key="btn_goto_connectors"):
-        st.switch_page("pages/data_sources_connectors.py")
+        switch_to_v1_page("pages/data_sources_connectors.py")
 
 st.markdown("### Invite Team Member")
 with st.form("invite_user_form", clear_on_submit=True):

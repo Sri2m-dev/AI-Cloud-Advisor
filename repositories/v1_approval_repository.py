@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
-
 from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.v1_approval_authority import ApprovalAuthorityError, SupabaseApprovalAuthority
 
@@ -16,10 +13,24 @@ class V1ApprovalRepository:
     def list_requests(self, context: AuthenticatedTenantContext, role: str | None = None):
         rows = [_row(request) for request in self.authority.list_requests(context)]
         if role:
-            roles = {"executive": "ceo", "cio": "cio", "finance": "finance", "technical": "technical"}
+            roles = {
+                "executive": "ceo",
+                "cio": "cio",
+                "finance": "finance",
+                "technical": "technical",
+            }
             wanted = roles.get(role.lower(), role.lower())
             rows = [row for row in rows if row["current_approver_role"] == wanted]
         return [row for row in rows if row["status"] in {"PENDING", "ESCALATED"}]
+
+    def sla_requests(self, context: AuthenticatedTenantContext):
+        """Read authoritative SLA evidence without compatibility timestamp fallbacks."""
+        if not isinstance(context, AuthenticatedTenantContext):
+            raise PermissionError("Authenticated tenant context is required")
+        requests = self.authority.list_requests(context)
+        for request in requests:
+            context.fabric_context.assert_record_matches(request, "approval SLA request")
+        return requests
 
     def all_requests(self, context: AuthenticatedTenantContext):
         return [_row(request) for request in self.authority.list_requests(context)]
@@ -33,11 +44,21 @@ class V1ApprovalRepository:
         request_id = self._request_id(context, approval_id)
         return [_history_row(item) for item in self.authority.get_history(context, request_id)]
 
-    def transition(self, context, approval_id, *, target, actor, reason, actor_role=None, escalated_to=None):
+    def transition(
+        self, context, approval_id, *, target, actor, reason, actor_role=None, escalated_to=None
+    ):
+        from auth.authenticated_tenant import require_protected_workflow
+
+        require_protected_workflow("approval_decision", context, actor=actor)
         request_id = self._request_id(context, approval_id)
         request = self.authority.transition_request(
-            context, request_id, to_state=target, actor=actor, actor_role=actor_role,
-            escalated_to=escalated_to, reason=reason,
+            context,
+            request_id,
+            to_state=target,
+            actor=actor,
+            actor_role=actor_role,
+            escalated_to=escalated_to,
+            reason=reason,
         )
         return [_row(request)]
 

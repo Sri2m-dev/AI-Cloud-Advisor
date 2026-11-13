@@ -6,7 +6,6 @@ from streamlit import switch_page
 from core.errors.error_handler import handle_error
 from core.logging.audit_logger import AuditLogger
 from core.auth import login_user
-from auth.role_constants import normalize_role
 
 st.set_page_config(
 	page_title="NEXORA",
@@ -36,16 +35,6 @@ if "show_reset" not in st.session_state:
 	st.session_state.show_reset = False
 if "show_signup" not in st.session_state:
 	st.session_state.show_signup = False
-
-# DEV BYPASS: temporarily skip login during development
-st.session_state["authenticated"] = True
-st.session_state["user"] = {
-	"name": "Srikanth",
-	"role": "SuperAdmin",
-	"email": "srikanth@example.com"
-}
-st.session_state["role_display"] = "SuperAdmin"
-st.session_state["role"] = normalize_role("SuperAdmin")
 
 left, center, right = st.columns([2,3,2])
 with center:
@@ -118,4 +107,3 @@ with center:
 			user_email = getattr(st.session_state.user, "email", None)
 		st.info(f"Logged in as: {user_email or 'unknown user'} (Role: {st.session_state.role})")
 		st.write("You can now access the platform.")
-

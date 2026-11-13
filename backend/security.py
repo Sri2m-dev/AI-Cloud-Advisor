@@ -6,10 +6,21 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from auth.jwt_utils import verify_jwt
 from auth.role_constants import normalize_role as normalize_canonical_role
 from auth.tenant_authorization import TenantAuthorizationContext, TenantAuthorizationError
-from backend.token_store import is_token_revoked
-from core.user_profile import get_user_profile
+from backend.api_user_store import (
+    APIUserStoreUnavailable,
+    is_api_user_active,
+    load_api_users,
+)
+from backend import supabase_auth
+from backend.supabase_auth import SupabaseAuthError
+from backend.token_store import (
+    TokenStoreUnavailable,
+    is_token_revoked,
+    validate_token_claims,
+)
 
 bearer_scheme = HTTPBearer(auto_error=False)
+_load_api_users = load_api_users
 
 ROLE_PERMISSIONS = {
     "super_admin": {
@@ -51,29 +62,61 @@ def normalize_role(role: str) -> str:
     return normalize_canonical_role(role)
 
 
-def _resolve_user_role(user_data: dict) -> str:
-    """
-    Try Supabase profile first.
-    Fall back to JWT role if profile doesn't exist.
-    """
+def _resolve_authorized_user(user_data: dict) -> dict:
+    username = user_data.get("username")
+    if not isinstance(username, str) or not username.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token identity",
+        )
+    try:
+        record = _load_api_users().get(username)
+    except APIUserStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API user authorization store unavailable",
+        ) from exc
+
+    if not isinstance(record, dict) or not is_api_user_active(record):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is no longer active",
+        )
+
+    token_tenant = str(user_data.get("tenant_id") or user_data.get("org_id") or "").strip()
+    assigned_tenant = str(record.get("tenant_id") or "").strip()
+    if not assigned_tenant or token_tenant != assigned_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access denied",
+        )
+
+    user_data["role"] = normalize_role(str(record.get("role", "Viewer")))
+    user_data["tenant_id"] = assigned_tenant
+    user_data["org_id"] = assigned_tenant
+    return user_data
+
+
+def _ensure_token_active(payload: dict) -> None:
+    try:
+        validate_token_claims(payload.get("jti"), payload.get("exp"))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        ) from exc
 
     try:
-        user_profile = None
-
-        if user_data.get("id"):
-            user_profile = get_user_profile(user_id=user_data.get("id"))
-
-        elif user_data.get("username"):
-            user_profile = get_user_profile(email=user_data.get("username"))
-
-        if user_profile and "role" in user_profile:
-            return normalize_role(user_profile["role"])
-
-    except Exception:
-        # Ignore Supabase lookup failures
-        pass
-
-    return normalize_role(user_data.get("role", "viewer"))
+        if is_token_revoked(payload.get("jti")):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token revoked",
+            )
+    except TokenStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Token revocation store unavailable",
+        ) from exc
 
 
 def get_current_user(
@@ -84,14 +127,28 @@ def get_current_user(
     state_user = getattr(request.state, "current_user", None)
 
     if state_user:
-        state_user["role"] = _resolve_user_role(state_user)
-        return state_user
+        if state_user.get("token_type") != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Wrong token type",
+            )
+        if supabase_auth.enabled():
+            return state_user
+        if not getattr(request.state, "token_revocation_checked", False):
+            _ensure_token_active(state_user)
+        return _resolve_authorized_user(state_user)
 
     if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing bearer token",
         )
+
+    if supabase_auth.enabled():
+        try:
+            return supabase_auth.resolve_access_token(credentials.credentials)
+        except SupabaseAuthError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     payload = verify_jwt(credentials.credentials)
 
@@ -106,23 +163,15 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
-
-    try:
-        if is_token_revoked(payload.get("jti")):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token revoked",
-            )
-
-    except RuntimeError as exc:
+    if payload.get("token_type") != "access":
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Token revocation store unavailable",
-        ) from exc
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Wrong token type",
+        )
 
-    payload["role"] = _resolve_user_role(payload)
+    _ensure_token_active(payload)
 
-    return payload
+    return _resolve_authorized_user(payload)
 
 
 def require_role(allowed_roles):

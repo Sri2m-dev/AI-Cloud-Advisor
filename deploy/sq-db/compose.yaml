@@ -1,0 +1,187 @@
+{
+  "name": "nexora-m3sq-local-20261110",
+  "services": {
+    "postgres": {
+      "image": "${SQDB_POSTGRES_IMAGE:?Supply qualified PostgreSQL 17 repository@sha256 digest}",
+      "pull_policy": "never",
+      "restart": "no",
+      "environment": {
+        "POSTGRES_DB": "nexora_m2c_m3sq_20261110",
+        "POSTGRES_PASSWORD_FILE": "/run/secrets/password",
+        "POSTGRES_INITDB_ARGS": "--auth-host=scram-sha-256 --auth-local=trust"
+      },
+      "entrypoint": [
+        "/bin/sh",
+        "/sqdb/server.sh"
+      ],
+      "command": [
+        "postgres",
+        "-c",
+        "ssl=on",
+        "-c",
+        "ssl_cert_file=/run/sqdb/server.crt",
+        "-c",
+        "ssl_key_file=/run/sqdb/server.key",
+        "-c",
+        "max_connections=30"
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "postgres_data",
+          "target": "/var/lib/postgresql/data",
+          "volume": {
+            "nocopy": true
+          }
+        },
+        "./server.sh:/sqdb/server.sh:ro"
+      ],
+      "tmpfs": [
+        "/run/sqdb:rw,noexec,nosuid,size=1m"
+      ],
+      "secrets": [
+        "password",
+        "server_cert",
+        "server_key"
+      ],
+      "networks": [
+        "private"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d nexora_m2c_m3sq_20261110"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 20,
+        "start_period": "10s"
+      }
+    },
+    "qualification": {
+      "image": "${SQDB_POSTGRES_IMAGE:?Supply qualified PostgreSQL 17 repository@sha256 digest}",
+      "pull_policy": "never",
+      "profiles": [
+        "qualification"
+      ],
+      "network_mode": "service:postgres",
+      "read_only": true,
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=16m,mode=1777"
+      ],
+      "environment": {
+        "PGHOST": "127.0.0.1",
+        "PGPORT": "5432",
+        "PGDATABASE": "nexora_m2c_m3sq_20261110",
+        "PGUSER": "postgres",
+        "PGSSLMODE": "verify-full",
+        "PGSSLROOTCERT": "/run/secrets/client_ca",
+        "PGPASSFILE": "/tmp/client/pgpass",
+        "PGOPTIONS": "-c nexora.qualification_authorized=local-disposable"
+      },
+      "secrets": [
+        "pgpass",
+        "client_ca"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2a",
+          "target": "/qualification/database/contracts/g08_m2a",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2b",
+          "target": "/qualification/database/contracts/g08_m2b",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2c",
+          "target": "/qualification/database/contracts/g08_m2c",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/tests/database_integrity",
+          "target": "/qualification/tests/database_integrity",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/tests/owner_authorization",
+          "target": "/qualification/tests/owner_authorization",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        "./client.sh:/sqdb/client.sh:ro"
+      ],
+      "entrypoint": [
+        "/bin/sh",
+        "/sqdb/client.sh"
+      ],
+      "command": [
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        "/qualification/database/contracts/g08_m2c/qualification/install_and_test.sql"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      }
+    }
+  },
+  "networks": {
+    "private": {
+      "name": "nexora-m3sq-local-20261110_sqdb_private",
+      "internal": true
+    }
+  },
+  "volumes": {
+    "postgres_data": {
+      "external": true,
+      "name": "nexora-m3sq-local-20261110_postgres_data"
+    }
+  },
+  "secrets": {
+    "password": {
+      "file": "${SQDB_PASSWORD_FILE:?Supply unique external managed test file}"
+    },
+    "server_cert": {
+      "file": "${SQDB_SERVER_CERT_FILE:?Supply unique external managed test file}"
+    },
+    "server_key": {
+      "file": "${SQDB_SERVER_KEY_FILE:?Supply unique external managed test file}"
+    },
+    "client_ca": {
+      "file": "${SQDB_CLIENT_CA_FILE:?Supply unique external managed test file}"
+    },
+    "pgpass": {
+      "file": "${SQDB_PGPASS_FILE:?Supply unique external managed test file}"
+    }
+  }
+}

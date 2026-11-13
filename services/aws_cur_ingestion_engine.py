@@ -16,7 +16,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
@@ -147,6 +147,9 @@ class AccountMapping:
     payer_account_id: str
     account_id: str
     status: str
+    effective_from: date | str | None = None
+    effective_to: date | str | None = None
+    account_kind: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +252,26 @@ def _decimal(value: str, field: str) -> Decimal:
         raise CurIngestionError(f"invalid decimal in {field}: {value!r}") from exc
 
 
+def _currency_code(value: Any) -> str:
+    currency = str(value or "").strip().upper()
+    if len(currency) != 3 or not currency.isascii() or not currency.isalpha():
+        raise CurIngestionError("invalid CUR currency code")
+    return currency
+
+
+def _mapping_date(value: date | str | None) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
@@ -287,6 +310,14 @@ def _open_csv(source: BinaryIO, filename: str) -> io.TextIOBase:
     raise CurIngestionError("unsupported CUR format; only .csv and .csv.gz are accepted")
 
 
+def _release_csv_stream(stream: io.TextIOBase) -> None:
+    if stream.closed:
+        return
+    binary_stream = stream.detach()
+    if isinstance(binary_stream, gzip.GzipFile):
+        binary_stream.close()
+
+
 def iter_cur_chunks(
     source: BinaryIO, filename: str, chunk_size: int = DEFAULT_CHUNK_SIZE
 ) -> tuple[CurProfile, Iterator[list[dict[str, Any]]]]:
@@ -294,30 +325,38 @@ def iter_cur_chunks(
         raise CurIngestionError(
             f"chunk_size must be between {DEFAULT_CHUNK_SIZE} and {MAX_CHUNK_SIZE}"
         )
-    reader = csv.DictReader(_open_csv(source, filename))
-    if not reader.fieldnames:
-        raise CurIngestionError("CUR has no header row")
-    header_map = canonical_header_map(reader.fieldnames)
-    profile = detect_profile(header_map)
+    text_stream = _open_csv(source, filename)
+    try:
+        reader = csv.DictReader(text_stream)
+        if not reader.fieldnames:
+            raise CurIngestionError("CUR has no header row")
+        header_map = canonical_header_map(reader.fieldnames)
+        profile = detect_profile(header_map)
+    except Exception:
+        _release_csv_stream(text_stream)
+        raise
 
     def chunks() -> Iterator[list[dict[str, Any]]]:
-        chunk: list[dict[str, Any]] = []
-        for source_row in reader:
-            raw_row = {
-                (key or "").lstrip("\ufeff"): value or "" for key, value in source_row.items()
-            }
-            canonical_row = {
-                canonical: raw_row.get(source_header, "")
-                for canonical, source_header in header_map.items()
-            }
-            canonical_row["__raw_fields__"] = raw_row
-            canonical_row["__mapped_source_headers__"] = tuple(header_map.values())
-            chunk.append(canonical_row)
-            if len(chunk) == chunk_size:
+        try:
+            chunk: list[dict[str, Any]] = []
+            for source_row in reader:
+                raw_row = {
+                    (key or "").lstrip("\ufeff"): value or "" for key, value in source_row.items()
+                }
+                canonical_row = {
+                    canonical: raw_row.get(source_header, "")
+                    for canonical, source_header in header_map.items()
+                }
+                canonical_row["__raw_fields__"] = raw_row
+                canonical_row["__mapped_source_headers__"] = tuple(header_map.values())
+                chunk.append(canonical_row)
+                if len(chunk) == chunk_size:
+                    yield chunk
+                    chunk = []
+            if chunk:
                 yield chunk
-                chunk = []
-        if chunk:
-            yield chunk
+        finally:
+            _release_csv_stream(text_stream)
 
     return profile, chunks()
 
@@ -372,21 +411,16 @@ class AwsCurIngestionEngine:
         period_end = _parse_timestamp(first_chunk[0][profile.billing_end]).date()
         if period_end < period_start:
             raise CurIngestionError("CUR billing period end precedes start")
+        currency = _currency_code(first_chunk[0][profile.currency])
         existing = self._persistence.find_import(context, payer, file_hash)
-        if existing and existing["status"] in {
-            CurState.COMPLETED.value,
-            CurState.AWAITING_ACCOUNT_RESOLUTION.value,
-        }:
-            return CurImportResult(
-                str(existing["import_id"]),
-                CurState(existing["status"]),
-                0,
-                0,
-                0,
-                0,
-                Decimal("0"),
-                replayed=True,
-            )
+        terminal_existing = bool(
+            existing
+            and existing["status"]
+            in {
+                CurState.COMPLETED.value,
+                CurState.AWAITING_ACCOUNT_RESOLUTION.value,
+            }
+        )
 
         is_retry = existing is not None
         import_id = str(existing["import_id"]) if existing else str(uuid.uuid4())
@@ -406,19 +440,59 @@ class AwsCurIngestionEngine:
             "source_uri": source_uri,
             "compression": "gzip" if filename.lower().endswith(".gz") else "csv",
             "parser_profile": "aws-cur-v1",
+            "currency_code": currency,
             "status": CurState.VALIDATING.value,
             "supersedes_import_id": supersedes_import_id,
             "source_evidence": {"file_sha256": file_hash},
         }
-        if existing:
-            self._persistence.update_import(
-                context,
-                import_id,
-                {"status": CurState.VALIDATING.value, "failure_code": None, "failure_detail": None},
-            )
-        else:
-            self._persistence.create_import(context, import_payload)
+        if not terminal_existing:
+            if existing:
+                self._persistence.update_import(
+                    context,
+                    import_id,
+                    {
+                        "status": CurState.VALIDATING.value,
+                        "failure_code": None,
+                        "failure_detail": None,
+                        "currency_code": currency,
+                    },
+                )
+            else:
+                self._persistence.create_import(context, import_payload)
         try:
+            expected_period = (period_start, period_end)
+            for chunk in itertools.chain((first_chunk,), chunks):
+                for row in chunk:
+                    if row[profile.payer].strip() != payer:
+                        raise CurIngestionError("mixed-payer CUR is rejected")
+                    row_period_start = _parse_timestamp(row[profile.billing_start]).date()
+                    row_period_end = _parse_timestamp(row[profile.billing_end]).date()
+                    if row_period_end < row_period_start:
+                        raise CurIngestionError("CUR billing period end precedes start")
+                    if (row_period_start, row_period_end) != expected_period:
+                        raise CurIngestionError("mixed CUR billing periods are rejected")
+                    if _currency_code(row[profile.currency]) != currency:
+                        raise CurIngestionError("mixed CUR currencies are rejected")
+            chunks.close()
+
+            if terminal_existing:
+                return CurImportResult(
+                    str(existing["import_id"]),
+                    CurState(existing["status"]),
+                    0,
+                    0,
+                    0,
+                    0,
+                    Decimal("0"),
+                    replayed=True,
+                )
+
+            source.seek(0)
+            profile, chunks = iter_cur_chunks(source, filename, self._chunk_size)
+            first_chunk = next(chunks, None)
+            if not first_chunk:
+                raise CurIngestionError("CUR has no data rows")
+
             mappings = tuple(self._persistence.list_account_mappings(context))
             self._validate_mapping_scope(context, mappings)
             accepted = quarantined = duplicates = source_rows = 0
@@ -492,6 +566,7 @@ class AwsCurIngestionEngine:
                     "duplicate_row_count": duplicates,
                     "source_cost_total": str(normalized_total),
                     "normalized_cost_total": str(normalized_total),
+                    "currency_code": currency,
                 },
             )
             self._persistence.upsert_reconciliation(
@@ -510,7 +585,7 @@ class AwsCurIngestionEngine:
                     "duplicate_row_count": duplicates,
                     "source_cost_total": str(normalized_total),
                     "normalized_cost_total": str(normalized_total),
-                    "currency_code": first_chunk[0][profile.currency],
+                    "currency_code": currency,
                     "status": "quarantined" if quarantined else "reconciled",
                     "evidence": {"parser_profile": "aws-cur-v1"},
                 },
@@ -532,6 +607,7 @@ class AwsCurIngestionEngine:
                 persistence_metrics=tuple(persistence_metrics),
             )
         except Exception as exc:
+            chunks.close()
             self._persistence.update_import(
                 context,
                 import_id,
@@ -625,6 +701,39 @@ class AwsCurIngestionEngine:
             ):
                 raise DataFabricTenantBoundaryError("account mapping crosses tenant boundary")
 
+    @staticmethod
+    def _has_active_account_mapping(
+        mappings: tuple[AccountMapping, ...],
+        payer: str,
+        account_id: str,
+        usage_start: datetime,
+        usage_end: datetime,
+    ) -> bool:
+        usage_start_date = usage_start.date()
+        covering = []
+        for mapping in mappings:
+            if mapping.payer_account_id != payer or mapping.account_id != account_id:
+                continue
+            effective_from = _mapping_date(mapping.effective_from)
+            effective_to = _mapping_date(mapping.effective_to)
+            if (
+                effective_from is None
+                or (mapping.effective_to is not None and effective_to is None)
+                or effective_from > usage_start_date
+                or (
+                    effective_to is not None
+                    and usage_end
+                    > datetime.combine(effective_to, datetime.min.time(), tzinfo=timezone.utc)
+                )
+            ):
+                continue
+            covering.append(mapping)
+        if len(covering) != 1:
+            return False
+        mapping = covering[0]
+        expected_kind = "payer" if account_id == payer else "member"
+        return mapping.status == "active" and mapping.account_kind in (None, expected_kind)
+
     def _normalise_chunk(
         self,
         context: TenantContext,
@@ -635,21 +744,26 @@ class AwsCurIngestionEngine:
         payer: str,
         mappings: tuple[AccountMapping, ...],
     ) -> tuple[list[dict[str, Any]], int, int]:
-        owned = {mapping.account_id: mapping for mapping in mappings if mapping.status == "active"}
         facts: list[dict[str, Any]] = []
         accepted = quarantined = 0
         for offset, row in enumerate(rows):
             if row[profile.payer].strip() != payer:
                 raise CurIngestionError("mixed-payer CUR is rejected")
             member = row[profile.member].strip()
-            account_known = payer in owned and member in owned
-            fact_status = "active" if account_known else "quarantined"
-            accepted += int(account_known)
-            quarantined += int(not account_known)
             usage_start, usage_end = (
                 _parse_timestamp(row[profile.usage_start]),
                 _parse_timestamp(row[profile.usage_end]),
             )
+            payer_mapped = self._has_active_account_mapping(
+                mappings, payer, payer, usage_start, usage_end
+            )
+            member_mapped = self._has_active_account_mapping(
+                mappings, payer, member, usage_start, usage_end
+            )
+            account_known = payer_mapped and member_mapped
+            fact_status = "active" if account_known else "quarantined"
+            accepted += int(account_known)
+            quarantined += int(not account_known)
             billing_start, billing_end = (
                 _parse_timestamp(row[profile.billing_start]).date(),
                 _parse_timestamp(row[profile.billing_end]).date(),
@@ -694,7 +808,7 @@ class AwsCurIngestionEngine:
                     "usage_quantity": row.get("usage_quantity") or None,
                     "usage_unit": row.get("usage_unit") or None,
                     "line_item_type": row[profile.line_item_type],
-                    "currency_code": row[profile.currency],
+                    "currency_code": _currency_code(row[profile.currency]),
                     "unblended_cost": str(
                         _decimal(row[profile.unblended_cost], profile.unblended_cost)
                     ),

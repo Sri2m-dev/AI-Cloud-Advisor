@@ -9,6 +9,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from auth.authenticated_tenant import ProtectedWorkflowUnavailable
+
 from services.production_tenant_provisioning_service import (
     ProductionTenantProvisioningService,
     ProvisioningInputError,
@@ -45,7 +47,7 @@ class _SupabaseProfiles:
     def get_by_email(self, email):
         rows = (
             self.client.table("users")
-            .select("id,email,org_id,role")
+            .select("id,email,org_id,role,auth_user_id")
             .eq("email", email)
             .limit(1)
             .execute()
@@ -54,11 +56,25 @@ class _SupabaseProfiles:
         )
         return rows[0] if rows else None
 
+    def bind_auth_user(self, email, auth_user_id):
+        (
+            self.client.table("users")
+            .update({"auth_user_id": auth_user_id})
+            .eq("email", email)
+            .is_("auth_user_id", "null")
+            .execute()
+        )
+
     def create(self, payload):
         self.client.table("users").insert(payload).execute()
 
 
 def _build_live_service():
+    from auth.authenticated_tenant import require_protected_workflow
+
+    # Approval acknowledgement and a service credential are not authenticated
+    # operator/owner authority. Deny BEFORE constructing an admin client.
+    require_protected_workflow("organization_provisioning")
     from data.supabase_client import supabase_admin
 
     return ProductionTenantProvisioningService(
@@ -118,6 +134,7 @@ def _exit_code(classification: str) -> int:
         "HARD_CONFLICT": 4,
         "PARTIAL_RECONCILIATION_REQUIRED": 5,
         "REMOTE_OPERATION_FAILED": 6,
+        "AUTHORITY_UNAVAILABLE": 7,
     }.get(classification, 6)
 
 
@@ -185,6 +202,11 @@ def main(argv=None, *, service_factory=None) -> int:
     try:
         service = (service_factory or _build_live_service)()
         result = service.provision(request)
+    except ProtectedWorkflowUnavailable:
+        result = _make_result(
+            request, "AUTHORITY_UNAVAILABLE",
+            {"execution": "NOT_RUN"}, "G08_OPERATOR_AUTHORITY_AND_FENCING_REQUIRED",
+        )
     except Exception:
         result = _make_result(
             request,

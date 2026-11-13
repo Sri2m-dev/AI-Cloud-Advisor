@@ -25,6 +25,7 @@ from components.executive_foundation import (
     render_page_header,
     render_section_header,
 )
+from components.navigation.v1_page_link import v1_page_link
 
 if TYPE_CHECKING:
     from services.executive_workspace_composition_service import WorkspaceSnapshot
@@ -560,14 +561,14 @@ def render_workspace(
             _render_demo_executive_ai(snapshot)
             primary_actions = st.columns(2)
             with primary_actions[0]:
-                st.page_link(
+                v1_page_link(
                     "pages/analyze_environment.py",
                     label="Analyze Environment",
                     help="Upload governed cost data or connect an authorized cloud account.",
                     use_container_width=True,
                 )
             with primary_actions[1]:
-                st.page_link(
+                v1_page_link(
                     "pages/decision_intelligence.py",
                     label="Review Executive Decisions",
                     use_container_width=True,
@@ -677,9 +678,9 @@ def render_workspace(
                     st.markdown(f"**Recommended decision:** {journey['recommendation']}")
                     links = st.columns(3)
                     with links[0]:
-                        st.page_link("pages/decision_intelligence.py", label="Review decision")
+                        v1_page_link("pages/decision_intelligence.py", label="Review decision")
                     with links[1]:
-                        st.page_link(
+                        v1_page_link(
                             "pages/twin_explorer.py",
                             label="Trace in Digital Twin",
                             help=(
@@ -688,7 +689,7 @@ def render_workspace(
                             ),
                         )
                     with links[2]:
-                        st.page_link("pages/approval_center.py", label="Open approval path")
+                        v1_page_link("pages/approval_center.py", label="Open approval path")
         render_section_header(
             "Executive decision story",
             "A governed sequence from change and risk to recommendation and accountable action.",
@@ -760,7 +761,7 @@ def render_workspace(
             surface for surface in definition.surfaces if surface.page in allowed_page_paths
         )
         for surface in visible_surfaces:
-            st.page_link(
+            v1_page_link(
                 surface.page,
                 label=surface.label,
                 help=surface.purpose,

@@ -1,0 +1,9 @@
+FROM docker.io/library/python@sha256:83f339c1be6340ae1096010fdccf6552ac932d8f410d45d206014916bdf37e48
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app
+WORKDIR /app
+COPY requirements.txt requirements-prod.txt requirements.frontend.txt /app/
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN python -m pip --isolated install --index-url https://pypi.org/simple --no-cache-dir --report /opt/nexora-dependency-install.json -r requirements.txt -r requirements-prod.txt -r requirements.frontend.txt -r backend/requirements.txt && python -m pip check && python -m pip freeze --all > /opt/nexora-dependency-lock.txt
+COPY . /app
+USER 10001:10001
+CMD ["streamlit", "run", "app_main.py", "--server.address=0.0.0.0", "--server.port=8501"]

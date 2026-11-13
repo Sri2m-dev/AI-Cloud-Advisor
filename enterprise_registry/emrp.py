@@ -10,6 +10,7 @@ from data_fabric.contracts import (
     EnterpriseEntity,
     EnterpriseRelationship,
     EntityType,
+    RelationshipDecisionState,
     RelationshipType,
 )
 from data_fabric.foundation import DataFabricTenantBoundaryError, TenantContext
@@ -106,9 +107,7 @@ class EMRPAcceptanceReport:
 
     @property
     def failed_checks(self) -> tuple[str, ...]:
-        return tuple(
-            name for name, check in self.checks.items() if not check.passed
-        )
+        return tuple(name for name, check in self.checks.items() if not check.passed)
 
 
 class EnterpriseMetadataRegistry(Protocol):
@@ -186,9 +185,7 @@ class EnterpriseMetadataRegistryService:
                 and normalize_name(candidate.name) == normalize_name(entity.name)
             )
             if same_source or same_name:
-                raise DataFabricTenantBoundaryError(
-                    "identity candidate crosses tenant boundary"
-                )
+                raise DataFabricTenantBoundaryError("identity candidate crosses tenant boundary")
         result = self.identities.detect_duplicates(candidate)
         for entity in result.matched_entities:
             self.context.assert_record_matches(entity, "identity match")
@@ -234,9 +231,7 @@ class EnterpriseMetadataRegistryService:
                 concept.canonical_name,
             }
             if not direct_match and business_domain not in compatible_domains:
-                raise EMRPTaxonomyError(
-                    "taxonomy concept is incompatible with the business domain"
-                )
+                raise EMRPTaxonomyError("taxonomy concept is incompatible with the business domain")
         return TaxonomyValidation(
             valid=True,
             taxonomy_id=taxonomy_id,
@@ -262,10 +257,7 @@ class EnterpriseMetadataRegistryService:
             raise EMRPRelationshipError("relationship source type is invalid")
         if target.entity_type not in rule.target_types:
             raise EMRPRelationshipError("relationship direction or target type is invalid")
-        if (
-            source.canonical_id == target.canonical_id
-            and not rule.allow_self_reference
-        ):
+        if source.canonical_id == target.canonical_id and not rule.allow_self_reference:
             raise EMRPRelationshipError("self-referential relationship is prohibited")
 
         source_key = source.canonical_id
@@ -283,15 +275,8 @@ class EnterpriseMetadataRegistryService:
             for _, existing_source, existing_target in existing
         ):
             raise EMRPRelationshipError("duplicate relationship is prohibited")
-        outgoing = [
-            item
-            for item, existing_source, _ in existing
-            if existing_source == source_key
-        ]
-        if (
-            rule.max_targets_per_source is not None
-            and len(outgoing) >= rule.max_targets_per_source
-        ):
+        outgoing = [item for item, existing_source, _ in existing if existing_source == source_key]
+        if rule.max_targets_per_source is not None and len(outgoing) >= rule.max_targets_per_source:
             raise EMRPRelationshipError("relationship cardinality is exceeded")
         if not rule.allow_cycles and self._would_create_cycle(
             source_key,
@@ -344,6 +329,12 @@ class EnterpriseMetadataRegistryService:
             uniqueness_confirmed=True,
         )
         checks = {
+            "relationship_authority": AcceptanceCheck(
+                name="relationship_authority",
+                passed=relationship.decision_state is RelationshipDecisionState.CONFIRMED,
+                actual=relationship.decision_state.value,
+                required="confirmed",
+            ),
             "identity_confidence": self._check(
                 "identity_confidence",
                 identity.confidence_score,
@@ -410,11 +401,7 @@ class EnterpriseMetadataRegistryService:
             organization_id=self.context.organization_id,
             include_inactive=False,
         )
-        return [
-            item
-            for item in candidates
-            if item.tenant_id == self.context.tenant_id
-        ]
+        return [item for item in candidates if item.tenant_id == self.context.tenant_id]
 
     @staticmethod
     def _would_create_cycle(

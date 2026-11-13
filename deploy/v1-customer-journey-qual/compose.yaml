@@ -1,0 +1,251 @@
+name: nexora-v1-customer-journey-qual-20261112-b5
+
+services:
+  database:
+    image: docker.io/library/postgres@sha256:73bedc9eaa0121b92b9b26bb52e5141b3f6f37479c7ef913c0160455763ca80a
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: supabase_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a unique qualification database password}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - identity_db:/var/lib/postgresql/data
+      - ./auth-bootstrap.sh:/docker-entrypoint-initdb.d/zz-auth-bootstrap.sh:ro
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supabase_admin -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  auth:
+    image: docker.io/supabase/gotrue@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: https://auth-gateway:8443
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@database:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:18515
+      GOTRUE_URI_ALLOW_LIST: http://localhost:18515
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?Set an isolated Auth signing secret}
+      GOTRUE_JWT_ISSUER: https://auth-gateway:8443
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMTP_ADMIN_EMAIL: nexora-qualification@example.test
+      GOTRUE_SMTP_HOST: localhost
+      GOTRUE_SMTP_PORT: "25"
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  rest:
+    image: docker.io/postgrest/postgrest@sha256:c847127074bd26e1b8d3f7c0e6e01e5346f4b85dd34f5d699fd230af960827c0
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@database:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,auth
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_JWT_SECRET: ${JWT_SECRET:?Set an isolated Auth signing secret}
+      PGRST_JWT_AUD: authenticated
+      PGRST_SERVER_HOST: 0.0.0.0
+      PGRST_SERVER_PORT: "3000"
+      PGRST_ADMIN_SERVER_HOST: 127.0.0.1
+      PGRST_ADMIN_SERVER_PORT: "3001"
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  auth-gateway:
+    image: docker.io/library/nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+    restart: unless-stopped
+    user: "101:101"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m,uid=101,gid=101
+    entrypoint: ["nginx"]
+    command: ["-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
+    volumes:
+      - ./gateway.conf:/etc/nginx/nginx.conf:ro
+    secrets:
+      - auth_tls_cert
+      - auth_tls_key
+    depends_on:
+      auth:
+        condition: service_healthy
+      rest:
+        condition: service_healthy
+    networks:
+      private:
+        aliases:
+          - auth-gateway
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      auth-gateway:
+        condition: service_started
+    environment:
+      ENVIRONMENT: development
+      NEXORA_CUSTOMER_WORKFLOW_BACKEND: sqlite
+      AUTH_MODE: supabase
+      NEXORA_DEMO_MODE: "false"
+      SUPABASE_URL: https://auth-gateway:8443
+      SUPABASE_KEY: ${SUPABASE_ANON_KEY:?Set an isolated Supabase anon JWT}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?Set an isolated Supabase anon JWT}
+      SUPABASE_ANON_KEY_FILE: /run/secrets/supabase_anon_key
+      SSL_CERT_FILE: /run/secrets/auth_ca_cert
+      REQUESTS_CA_BUNDLE: /run/secrets/auth_ca_cert
+      NEXORA_APPLICATION_DB: /var/lib/nexora/application.sqlite
+      NEXORA_UNIVERSAL_EVIDENCE_DB: /var/lib/nexora/act009.sqlite
+      NEXORA_CUSTOMER_EVIDENCE_ROOT: /var/lib/nexora/customer_evidence
+      NEXORA_CUSTOMER_WORKFLOW_KEY_FILE: /run/secrets/customer_workflow_key
+      NEXORA_CUSTOMER_EVIDENCE_KEY_FILE: /run/secrets/customer_evidence_key
+      BACKGROUND_JOBS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18515:8501"
+    volumes:
+      - application_data:/var/lib/nexora
+    secrets:
+      - supabase_anon_key
+      - customer_workflow_key
+      - customer_evidence_key
+      - auth_ca_cert
+    networks:
+      - private
+      - frontend_access
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "2"
+
+  seed:
+    profiles: ["qualification-seed"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile.frontend
+    entrypoint: ["python", "scripts/seed_v1_qualification_identities.py"]
+    depends_on:
+      auth:
+        condition: service_healthy
+      rest:
+        condition: service_healthy
+    environment:
+      QUAL_AUTH_URL: http://auth:9999
+      QUAL_REST_URL: http://rest:3000
+      JWT_SECRET: ${JWT_SECRET:?Set an isolated Auth signing secret}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?Set an isolated Supabase anon JWT}
+      QUAL_CUSTOMER_CREDENTIALS_FILE: /run/secrets/customer_credentials
+    secrets:
+      - customer_credentials
+    networks:
+      - private
+
+  maintenance:
+    profiles: ["qualification-maintenance"]
+    network_mode: none
+    build:
+      context: ../..
+      dockerfile: Dockerfile.frontend
+    entrypoint: ["python", "scripts/customer_workflow_store.py"]
+    environment:
+      NEXORA_CUSTOMER_WORKFLOW_KEY_FILE: /run/secrets/customer_workflow_key
+      NEXORA_CUSTOMER_EVIDENCE_KEY_FILE: /run/secrets/customer_evidence_key
+      NEXORA_CUSTOMER_WORKFLOW_KEY_NEW_FILE: /run/secrets/customer_workflow_key_next
+      NEXORA_CUSTOMER_EVIDENCE_KEY_NEW_FILE: /run/secrets/customer_evidence_key_next
+    volumes:
+      - application_data:/var/lib/nexora
+    secrets:
+      - customer_workflow_key
+      - customer_evidence_key
+      - customer_workflow_key_next
+      - customer_evidence_key_next
+
+networks:
+  private:
+    name: nexora-v1-customer-journey-qual-20261112-b5_private
+    internal: true
+  frontend_access:
+    name: nexora-v1-customer-journey-qual-20261112-b5_frontend_access
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+
+volumes:
+  identity_db:
+    name: nexora-v1-customer-journey-qual-20261112-b5_identity_db
+  application_data:
+    name: nexora-v1-customer-journey-qual-20261112-b5_application_data
+
+secrets:
+  auth_tls_cert:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/auth-gateway-cert.pem
+  auth_tls_key:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/auth-gateway-key.pem
+  auth_ca_cert:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/auth-ca-cert.pem
+  supabase_anon_key:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/supabase-anon-key
+  customer_workflow_key:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-key
+  customer_evidence_key:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-evidence-key
+  customer_credentials:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-credentials.json
+  customer_workflow_key_next:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-key-next
+  customer_evidence_key_next:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-evidence-key-next

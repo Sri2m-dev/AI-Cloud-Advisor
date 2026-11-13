@@ -3,14 +3,31 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.security import get_current_user, require_role, tenant_guard
-from backend.services.report_service import (
-    build_executive_pdf,
-    get_report_distribution_list,
-    list_report_history,
-    record_report_history,
-    save_report_distribution_list,
-    send_executive_report_email,
-)
+# Resolve service dependencies only after the route authentication dependencies.
+def build_executive_pdf(*args, **kwargs):
+    from backend.services.report_service import build_executive_pdf as implementation
+    return implementation(*args, **kwargs)
+
+def get_report_distribution_list(*args, **kwargs):
+    from backend.services.report_service import get_report_distribution_list as implementation
+    return implementation(*args, **kwargs)
+
+def list_report_history(*args, **kwargs):
+    from backend.services.report_service import list_report_history as implementation
+    return implementation(*args, **kwargs)
+
+def record_report_history(*args, **kwargs):
+    from backend.services.report_service import record_report_history as implementation
+    return implementation(*args, **kwargs)
+
+def save_report_distribution_list(*args, **kwargs):
+    from backend.services.report_service import save_report_distribution_list as implementation
+    return implementation(*args, **kwargs)
+
+def send_executive_report_email(*args, **kwargs):
+    from backend.services.report_service import send_executive_report_email as implementation
+    return implementation(*args, **kwargs)
+
 
 router = APIRouter()
 

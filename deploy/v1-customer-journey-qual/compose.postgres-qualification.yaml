@@ -1,0 +1,82 @@
+services:
+  postgres-qualification-app:
+    image: nexora-v1-customer-workflow-postgres-qual:20261112
+    build:
+      context: ../..
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      auth-gateway:
+        condition: service_started
+    environment:
+      ENVIRONMENT: development
+      NEXORA_CUSTOMER_WORKFLOW_BACKEND: postgres
+      NEXORA_CUSTOMER_WORKFLOW_DSN_FILE: /run/secrets/customer_workflow_pg_dsn
+      NEXORA_CUSTOMER_WORKFLOW_KEY_FILE: /run/secrets/customer_workflow_pg_key
+      NEXORA_CUSTOMER_EVIDENCE_KEY_FILE: /run/secrets/customer_evidence_pg_key
+      AUTH_MODE: supabase
+      NEXORA_DEMO_MODE: "false"
+      SUPABASE_URL: https://auth-gateway:8443
+      SUPABASE_KEY: ${SUPABASE_ANON_KEY:?Set an isolated Supabase anon JWT}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?Set an isolated Supabase anon JWT}
+      SUPABASE_ANON_KEY_FILE: /run/secrets/supabase_anon_key
+      SSL_CERT_FILE: /run/secrets/auth_ca_cert
+      REQUESTS_CA_BUNDLE: /run/secrets/auth_ca_cert
+      NEXORA_APPLICATION_DB: /var/lib/nexora/application.sqlite
+      NEXORA_UNIVERSAL_EVIDENCE_DB: /var/lib/nexora/act009.sqlite
+      NEXORA_CUSTOMER_EVIDENCE_ROOT: /var/lib/nexora/customer_evidence
+      BACKGROUND_JOBS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18516:8501"
+    volumes:
+      - postgres_qualification_data:/var/lib/nexora
+    secrets:
+      - supabase_anon_key
+      - auth_ca_cert
+      - customer_workflow_pg_dsn
+      - customer_workflow_pg_key
+      - customer_evidence_pg_key
+    networks:
+      - private
+      - frontend_access
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "2"
+
+  postgres-qualification-provisioner:
+    image: nexora-v1-customer-workflow-postgres-qual:20261112
+    build:
+      context: ../..
+      dockerfile: Dockerfile.frontend
+    profiles: ["qualification-provisioner"]
+    entrypoint: ["python", "-m", "scripts.provision_customer_workflow_postgres"]
+    environment:
+      NEXORA_CUSTOMER_WORKFLOW_MIGRATION_DSN_FILE: /run/secrets/customer_workflow_migration_dsn
+      NEXORA_CUSTOMER_WORKFLOW_DB_PASSWORD_FILE: /run/secrets/customer_workflow_pg_password
+      NEXORA_CUSTOMER_WORKFLOW_JWT_SECRET_FILE: /run/secrets/customer_workflow_auth_jwt
+      NEXORA_CUSTOMER_WORKFLOW_JWT_ISSUER: https://auth-gateway:8443
+    secrets:
+      - customer_workflow_migration_dsn
+      - customer_workflow_pg_password
+      - customer_workflow_auth_jwt
+    networks:
+      - private
+
+volumes:
+  postgres_qualification_data:
+
+secrets:
+  customer_workflow_pg_dsn:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-pg-dsn
+  customer_workflow_pg_key:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-pg-key
+  customer_evidence_pg_key:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-evidence-pg-key
+  customer_workflow_migration_dsn:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-migration-dsn
+  customer_workflow_pg_password:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-pg-password
+  customer_workflow_auth_jwt:
+    file: ${QUAL_SECRETS_DIR:?Set the outside-repository secrets directory}/customer-workflow-auth-jwt

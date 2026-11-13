@@ -1,21 +1,29 @@
+import json
 import os
 import time
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from api.v1.approvals import router as approvals_router
-from backend.jobs.scheduler import start_scheduler, stop_scheduler
+from backend.jobs.scheduler import stop_scheduler
 from backend.middleware.tenant_isolation import TenantIsolationMiddleware
-from backend.routes.alerts import router as alerts_router
 from backend.routes.auth import router as auth_router
-from backend.routes.cost import router as cost_router
-from backend.routes.governance import router as governance_router
-from backend.routes.recommendations import router as recommendations_router
-from backend.routes.reports import router as reports_router
 from nexora_release import RELEASE_VERSION
 
-app = FastAPI(title="Nexora API", version=RELEASE_VERSION)
+
+@asynccontextmanager
+async def lifespan(application):
+    startup_jobs()
+    try:
+        yield
+    finally:
+        shutdown_jobs()
+
+
+app = FastAPI(title="Nexora API", version=RELEASE_VERSION, lifespan=lifespan)
 app.add_middleware(TenantIsolationMiddleware)
 
 REQUEST_COUNT = Counter(
@@ -28,15 +36,31 @@ REQUEST_LATENCY = Histogram(
     "HTTP request latency",
     ["method", "path"],
 )
+APPLICATION_ERRORS = Counter("nexora_application_errors_total", "Unhandled application errors")
 
 
-@app.on_event("startup")
+def infrastructure_readiness(path=None, *, now=None):
+    """Operational availability only; never a G08 authority/qualification PASS."""
+    now = time.time() if now is None else now
+    try:
+        status = json.loads(Path(path or os.environ["NEXORA_READINESS_FILE"]).read_text())
+        components = status["components"]
+        expected = {"api", "frontend", "redis", "postgres", "auth"}
+        if set(components) != expected or any(components[name] is not True for name in expected):
+            return False
+        age = now - status["observed_at"]
+        return 0 <= age <= 120 and status["infrastructure_ready"] is True and status["protected_execution_enabled"] is False
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
+
+
 def startup_jobs() -> None:
     if os.getenv("BACKGROUND_JOBS_ENABLED", "false").lower() == "true":
-        start_scheduler()
+        raise RuntimeError(
+            "BACKGROUND_JOBS_ENABLED is not supported by the V1 API route profile"
+        )
 
 
-@app.on_event("shutdown")
 def shutdown_jobs() -> None:
     stop_scheduler()
 
@@ -46,12 +70,24 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/ready")
+def ready():
+    available = infrastructure_readiness()
+    return Response(json.dumps({"infrastructure_ready": available, "protected_execution_enabled": False}),
+                    status_code=200 if available else 503, media_type="application/json")
+
+
 @app.middleware("http")
 async def capture_metrics(request: Request, call_next):
     start = time.perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        APPLICATION_ERRORS.inc()
+        raise
     duration = time.perf_counter() - start
-    path = request.url.path
+    # Route templates bound cardinality and avoid recording caller identifiers.
+    path = getattr(request.scope.get("route"), "path", "unmatched")
     REQUEST_COUNT.labels(request.method, path, str(response.status_code)).inc()
     REQUEST_LATENCY.labels(request.method, path).observe(duration)
     return response
@@ -62,13 +98,7 @@ def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-app.include_router(cost_router, prefix="/api/v1", tags=["cost"])
-app.include_router(recommendations_router, prefix="/api/v1", tags=["recommendations"])
-app.include_router(reports_router, prefix="/api/v1", tags=["reports"])
-app.include_router(alerts_router, prefix="/api/v1", tags=["alerts"])
 app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
-app.include_router(governance_router, prefix="/api/v1", tags=["governance"])
-
 app.include_router(
     approvals_router,
     prefix="/api/v1",

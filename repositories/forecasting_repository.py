@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Any
 
 from connectors.common.tenant_guard import resolve_organization_id
-from services.supabase_client import supabase
+from services.supabase_client import TenantScopeRequiredError, supabase
 
 
 class ForecastingRepository:
@@ -27,6 +27,17 @@ class ForecastingRepository:
         "simulation_results",
         "ai_reasoning_history",
     )
+    READ_TABLES = frozenset(TABLES)
+    WRITE_TABLES = frozenset({"forecast_history"})
+
+    @staticmethod
+    def _require_table(table_name: str) -> None:
+        if table_name not in (
+            ForecastingRepository.READ_TABLES | ForecastingRepository.WRITE_TABLES
+        ):
+            raise TenantScopeRequiredError(
+                f"verified tenant access is unavailable for {table_name}"
+            )
 
     @staticmethod
     def load_context(organization_id: str | None = None) -> dict[str, Any]:
@@ -43,14 +54,21 @@ class ForecastingRepository:
 
     @staticmethod
     def save_forecast(table_name: str, payload: dict[str, Any]) -> bool:
+        if table_name not in ForecastingRepository.WRITE_TABLES:
+            raise TenantScopeRequiredError(
+                f"verified tenant write is unavailable for {table_name}"
+            )
         try:
             supabase.table(table_name).insert(payload).execute()
             return True
+        except TenantScopeRequiredError:
+            raise
         except Exception:
             return False
 
     @staticmethod
     def list_forecasts(table_name: str, organization_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        ForecastingRepository._require_table(table_name)
         org_id = resolve_organization_id(organization_id)
         try:
             return (
@@ -68,15 +86,8 @@ class ForecastingRepository:
 
     @staticmethod
     def _fetch_table(table_name: str, organization_id: str | None = None, limit: int = 1000) -> list[dict[str, Any]]:
-        try:
-            query = supabase.table(table_name).select("*")
-            if organization_id:
-                query = query.eq("organization_id", organization_id)
-            return query.limit(limit).execute().data or []
-        except Exception:
-            if organization_id:
-                try:
-                    return supabase.table(table_name).select("*").limit(limit).execute().data or []
-                except Exception:
-                    return []
-            return []
+        ForecastingRepository._require_table(table_name)
+        query = supabase.table(table_name).select("*")
+        if organization_id:
+            query = query.eq("organization_id", organization_id)
+        return query.limit(limit).execute().data or []

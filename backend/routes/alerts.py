@@ -4,28 +4,73 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel
 
 from backend.security import get_current_user, require_role, tenant_guard
-from backend.services.alert_service import (
-    dispatch_alert_channels,
-    send_email_alert,
-    send_slack_alert,
-    send_teams_alert,
-    send_webhook_alert,
-)
-from backend.services.alerting_engine import (
-    evaluate_alerts,
-    get_alert_config,
-    list_alert_history,
-    record_alert_event,
-    save_alert_config,
-)
-from services.alert_processor import (
-    process_alerts,
-    get_alert_configs,
-    execute_email_alert,
-    execute_slack_alert,
-    execute_teams_alert,
-    execute_webhook_alert,
-)
+# Resolve service dependencies only after the route authentication dependencies.
+def dispatch_alert_channels(*args, **kwargs):
+    from backend.services.alert_service import dispatch_alert_channels as implementation
+    return implementation(*args, **kwargs)
+
+def send_email_alert(*args, **kwargs):
+    from backend.services.alert_service import send_email_alert as implementation
+    return implementation(*args, **kwargs)
+
+def send_slack_alert(*args, **kwargs):
+    from backend.services.alert_service import send_slack_alert as implementation
+    return implementation(*args, **kwargs)
+
+def send_teams_alert(*args, **kwargs):
+    from backend.services.alert_service import send_teams_alert as implementation
+    return implementation(*args, **kwargs)
+
+def send_webhook_alert(*args, **kwargs):
+    from backend.services.alert_service import send_webhook_alert as implementation
+    return implementation(*args, **kwargs)
+
+# Resolve service dependencies only after the route authentication dependencies.
+def evaluate_alerts(*args, **kwargs):
+    from backend.services.alerting_engine import evaluate_alerts as implementation
+    return implementation(*args, **kwargs)
+
+def get_alert_config(*args, **kwargs):
+    from backend.services.alerting_engine import get_alert_config as implementation
+    return implementation(*args, **kwargs)
+
+def list_alert_history(*args, **kwargs):
+    from backend.services.alerting_engine import list_alert_history as implementation
+    return implementation(*args, **kwargs)
+
+def record_alert_event(*args, **kwargs):
+    from backend.services.alerting_engine import record_alert_event as implementation
+    return implementation(*args, **kwargs)
+
+def save_alert_config(*args, **kwargs):
+    from backend.services.alerting_engine import save_alert_config as implementation
+    return implementation(*args, **kwargs)
+
+# Alert services load only when their authenticated handler is called.
+def process_alerts(*args, **kwargs):
+    from services.alert_processor import process_alerts as implementation
+    return implementation(*args, **kwargs)
+
+def get_alert_configs(*args, **kwargs):
+    from services.alert_processor import get_alert_configs as implementation
+    return implementation(*args, **kwargs)
+
+def execute_email_alert(*args, **kwargs):
+    from services.alert_processor import execute_email_alert as implementation
+    return implementation(*args, **kwargs)
+
+def execute_slack_alert(*args, **kwargs):
+    from services.alert_processor import execute_slack_alert as implementation
+    return implementation(*args, **kwargs)
+
+def execute_teams_alert(*args, **kwargs):
+    from services.alert_processor import execute_teams_alert as implementation
+    return implementation(*args, **kwargs)
+
+def execute_webhook_alert(*args, **kwargs):
+    from services.alert_processor import execute_webhook_alert as implementation
+    return implementation(*args, **kwargs)
+
 
 router = APIRouter()
 

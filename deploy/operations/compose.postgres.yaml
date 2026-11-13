@@ -1,0 +1,63 @@
+{
+  "services": {
+    "postgres": {
+      "profiles": [
+        "local-postgres"
+      ],
+      "image": "${NEXORA_POSTGRES_IMAGE:?Supply inspected PostgreSQL 17 digest}",
+      "restart": "unless-stopped",
+      "environment": {
+        "POSTGRES_DB": "${NEXORA_POSTGRES_DATABASE:?Supply authorized isolated staging database name}",
+        "POSTGRES_PASSWORD_FILE": "/run/secrets/postgres_password"
+      },
+      "command": [
+        "postgres",
+        "-c",
+        "ssl=on",
+        "-c",
+        "ssl_cert_file=/run/secrets/postgres_cert",
+        "-c",
+        "ssl_key_file=/run/secrets/postgres_key",
+        "-c",
+        "max_connections=50"
+      ],
+      "volumes": [
+        "postgres_data:/var/lib/postgresql/data"
+      ],
+      "secrets": [
+        "postgres_password",
+        "postgres_cert",
+        "postgres_key"
+      ],
+      "networks": [
+        "application"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d \"$${POSTGRES_DB}\""
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 5
+      }
+    }
+  },
+  "secrets": {
+    "postgres_password": {
+      "file": "${NEXORA_POSTGRES_PASSWORD_FILE:?Supply managed secret file outside repository}"
+    },
+    "postgres_cert": {
+      "file": "${NEXORA_POSTGRES_CERT_FILE:?Supply managed secret file outside repository}"
+    },
+    "postgres_key": {
+      "file": "${NEXORA_POSTGRES_KEY_FILE:?Supply managed secret file outside repository}"
+    }
+  },
+  "volumes": {
+    "postgres_data": {
+      "external": true,
+      "name": "${NEXORA_POSTGRES_VOLUME:?Supply isolated custodian-prepared volume}"
+    }
+  }
+}

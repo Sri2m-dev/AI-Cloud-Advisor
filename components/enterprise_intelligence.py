@@ -4,18 +4,34 @@ from typing import Any
 
 import streamlit as st
 
+from auth.role_constants import normalize_role
+from auth.v1_route_policy import is_v1_page_allowed
+from components.navigation.v1_page_link import switch_to_v1_page
+from components.sidebar_navigation import PAGE_PATHS, ROLE_PAGES
 from services.enterprise_intelligence_service import EnterpriseIntelligenceService
 
 
 def render_intelligence_workspace(current: str) -> None:
-    pages = EnterpriseIntelligenceService.get_workspace_pages()
+    role = normalize_role(st.session_state.get("role", ""))
+    pages = [
+        page
+        for page in EnterpriseIntelligenceService.get_workspace_pages()
+        if is_v1_page_allowed(
+            page["Path"],
+            role,
+            page_paths=PAGE_PATHS,
+            role_pages=ROLE_PAGES,
+        )
+    ]
+    if not pages:
+        return
     st.caption("Enterprise Intelligence")
     columns = st.columns(len(pages))
     for index, page in enumerate(pages):
         active = page["Label"] == current
         label = page["Label"] if not active else f"{page['Label']} •"
         if columns[index].button(label, key=f"ei_nav_{page['Label']}", use_container_width=True, disabled=active):
-            st.switch_page(page["Path"])
+            switch_to_v1_page(page["Path"])
 
 
 def render_common_asset_search(

@@ -3,10 +3,35 @@
 **Status: BLOCKED. Recommendation: BLOCKED. Do not create staging or start P6-1B.**
 
 The full requested bootstrap cannot be certified within the stated boundaries.
-Two independently evidenced blockers remain: missing creation DDL for active
-application objects, and a compilation failure in the protected Data Fabric
-migration chain. This report does not equate passing Python tests with successful
-fresh deployment.
+The current branch has now passed a disposable local replay of all 43 PostgreSQL
+inputs, including Data Fabric 0020–0023, but active application object definitions
+remain incomplete and hosted Supabase behavior remains unverified. The earlier
+0020 compilation failure below is historical and superseded by this current replay.
+This result does not certify the full application schema, Supabase runtime, or a
+production bootstrap.
+
+## Current execution update — 2026-11-12
+
+The network-disabled test-only harness executed the schema-only prerequisites,
+all 19 dated public migrations, and all 23 Data Fabric migrations on a fresh
+disposable PostgreSQL target. Catalog and synthetic tenant-isolation assertions
+passed. A second fresh PostgreSQL 18.3 cluster then applied the same 43 inputs,
+recorded their hashes in a test-only migration ledger, skipped all 43 on its
+second pass, and passed the transactional failure/rollback probe. The existing
+`database/contracts/v1_customer_workflow/001_customer_workflow_postgres.sql`
+contract was then applied on that same cluster; the environment-configured
+customer-workflow service completed a synthetic A/B journey. Full application
+startup and browser acceptance were not run.
+
+The prior 0020 parser finding does not reproduce: the current source has the
+parenthesized `CASE` expression and the actual replay compiled 0020 and executed
+0021–0023 successfully. The production manifest has been corrected to list all
+19 current public migrations and remains `BLOCKED` / non-executable. The current
+offline inventory still finds 29 distinct database API object names without
+creation definitions; several are used by active application code, including
+legacy approvals, alerts, connectors, and reporting. No speculative DDL was
+added. Accordingly this remains a **partial local qualification**, not canonical
+full-app bootstrap GO.
 
 ## Root cause and reconstruction result
 
@@ -48,10 +73,10 @@ real Supabase project.
 
 ## Historical SQL classification
 
-The machine-readable inventory covers 112 SQL files (111 existing files plus the
-new prerequisite file). Each has a classification, reason, hash, definitions,
-structural object identifiers and qualified references. Totals: 88
-CURRENT_REQUIRED, 8 UNSAFE_TO_REPLAY, 1 SUPERSEDED, 15 UNKNOWN. No file is declared
+The current machine-readable inventory covers 252 SQL files in the worktree.
+Each has a classification, reason, hash, definitions, structural object
+identifiers and qualified references. Totals: 167 CURRENT_REQUIRED, 10
+UNSAFE_TO_REPLAY, 1 SUPERSEDED, 74 UNKNOWN. No file is declared
 OPTIONAL or HISTORICAL_ONLY without sufficient evidence. CURRENT_REQUIRED means
 required **evidence**, not permission to replay the file wholesale. Duplicate or
 conflicting definitions still need resolution. UNKNOWN objects were retained,
@@ -69,8 +94,7 @@ flowchart TD
   R --> A[20260808 account resolution and financial wrapper]
   A --> K[20260809 classification and inference RPCs]
   D[Data Fabric schema 0001] --> E[0002–0019 tables, indexes, triggers and RPCs]
-  E --> X[0020 compilation failure]
-  X -. blocked .-> Z[0021–0023]
+  E --> R[0020–0023 compiled and replayed in the test-only chain]
   U[Persistent local UE paths and key] --> L[SQLite lifecycle initialization]
 ```
 
@@ -87,11 +111,11 @@ and unresolved application calls are explicitly not claimed fully certified.
 
 ## Application contract gaps
 
-The Python AST inventory covers 244 literal database API calls and 152 dynamic
+The Python AST inventory covers 237 literal database API calls and 154 dynamic
 calls. String references to known objects are also retained to expose configuration
 and table-name constants. These are conservative candidates: static references do
 not prove route reachability, and schema-bound clients require namespace review.
-The 34 distinct names below have no CREATE definition in the SQL inventory.
+The 29 distinct names below have no CREATE definition in the SQL inventory.
 
 At least these are confirmed active public calls, rather than solely legacy names:
 `repositories/application_repository.py:20` selects application_registry columns,
@@ -103,9 +127,7 @@ cannot be recovered from SELECT consumers without inventing business semantics.
 Catching database exceptions and returning an empty list is not deployment proof.
 Repository documentation and available SQL history did not supply these definitions.
 
-- `alert_executions` — `backend/routes/alerts.py:376`
-- `application_registry` — `repositories/application_portfolio_repository.py:19`
-- `application_spend_mapping` — `repositories/application_repository.py:34`
+- `alert_executions` — `backend/routes/alerts.py:421`
 - `approval_history` — `repositories/approval_repository.py:301`
 - `approval_queue` — `repositories/dashboard_repository.py:100`
 - `approval_requests` — `repositories/approval_repository.py:80`
@@ -121,32 +143,29 @@ Repository documentation and available SQL history did not supply these definiti
 - `kpi_spend_by_cloud` — `utils/data_access_layer.py:443`
 - `kpi_top_services` — `utils/data_access_layer.py:451`
 - `kpi_total_cloud_spend` — `utils/data_access_layer.py:433`
-- `mart_application_spend` — `repositories/application_repository.py:48`
-- `mart_cost_anomalies` — `repositories/cost_intelligence_repository.py:34`
+- `mart_cost_anomalies` — `repositories/service_explorer_repository.py:59`
 - `mart_enterprise_forecast` — `pages/reports.py:261`
-- `mart_enterprise_spend` — `repositories/cost_intelligence_repository.py:10`
-- `mart_enterprise_spend_v2` — `pages/reports.py:253`
-- `mart_optimization_opportunities` — `repositories/cost_intelligence_repository.py:41`
+- `mart_optimization_opportunities` — `repositories/service_explorer_repository.py:36`
 - `mart_service_classification` — `repositories/service_explorer_repository.py:11`
 - `notification_queue` — `services/escalation_service.py:74`
 - `platform_health_history` — `repositories/platform_health_repository.py:31`
 - `platform_health_snapshot` — `repositories/platform_health_repository.py:30`
 - `platform_operations_log` — `repositories/platform_health_repository.py:59`
-- `refresh_kpis` — `backend/jobs/tasks.py:130`
-- `technology_inventory` — `repositories/ai_governance_repository.py:15`
-- `vw_inactive_saas_users` — `repositories/technology_graph_repository.py:69`
-- `vw_saas_renewal_risk` — `repositories/technology_graph_repository.py:55`
-- `vw_vendor_spend` — `repositories/technology_graph_repository.py:41`
+- `recommendation_events` — `backend/jobs/tasks.py:263`
+- `refresh_kpis` — `backend/jobs/tasks.py:140`
+- `vw_inactive_saas_users` — `repositories/technology_graph_repository.py:60`
+- `vw_saas_renewal_risk` — `repositories/technology_graph_repository.py:46`
+- `vw_vendor_spend` — `repositories/technology_graph_repository.py:32`
 
-## Exact recorded deployment order (blocked, not executable)
+## Exact recorded test-replay order (production manifest remains blocked)
 
 The single machine-readable `migration_manifest.json` records every path and
 SHA-256 over UTF-8 SQL with canonical LF newlines (portable across Git checkouts), and explicitly sets executable=false. Nothing may skip the incomplete
-first step or the failing Data Fabric migration.
+full application baseline; successful test replay does not authorize deployment.
 
 1. Complete reviewed public bootstrap: **missing**. The recovered
    `supabase/bootstrap/public_prerequisites.sql` is only the known five-table subset.
-2. Apply these 17 existing public migrations in this exact order:
+2. Apply these 19 dated public migrations in this exact order:
 
    - `supabase/migrations/202607230001_public_security_reconciliation.sql`
    - `supabase/migrations/202607260001_aws_cur_ingestion_foundation.sql`
@@ -165,8 +184,12 @@ first step or the failing Data Fabric migration.
    - `supabase/migrations/202608090005_p42_persistence_lock_key.sql`
    - `supabase/migrations/202608090006_p42_batch_account_evidence.sql`
    - `supabase/migrations/202608090007_p42_single_scan_batch_evidence.sql`
+   - `supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql`
+   - `supabase/migrations/202610110001_bind_user_profiles_to_auth_uid.sql`
 
-3. Apply Data Fabric in this exact order (0020 currently blocks):
+3. Apply Data Fabric in this exact order. All 23 files passed the bounded local
+   replay; the production manifest remains non-executable because application
+   schema and hosted-runtime verification are incomplete:
 
    - `migrations/data_fabric/0001_create_data_fabric_schema.sql`
    - `migrations/data_fabric/0002_create_enterprise_entities.sql`
@@ -200,7 +223,7 @@ first step or the failing Data Fabric migration.
    configuration remain operator prerequisites. This file is not evidence of
    PostgreSQL migration correctness.
 
-## Local/ephemeral certification
+## Historical local/ephemeral certification — superseded for migration replay
 
 A disposable PostgreSQL 18.3 instance was initialized inside `.tmp/def001-postgres`
 and bound only to 127.0.0.1:55491. Docker's daemon was unavailable. Native pg_ctl
@@ -212,35 +235,35 @@ Postgres-compatible replay; these shims do not certify Supabase Auth or PostgRES
 | Check | Result |
 | --- | --- |
 | Blank database → prerequisite SQL | PASS |
-| All 17 unchanged dated public migrations | PASS |
-| Data Fabric 0001–0019 unchanged | PASS |
-| Data Fabric 0020 | FAIL: function compilation |
-| Data Fabric 0021–0023 | NOT RUN: fail-stop at 0020 |
-| No seed rows after partial replay | PASS: all public/data_fabric tables empty |
-| Synthetic two-tenant users/organization read isolation | PASS |
-| Cross-tenant recommendation insert rejected | PASS |
-| Final public financial-posture RPC invocation | PASS: authorized empty tenant returned one posture row |
-| Nonempty schema bootstrap replay rejection | PASS |
-| Complete frozen application schema | NOT CERTIFIED |
-| Real Supabase RLS/RPC/PostgREST behavior | Deferred to separately authorized P6-1B after repository blockers are fixed |
+| All 19 dated public migrations | PASS in the current test-only replay |
+| Data Fabric 0001–0023 | PASS; 0020 compiled and 0021–0023 executed |
+| Catalog and synthetic tenant-isolation assertions | PASS |
+| Fresh-cluster second migration pass | PASS; all 43 inputs skipped using the test-only hash ledger |
+| Intentional migration failure/transaction rollback probe | PASS; no partial probe object remained |
+| Customer-workflow service on the migrated database | PASS; synthetic A/B workflow and tenant denial |
+| Complete application bootstrap / full application startup | NOT CERTIFIED |
+| Browser acceptance against this database | NOT RUN |
+| Real Supabase Auth/RLS/RPC/PostgREST behavior | NOT CERTIFIED |
 
 Synthetic isolation rows were inserted inside a transaction and rolled back.
 The exported catalog contains schema metadata only, not those rows. The disposable PostgreSQL server was shut down cleanly after the checks; no background database service remains running.
 
-The reproducible error is in
+The historical reproducible error was in
 `migrations/data_fabric/0020_create_stewardship_rpcs.sql:44`:
 `if not case v_current.state when ... end then ...`.
 PostgreSQL reports **syntax error at end of input** while compiling
 `data_fabric.stewardship_transition_review`, with psql reporting the closing
 statement at line 51. This is a parser failure, not missing client data or missing
-Supabase roles. The first RPC in 0020 was created before that failure because the
-file is not wrapped in a transaction; it is not a successfully applied migration.
-The file was not modified, and later files were not used to disguise the failure.
-A separately authorized correction to the protected migration is required.
+Supabase roles. At the time, the first RPC in 0020 was created before that failure
+because the file was not wrapped in a transaction; the later files were not run.
+The current source and successful 43-input replay supersede that recorded failure.
 
 ## Regression and security results
 
 - Focused migration/security tests: **64 passed**, 0 failures, no warnings in the final focused run.
+- Current V1 bootstrap/auth/workflow/finance/recovery regression selection:
+  **172 passed, 0 failed** (2026-11-12; 180.90 seconds). This is a focused
+  run, not the full repository suite.
 - Final full repository suite: **1852 passed, 7 skipped, 0 failures**, 12 dependency deprecation warnings (154.62 seconds).
 - Initial default-temp execution had 235 setup errors from Windows temp-directory
   permissions. A workspace-local basetemp resolved them; the earlier complete
@@ -269,14 +292,15 @@ This command never executes SQL and is not a deployment runner.
 
 ## Remaining engineering/operator prerequisites
 
-Engineering must recover authoritative schema-only definitions for missing active
-objects (including their keys, joins, tenant access and aggregation semantics),
-resolve historical definition conflicts and dynamic table names, finish the one
-complete bootstrap, and obtain scope authorization to correct the Data Fabric
-0020 parser defect. An approved schema-only reference or prior migration source
-can resolve missing semantics; runtime/client data is unnecessary and must not be
-substituted for DDL. The operator is not being asked to assemble tables manually.
-Then rerun the entire local chain before any staging recommendation.
+Engineering must recover authoritative schema-only definitions for the 29
+unresolved database API objects (including keys, joins, tenant access and
+aggregation semantics), resolve historical definition conflicts and dynamic
+table names, and finish a complete V1 application bootstrap. The current local
+43-input replay succeeds; the remaining blocker is missing application contracts
+and hosted-runtime verification, not the historical 0020 parser error. An
+approved schema-only reference or prior migration source can resolve missing
+semantics; runtime/client data is unnecessary and must not be substituted for
+DDL. Then rerun the complete local chain before any staging recommendation.
 
 Only after that repository gate passes: create a new dedicated staging project,
 provide credentials securely, configure durable UE paths/key and backup/checkpoint,

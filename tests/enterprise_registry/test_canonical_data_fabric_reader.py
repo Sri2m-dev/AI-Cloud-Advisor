@@ -17,7 +17,10 @@ from data_fabric.persistence.models import PageResult
 from enterprise_registry.canonical import enterprise_entity_from_source
 from repositories.enterprise_registry_source import CanonicalDataFabricRegistrySource
 from services.demo_enterprise_topology import demo_enterprise_topology
-from services.enterprise_registry_composition import enterprise_registry_service
+from services.enterprise_registry_composition import (
+    EnterpriseRegistryConfigurationError,
+    enterprise_registry_service,
+)
 
 ORG = "11111111-1111-4111-8111-111111111111"
 
@@ -225,6 +228,57 @@ def test_enterprise_registry_prefers_canonical_source_and_keeps_legacy_and_demo(
         scoped = dict(filters)
         assert scoped["organization_id"] == ORG
         assert scoped["tenant_id"] == ORG
+
+
+def test_v1_enterprise_registry_uses_canonical_data_fabric_only(monkeypatch):
+    context = TenantContext(ORG, ORG)
+    canonical_entity = entity(context, "canonical-v1-entity")
+    canonical_source = CanonicalSource((canonical_entity,))
+    client = DomainClient(
+        {
+            "technology_inventory": (
+                {
+                    "technology_id": "legacy-only-id",
+                    "technology_name": "Legacy Technology",
+                    "source_system": "legacy",
+                    "organization_id": ORG,
+                    "tenant_id": ORG,
+                },
+            )
+        }
+    )
+    monkeypatch.setenv("NEXORA_PRODUCT_PROFILE", "V1")
+
+    service = enterprise_registry_service(
+        context,
+        role="cio",
+        environment="production",
+        supabase_url="https://tenant.supabase.co",
+        supabase_key="test-key",
+        client=client,
+        canonical_source=canonical_source,
+    )
+
+    assert service.source_mode == "data_fabric"
+    assert service.search_entities("canonical-v1-entity")
+    assert not service.search_entities("legacy-only-id")
+    assert client.seen_filters == []
+
+
+def test_v1_enterprise_registry_fails_closed_without_canonical_source(monkeypatch):
+    monkeypatch.setenv("NEXORA_PRODUCT_PROFILE", "v1")
+
+    with pytest.raises(
+        EnterpriseRegistryConfigurationError,
+        match="canonical Data Fabric source is required",
+    ):
+        enterprise_registry_service(
+            TenantContext(ORG, ORG),
+            role="cio",
+            environment="development",
+            supabase_url="",
+            supabase_key="",
+        )
 
 
 def test_enterprise_registry_composition_requires_explicit_tenant_context():

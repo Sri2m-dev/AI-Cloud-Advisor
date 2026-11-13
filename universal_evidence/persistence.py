@@ -13,11 +13,8 @@ from uuid import uuid4
 from universal_evidence.normalization.fingerprints import fingerprint
 
 LIFECYCLE_STATES = frozenset({"ACTIVE", "EXPIRED", "PURGE_PENDING", "PURGED"})
-_MIGRATION = (
-    Path(__file__).resolve().parents[1]
-    / "migrations"
-    / "universal_evidence"
-    / "0001_create_lifecycle_state.sql"
+_MIGRATIONS = (
+    Path(__file__).resolve().parents[1] / "migrations" / "universal_evidence"
 )
 
 
@@ -63,8 +60,12 @@ def run_universal_evidence_migrations(database, *, connection_factory=None) -> N
         connection = factory()
         try:
             connection.execute("PRAGMA foreign_keys = ON")
-            connection.executescript(_MIGRATION.read_text(encoding="utf-8"))
-            connection.commit()
+            migrations = tuple(sorted(_MIGRATIONS.glob("[0-9][0-9][0-9][0-9]_*.sql")))
+            if not migrations:
+                raise LifecyclePersistenceError("no lifecycle migrations are available")
+            for migration in migrations:
+                connection.executescript(migration.read_text(encoding="utf-8"))
+                connection.commit()
         except Exception:
             connection.rollback()
             raise

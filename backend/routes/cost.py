@@ -4,7 +4,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 
 from backend.security import get_current_user, require_role, tenant_guard
-from backend.services.cost_service import fetch_cost_data
+# Resolve service dependencies only after the route authentication dependencies.
+def fetch_cost_data(*args, **kwargs):
+    from backend.services.cost_service import fetch_cost_data as implementation
+    return implementation(*args, **kwargs)
+
 
 router = APIRouter()
 

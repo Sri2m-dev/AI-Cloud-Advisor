@@ -7,6 +7,7 @@ Real values belong in the deployment secret manager, never `.env.example` or Git
 | `ENVIRONMENT` | Runtime policy | Required | `development` | `production` | No | Deployment must set it; production guards depend on this classification |
 | `AUTH_MODE` | Authentication backend | Required | dev only | Supabase; never `dev` | No | Local personas disabled outside non-production dev mode |
 | `JWT_SECRET` | API token signing | Required | none | High-entropy managed value | Yes | Production token operations raise when absent |
+| `API_USERS_JSON` | Standalone API identity, role, active status, and tenant authorization records | Required for API auth | none | Managed secret configuration; update records to apply access changes | Yes | API authentication returns 503 when unavailable or invalid; unlisted/disabled users are rejected |
 | `SUPABASE_URL` | Tenant datastore/auth endpoint | Required | none | Approved production project | No | Tenant services unavailable; no synthetic fallback |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server datastore authority | Required | none | Backend secret manager only | Yes | Production composition does not downgrade to local data |
 | `DEFAULT_ORG_ID` | Legacy scoped query default | Conditional | none | Approved tenant where required | No | Missing scope must not select another tenant |

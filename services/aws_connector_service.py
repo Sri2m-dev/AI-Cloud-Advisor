@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from connector_auth.aws_runtime import AWSRuntimeSessionProvider
-from connector_auth.runtime_identity import WebIdentityTokenFileSource
 from config.settings import (
     AWS_BOOTSTRAP_ROLE_ARN,
     AWS_RUNTIME_MODE,
     AWS_WEB_IDENTITY_TOKEN_FILE,
 )
+from connector_auth.aws_runtime import AWSRuntimeSessionProvider
+from connector_auth.runtime_identity import WebIdentityTokenFileSource
 from connectors.aws.aws_credential_manager import (
     AWSConnectedModeConfigurationError,
     validate_external_id,
@@ -32,6 +32,7 @@ from connectors.common.persistence import (
 )
 from connectors.common.tenant_guard import resolve_organization_id, with_organization
 from services.aws_onboarding_template_service import AWSOnboardingTemplateService
+from services.demo_tenant_service import is_demo_tenant
 from services.supabase_client import supabase
 
 
@@ -127,22 +128,25 @@ class AWSConnectorService:
 
     @staticmethod
     def sync_all(role_arn=None, external_id=None, region=None, organization_id: str | None = None):
-        started_at = datetime.now(timezone.utc)
         organization_id = AWSConnectorService._resolve_organization_id(organization_id)
-        config = AWSConnectorService.get_config(organization_id)
-        effective_role_arn = role_arn if role_arn is not None else config.get("role_arn")
-        effective_external_id = (
-            external_id if external_id is not None else config.get("external_id")
-        )
-        effective_region = region or config.get("region") or "us-east-1"
+        if is_demo_tenant(organization_id):
+            return {
+                "status": "REJECTED",
+                "discovery_status": "NOT_STARTED",
+                "financial_ingestion_status": "NOT_PERFORMED",
+                "persistence_status": "NOT_ATTEMPTED",
+                "dashboard_readiness": "UNKNOWN",
+                "error": "Live AWS synchronization is unavailable for the synthetic demo tenant.",
+            }
 
+        retrieved = {"accounts": 0, "costs": 0, "resources": 0, "recommendations": 0}
         try:
-            AWSConnectorService._upsert_connector_registry(
-                status="SYNCING",
-                objects_synced=0,
-                error_message=None,
-                organization_id=organization_id,
+            config = AWSConnectorService.get_config(organization_id)
+            effective_role_arn = role_arn if role_arn is not None else config.get("role_arn")
+            effective_external_id = (
+                external_id if external_id is not None else config.get("external_id")
             )
+            effective_region = region or config.get("region") or "us-east-1"
 
             connector = AWSConnectorService._build_connector(
                 effective_role_arn,
@@ -151,109 +155,47 @@ class AWSConnectorService:
             )
 
             accounts = connector.sync_accounts()
+            retrieved["accounts"] = len(accounts)
             costs = connector.sync_costs()
+            retrieved["costs"] = len(costs)
             resources = connector.sync_resources()
+            retrieved["resources"] = len(resources)
             recommendations = connector.sync_recommendations()
-
-            AWSConnectorService._upsert_cloud_accounts(accounts)
-            AWSConnectorService._upsert_rows(
-                "unified_cloud_costs",
-                costs,
-                on_conflict="cloud,account_name,service_name,usage_date",
-            )
-            technology_rows = AWSConnectorService._resources_to_technology_inventory(resources)
-            technology_rows = AWSConnectorService._with_organization(
-                technology_rows, organization_id
-            )
-            AWSConnectorService._upsert_rows(
-                "technology_inventory",
-                technology_rows,
-                on_conflict="technology_name",
-            )
-            relationships = AWSConnectorService._resources_to_relationships(
-                resources=resources,
-                accounts=accounts,
-            )
-            relationships = AWSConnectorService._with_organization(relationships, organization_id)
-            AWSConnectorService._upsert_relationships(relationships)
-            AWSConnectorService._upsert_relationship_graph(relationships)
-            AWSConnectorService._insert_rows("recommendations", recommendations)
-
-            assets = AWSConnectorService._resources_to_discovered_assets(
-                resources=resources,
-                accounts=accounts,
-            )
-            assets = AWSConnectorService._with_organization(assets, organization_id)
-            AWSConnectorService._upsert_discovered_assets(assets)
-
-            completed_at = datetime.now(timezone.utc)
-            duration_seconds = (completed_at - started_at).total_seconds()
-
-            objects_synced = len(accounts) + len(costs) + len(resources) + len(recommendations)
-
-            AWSConnectorService._insert_sync_history(
-                sync_status="SUCCESS",
-                started_at=started_at,
-                completed_at=completed_at,
-                duration_seconds=duration_seconds,
-                accounts_synced=len(accounts),
-                costs_synced=len(costs),
-                resources_synced=len(resources),
-                recommendations_synced=len(recommendations),
-                assets_discovered=len(assets),
-                error_message=None,
-                organization_id=organization_id,
-            )
-
-            AWSConnectorService._upsert_connector_registry(
-                status="CONNECTED",
-                objects_synced=objects_synced,
-                error_message=None,
-                last_success=True,
-                organization_id=organization_id,
-            )
+            retrieved["recommendations"] = len(recommendations)
 
             return {
-                "status": "SUCCESS",
-                "accounts": len(accounts),
-                "costs": len(costs),
-                "resources": len(resources),
-                "recommendations": len(recommendations),
-                "assets_discovered": len(assets),
-                "objects_synced": objects_synced,
+                "status": "PARTIAL",
+                "discovery_status": "SUCCESS",
+                "retrieved_counts": retrieved,
+                "accounts": retrieved["accounts"],
+                "costs": retrieved["costs"],
+                "resources": retrieved["resources"],
+                "recommendations": retrieved["recommendations"],
+                "financial_ingestion_status": "BLOCKED",
+                "persistence_status": "NOT_ATTEMPTED",
+                "persistence_reason": "TENANT_SCOPED_LEGACY_WRITE_UNAVAILABLE",
+                "dashboard_readiness": "UNKNOWN",
+                "error": (
+                    "AWS discovery completed, but this sync has no approved "
+                    "tenant-scoped persistence path for its legacy outputs. "
+                    "No records were persisted and dashboard readiness is unknown."
+                ),
             }
 
-        except Exception as exc:
-            completed_at = datetime.now(timezone.utc)
-            duration_seconds = (completed_at - started_at).total_seconds()
-
-            error_message = str(exc)
-
-            AWSConnectorService._insert_sync_history(
-                sync_status="FAILED",
-                started_at=started_at,
-                completed_at=completed_at,
-                duration_seconds=duration_seconds,
-                accounts_synced=0,
-                costs_synced=0,
-                resources_synced=0,
-                recommendations_synced=0,
-                assets_discovered=0,
-                error_message=error_message,
-                organization_id=organization_id,
-            )
-
-            AWSConnectorService._upsert_connector_registry(
-                status="FAILED",
-                objects_synced=0,
-                error_message=error_message,
-                last_failure=True,
-                organization_id=organization_id,
-            )
-
+        except Exception:
+            discovery_status = "PARTIAL" if any(retrieved.values()) else "FAILED"
             return {
-                "status": "FAILED",
-                "error": error_message,
+                "status": discovery_status,
+                "discovery_status": discovery_status,
+                "retrieved_counts": retrieved,
+                "financial_ingestion_status": "BLOCKED",
+                "persistence_status": "NOT_ATTEMPTED",
+                "dashboard_readiness": "UNKNOWN",
+                "error": (
+                    "AWS discovery was incomplete; retrieved records were not persisted."
+                    if discovery_status == "PARTIAL"
+                    else "AWS discovery failed before tenant-scoped persistence was available."
+                ),
             }
 
     @staticmethod

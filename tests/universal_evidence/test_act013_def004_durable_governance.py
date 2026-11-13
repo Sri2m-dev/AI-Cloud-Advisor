@@ -1,6 +1,7 @@
 """ACT013-DEF-004 durable governance across logout, persona, and restart."""
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from services.prospect_data_intake_service import ProspectTenant
@@ -29,11 +30,12 @@ class PersonaSession:
 
 
 def _tenant(prospect="prospect-def004", audit="audit-def004"):
+    created_at = datetime.now(timezone.utc)
     return ProspectTenant(
         prospect,
         audit,
-        "2026-08-31T00:00:00+00:00",
-        "2026-09-30T00:00:00+00:00",
+        created_at.isoformat(),
+        (created_at + timedelta(days=30)).isoformat(),
         30,
     )
 

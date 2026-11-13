@@ -126,6 +126,7 @@ def relationship(
         organization_id=context.organization_id,
         tenant_id=context.tenant_id,
         source_system="catalog",
+        decision_state="confirmed",  # Explicit synthetic accepted relationship.
         source_identifier=relationship_id,
     )
 
@@ -215,9 +216,7 @@ def test_identity_reconciliation_is_deterministic(
     reason: str,
     confidence: float,
 ) -> None:
-    registered = emrp.register_entity(
-        entity(context, "payments", aliases=("Payments API",))
-    )
+    registered = emrp.register_entity(entity(context, "payments", aliases=("Payments API",)))
 
     result = emrp.reconcile_identity(match_candidate(context, registered))
 
@@ -440,9 +439,7 @@ def test_acceptance_thresholds_produce_explicit_pass_evidence(
 ) -> None:
     application, node = taxonomy_setup(emrp, context)
     target = emrp.register_entity(entity(context, "ledger"))
-    identity = emrp.reconcile_identity(
-        candidate(context, canonical_id=application.canonical_id)
-    )
+    identity = emrp.reconcile_identity(candidate(context, canonical_id=application.canonical_id))
     relation = relationship(context, "payments-ledger", application.id, target.id)
     emrp.validate_relationship(relation, rule=application_dependency_rule())
     taxonomy = emrp.validate_taxonomy_assignment(

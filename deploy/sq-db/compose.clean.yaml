@@ -1,0 +1,101 @@
+{
+  "services": {
+    "clean-install": {
+      "image": "${SQDB_POSTGRES_IMAGE:?Supply qualified PostgreSQL 17 repository@sha256 digest}",
+      "pull_policy": "never",
+      "profiles": [
+        "clean"
+      ],
+      "network_mode": "none",
+      "tmpfs": [
+        "/var/lib/postgresql/data:rw,nosuid,size=256m",
+        "/run/sqdb:rw,noexec,nosuid,size=2m",
+        "/tmp:rw,nosuid,size=32m"
+      ],
+      "environment": {
+        "PGHOST": "127.0.0.1",
+        "PGPORT": "5432",
+        "PGDATABASE": "nexora_m2c_m3sq_20261110",
+        "PGUSER": "postgres",
+        "PGSSLMODE": "verify-full",
+        "PGSSLROOTCERT": "/run/secrets/client_ca",
+        "PGPASSFILE": "/tmp/client/pgpass",
+        "PGOPTIONS": "-c nexora.qualification_authorized=local-disposable",
+        "POSTGRES_DB": "nexora_m2c_m3sq_20261110",
+        "POSTGRES_PASSWORD_FILE": "/run/secrets/password",
+        "POSTGRES_INITDB_ARGS": "--auth-host=scram-sha-256 --auth-local=trust"
+      },
+      "secrets": [
+        "password",
+        "server_cert",
+        "server_key",
+        "client_ca",
+        "pgpass"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2a",
+          "target": "/qualification/database/contracts/g08_m2a",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2b",
+          "target": "/qualification/database/contracts/g08_m2b",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2c",
+          "target": "/qualification/database/contracts/g08_m2c",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/tests/database_integrity",
+          "target": "/qualification/tests/database_integrity",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/tests/owner_authorization",
+          "target": "/qualification/tests/owner_authorization",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        "./clean-install.sh:/sqdb/clean-install.sh:ro"
+      ],
+      "entrypoint": [
+        "/bin/sh",
+        "/sqdb/clean-install.sh"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "test",
+          "-f",
+          "/tmp/clean-install-passed"
+        ],
+        "interval": "2s",
+        "timeout": "2s",
+        "retries": 30,
+        "start_period": "10s"
+      }
+    }
+  }
+}

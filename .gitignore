@@ -69,3 +69,15 @@ data/CUR Jan 2026.xlsx
 /archive/backup 11-03-26/
 
 !.env.production.backend.example
+
+# M1 private machine credentials and local execution material
+.local/
+.aws/
+.docker/
+*.p12
+*.pfx
+credentials.json
+**/service-account*.json
+
+# Local pytest artifacts within release qualification runs
+docs/release/**/pytest-temp/

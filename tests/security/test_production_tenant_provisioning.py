@@ -23,16 +23,20 @@ ORG_ID = "12345678-1234-4234-8234-123456789abc"
 REQUEST_ID = "CHANGE-PO2-001"
 ORG_NAME = "Northwind Retail"
 EMAIL = "admin@example.com"
+AUTH_USER_ID = "11111111-1111-4111-8111-111111111111"
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY_AUTH_TRIGGER_MIGRATION = (
     ROOT / "supabase/migrations/202610090001_retire_legacy_auth_user_trigger.sql"
+)
+AUTH_UID_MIGRATION = (
+    ROOT / "supabase/migrations/202610110001_bind_user_profiles_to_auth_uid.sql"
 )
 
 
 @dataclass
 class FakeUser:
     email: str
-    id: str = "auth-user-id-independent"
+    id: str = AUTH_USER_ID
 
 
 class FakeAuthAdmin:
@@ -87,6 +91,10 @@ class FakeProfiles:
         if self.create_error:
             raise self.create_error
         self.rows[payload["email"]] = {"id": "profile-generated-id", **payload}
+
+    def bind_auth_user(self, email, auth_user_id):
+        self.events.append(("profile_bind", email, auth_user_id))
+        self.rows[email]["auth_user_id"] = auth_user_id
 
 
 def request(**overrides):
@@ -189,7 +197,7 @@ def test_auth_lookup_stops_at_maximum_page_count():
     assert len(auth.events) == 1000
 
 
-def test_success_uses_org_profile_invite_order_and_keeps_profile_uuid_independent():
+def test_success_binds_profile_to_auth_identity_after_invitation():
     events = []
     organizations = FakeOrganizations(events=events)
     profiles = FakeProfiles(events=events)
@@ -198,12 +206,22 @@ def test_success_uses_org_profile_invite_order_and_keeps_profile_uuid_independen
     result = service(organizations=organizations, profiles=profiles, auth=auth, events=events).provision(request())
 
     assert result.classification == "COMPLETE"
-    mutations = [event[0] for event in events if event[0].endswith(("create", "invite"))]
-    assert mutations == ["organization_create", "profile_create", "auth_invite"]
+    mutations = [
+        event[0]
+        for event in events
+        if event[0].endswith(("create", "invite", "bind"))
+    ]
+    assert mutations == [
+        "organization_create",
+        "profile_create",
+        "auth_invite",
+        "profile_bind",
+    ]
     profile_payload = next(event[1] for event in events if event[0] == "profile_create")
     assert profile_payload == {"email": EMAIL, "org_id": ORG_ID, "role": "client_admin"}
     assert "id" not in profile_payload
     assert profiles.rows[EMAIL]["id"] != auth.pages[1][0].id
+    assert profiles.rows[EMAIL]["auth_user_id"] == auth.pages[1][0].id
 
 
 def test_legacy_auth_trigger_migration_only_drops_the_trigger_transactionally():
@@ -225,10 +243,48 @@ def test_legacy_auth_trigger_migration_only_drops_the_trigger_transactionally():
     assert "71cf875a-2103-47a0-8886-41a97c5750ec" not in normalized_sql
 
 
+def test_auth_uid_migration_fails_closed_for_unmapped_profiles():
+    sql = AUTH_UID_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "auth_user_id uuid" in sql
+    assert "where auth_user_id is not null" in sql
+    assert "using (auth_user_id = (select auth.uid()))" in " ".join(sql.split())
+    assert "where u.auth_user_id = (select auth.uid())" in " ".join(sql.split())
+    assert "update public.users" not in sql
+    assert "auth.jwt()" not in sql
+    for policy in (
+        "cloud_cost_import_select_own_org",
+        "cloud_cost_import_part_select_own_org",
+        "cloud_account_mapping_select_own_org",
+        "cloud_cost_reconciliation_select_own_org",
+    ):
+        assert f"create policy {policy}" in sql
+    assert "create or replace function public.pvt003c1_can_read_organization" in sql
+    assert "create or replace function public.fg002_resolve_cloud_account(" in sql
+    assert "create or replace function public.fg002_bulk_resolve_cloud_accounts(" in sql
+    assert sql.count("where u.auth_user_id = (select auth.uid())") >= 3
+    assert "and u.org_id = requested_organization_id" in sql
+    assert "lower(u.email) = actor_email" not in sql
+    assert "actor_role text" in sql
+    assert "account resolution permission required" in sql
+    assert "revoke all on function public.fg002_resolve_cloud_account" in sql
+    assert "grant execute on function public.fg002_resolve_cloud_account" in sql
+
+
 def test_complete_state_is_already_complete_without_mutations():
     events = []
     orgs = FakeOrganizations({ORG_ID: {"id": ORG_ID, "name": ORG_NAME, "status": "active"}}, events)
-    profiles = FakeProfiles({EMAIL: {"id": "profile-id", "email": EMAIL, "org_id": ORG_ID, "role": "client_admin"}}, events)
+    profiles = FakeProfiles(
+        {
+            EMAIL: {
+                "id": "profile-id",
+                "email": EMAIL,
+                "org_id": ORG_ID,
+                "role": "client_admin",
+                "auth_user_id": AUTH_USER_ID,
+            }
+        },
+        events,
+    )
     auth = FakeAuthAdmin({1: [FakeUser(EMAIL)]}, events)
 
     result = service(organizations=orgs, profiles=profiles, auth=auth, events=events).provision(request())
@@ -278,7 +334,27 @@ def test_auth_identity_without_expected_profile_is_hard_conflict():
     result = service(auth=auth).provision(request())
 
     assert result.classification == "HARD_CONFLICT"
-    assert result.reason_code == "AUTH_IDENTITY_WITHOUT_EXPECTED_PROFILE"
+    assert result.reason_code == "AUTH_PROFILE_IDENTITY_MISMATCH"
+
+
+def test_profile_linked_to_different_auth_identity_is_hard_conflict():
+    profiles = FakeProfiles(
+        {
+            EMAIL: {
+                "id": "profile-id",
+                "auth_user_id": "22222222-2222-4222-8222-222222222222",
+                "email": EMAIL,
+                "org_id": ORG_ID,
+                "role": "client_admin",
+            }
+        }
+    )
+    auth = FakeAuthAdmin({1: [FakeUser(EMAIL)]})
+
+    result = service(profiles=profiles, auth=auth).provision(request())
+
+    assert result.classification == "HARD_CONFLICT"
+    assert result.reason_code == "AUTH_PROFILE_IDENTITY_MISMATCH"
 
 
 def test_profile_without_auth_identity_is_partial_and_not_auto_resumed():

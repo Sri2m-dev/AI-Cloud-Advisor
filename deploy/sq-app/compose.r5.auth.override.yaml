@@ -1,0 +1,68 @@
+services:
+  frontend:
+    environment:
+      NEXORA_SQAPP_SCOPE: nexora-sqapp-r5-auth-local-20261111:authenticated-local-only
+      SUPABASE_URL: https://auth-gateway:8443
+      SUPABASE_API_AUTH_ENABLED: "true"
+      SUPABASE_JWT_ISSUER: https://auth-gateway:8443
+      SUPABASE_JWT_AUDIENCE: authenticated
+      SUPABASE_KEY_FILE: /run/secrets/supabase_anon_key
+      SUPABASE_ANON_KEY_FILE: /run/secrets/supabase_anon_key
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      SSL_CERT_FILE: /run/secrets/auth_ca
+    entrypoint:
+      - python
+      - /opt/sqapp/authenticated-r5.py
+      - frontend
+    networks:
+      - private
+      - supabase_auth
+    secrets:
+      - credential_key
+      - prospect_key
+      - supabase_anon_key
+      - auth_ca
+    volumes:
+      - ./authenticated_smoke_r5.py:/opt/sqapp/authenticated-r5.py:ro
+
+  api:
+    environment:
+      NEXORA_SQAPP_SCOPE: nexora-sqapp-r5-auth-local-20261111:authenticated-local-only
+      SUPABASE_URL: https://auth-gateway:8443
+      SUPABASE_API_AUTH_ENABLED: "true"
+      SUPABASE_JWT_ISSUER: https://auth-gateway:8443
+      SUPABASE_JWT_AUDIENCE: authenticated
+      SUPABASE_KEY_FILE: /run/secrets/supabase_anon_key
+      SUPABASE_ANON_KEY_FILE: /run/secrets/supabase_anon_key
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      SSL_CERT_FILE: /run/secrets/auth_ca
+      JWT_SECRET_FILE: /run/secrets/jwt
+    entrypoint:
+      - python
+      - /opt/sqapp/authenticated-r5.py
+      - api
+    networks:
+      - private
+      - supabase_auth
+    secrets:
+      - credential_key
+      - prospect_key
+      - jwt
+      - broker_url
+      - supabase_anon_key
+      - auth_ca
+    volumes:
+      - ./authenticated_smoke_r5.py:/opt/sqapp/authenticated-r5.py:ro
+
+networks:
+  supabase_auth:
+    external: true
+    name: nexora-sqapp-auth-local-20261111_private
+
+secrets:
+  jwt:
+    file: ${SUPABASE_AUTH_JWT_FILE:?Set managed Auth signing key file}
+  supabase_anon_key:
+    file: ${SUPABASE_ANON_KEY_FILE:?Set managed Supabase anonymous key file}
+  auth_ca:
+    file: ${SUPABASE_AUTH_CA_FILE:?Set managed Auth CA certificate file}

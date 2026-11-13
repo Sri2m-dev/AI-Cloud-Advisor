@@ -70,6 +70,52 @@ class ApprovalHistory:
     actor_role: str | None = None
 
 
+def transition_approval_request(
+    current: ApprovalRequest,
+    *,
+    to_state: str,
+    actor: str,
+    reason: str,
+    actor_role: str | None = None,
+    escalated_to: str | None = None,
+    now: datetime | None = None,
+) -> tuple[ApprovalRequest, ApprovalHistory]:
+    """Apply the canonical customer approval transition without persistence."""
+    target = str(to_state).upper()
+    workflow_stage = current.workflow_stage
+    if target == "APPROVED" and current.workflow_stage != "CEO":
+        workflow_stage = STAGE_ORDER[STAGE_ORDER.index(current.workflow_stage) + 1]
+        target = "PENDING"
+    if target not in ALLOWED_TRANSITIONS.get(current.state, frozenset()):
+        raise ApprovalAuthorityError(
+            f"invalid approval transition: {current.state} -> {target}"
+        )
+    occurred_at = now or datetime.now(timezone.utc)
+    updated = replace(
+        current,
+        state=target,
+        decision_actor=actor,
+        decision_at=occurred_at,
+        workflow_stage=workflow_stage,
+        current_approver_role=STAGE_ROLES[workflow_stage],
+        escalated_to=escalated_to if target == "ESCALATED" else None,
+    )
+    history = ApprovalHistory(
+        history_id=str(uuid4()),
+        request_id=current.request_id,
+        organization_id=current.organization_id,
+        tenant_id=current.tenant_id,
+        from_state=current.state,
+        to_state=target,
+        actor=actor,
+        reason=reason,
+        occurred_at=occurred_at,
+        action="ESCALATE" if target == "ESCALATED" else "TRANSITION",
+        actor_role=actor_role,
+    )
+    return updated, history
+
+
 class ApprovalAuthority(Protocol):
     def create_request(
         self, context: TenantContext, *, subject_id: str, requested_action: str,
@@ -86,7 +132,9 @@ class ApprovalAuthority(Protocol):
         actor: str, reason: str,
     ) -> ApprovalRequest: ...
 
-    def get_history(self, context: TenantContext, request_id: str) -> tuple[ApprovalHistory, ...]: ...
+    def get_history(
+        self, context: TenantContext, request_id: str
+    ) -> tuple[ApprovalHistory, ...]: ...
 
 
 class InMemoryApprovalAuthority:
@@ -141,36 +189,16 @@ class InMemoryApprovalAuthority:
         current = self._requests.get(key)
         if current is None:
             raise ApprovalAuthorityError("approval request not found")
-        target = str(to_state).upper()
-        workflow_stage = current.workflow_stage
-        if target == "APPROVED" and current.workflow_stage != "CEO":
-            workflow_stage = STAGE_ORDER[STAGE_ORDER.index(current.workflow_stage) + 1]
-            target = "PENDING"
-        if target not in ALLOWED_TRANSITIONS.get(current.state, frozenset()):
-            raise ApprovalAuthorityError(
-                f"invalid approval transition: {current.state} -> {target}"
-            )
-        now = datetime.now(timezone.utc)
-        updated = replace(
+        updated, history = transition_approval_request(
             current,
-            state=target,
-            decision_actor=actor,
-            decision_at=now,
-            workflow_stage=workflow_stage,
-            current_approver_role=STAGE_ROLES[workflow_stage],
-            escalated_to=escalated_to if target == "ESCALATED" else None,
+            to_state=to_state,
+            actor=actor,
+            reason=reason,
+            actor_role=actor_role,
+            escalated_to=escalated_to,
         )
         self._requests[key] = updated
-        self._history[key].append(
-            ApprovalHistory(
-                history_id=str(uuid4()), request_id=request_id,
-                organization_id=context.organization_id, tenant_id=context.tenant_id,
-                from_state=current.state, to_state=target, actor=actor,
-                reason=reason, occurred_at=now,
-                action="ESCALATE" if target == "ESCALATED" else "TRANSITION",
-                actor_role=actor_role,
-            )
-        )
+        self._history[key].append(history)
         return updated
 
     def get_history(self, context: TenantContext, request_id: str) -> tuple[ApprovalHistory, ...]:
@@ -191,118 +219,63 @@ class InMemoryApprovalAuthority:
 
 
 class SupabaseApprovalAuthority:
-    """PostgREST adapter for the explicit v1 approval authority tables."""
+    """Read-only scoped adapter until an approved atomic decision RPC exists."""
 
     def __init__(self, client: Any) -> None:
         self._client = client
 
-    def create_request(
-        self, context: TenantContext, *, subject_id: str, requested_action: str,
-        requesting_actor: str, reason: str, request_id: str | None = None,
-    ) -> ApprovalRequest:
-        payload = {
-            "request_id": request_id or str(uuid4()),
-            "organization_id": context.organization_id,
-            "tenant_id": context.tenant_id,
-            "subject_id": subject_id,
-            "requested_action": requested_action,
-            "state": "PENDING",
-            "requesting_actor": requesting_actor,
-            "reason": reason,
-            "workflow_stage": workflow_stage,
-            "current_approver_role": STAGE_ROLES[workflow_stage],
-        }
-        row = self._client.table("nexora_v1_approval_requests").insert(payload).execute().data[0]
-        return _request_from_row(row)
+    @staticmethod
+    def _context(context):
+        from auth.authenticated_tenant import AuthenticatedTenantContext
 
-    def get_request(self, context: TenantContext, request_id: str) -> ApprovalRequest | None:
-        rows = (
-            self._client.table("nexora_v1_approval_requests")
-            .select("*")
-            .eq("organization_id", context.organization_id)
-            .eq("tenant_id", context.tenant_id)
-            .eq("request_id", request_id)
-            .limit(1)
-            .execute()
-            .data
-            or []
-        )
-        return _request_from_row(rows[0]) if rows else None
+        if not isinstance(context, AuthenticatedTenantContext):
+            raise PermissionError("Authenticated tenant context is required")
+        return context
 
-    def list_requests(self, context: TenantContext) -> tuple[ApprovalRequest, ...]:
-        rows = (
-            self._client.table("nexora_v1_approval_requests")
-            .select("*")
-            .eq("organization_id", context.organization_id)
-            .eq("tenant_id", context.tenant_id)
-            .order("created_at", desc=True)
-            .execute()
-            .data
-            or []
-        )
-        return tuple(_request_from_row(row) for row in rows)
+    @staticmethod
+    def _checked(context, row, request_id=None):
+        if (str(row.get("organization_id")), str(row.get("tenant_id"))) != (
+                context.organization_id, context.tenant_id):
+            raise PermissionError("Approval response crossed tenant boundary")
+        if request_id is not None and str(row.get("request_id")) != str(request_id):
+            raise PermissionError("Approval response crossed request boundary")
+        return row
 
-    def transition_request(
-        self, context: TenantContext, request_id: str, *, to_state: str,
-        actor: str, reason: str, actor_role: str | None = None,
-        escalated_to: str | None = None,
-    ) -> ApprovalRequest:
-        current = self.get_request(context, request_id)
-        if current is None:
-            raise ApprovalAuthorityError("approval request not found")
-        target = str(to_state).upper()
-        workflow_stage = current.workflow_stage
-        if target == "APPROVED" and current.workflow_stage != "CEO":
-            workflow_stage = STAGE_ORDER[STAGE_ORDER.index(current.workflow_stage) + 1]
-            target = "PENDING"
-        if target not in ALLOWED_TRANSITIONS.get(current.state, frozenset()):
-            raise ApprovalAuthorityError(
-                f"invalid approval transition: {current.state} -> {target}"
-            )
-        now = datetime.now(timezone.utc).isoformat()
-        row = (
-            self._client.table("nexora_v1_approval_requests")
-            .update({
-                "state": target,
-                "decision_actor": actor,
-                "decision_at": now,
-                "workflow_stage": workflow_stage,
-                "current_approver_role": STAGE_ROLES[workflow_stage],
-                "escalated_to": escalated_to if target == "ESCALATED" else None,
-            })
-            .eq("organization_id", context.organization_id)
-            .eq("tenant_id", context.tenant_id)
-            .eq("request_id", request_id)
-            .execute()
-            .data[0]
-        )
-        self._client.table("nexora_v1_approval_history").insert({
-            "request_id": request_id,
-            "organization_id": context.organization_id,
-            "tenant_id": context.tenant_id,
-            "from_state": current.state,
-            "to_state": target,
-            "actor": actor,
-            "reason": reason,
-            "occurred_at": now,
-            "action": "ESCALATE" if target == "ESCALATED" else "TRANSITION",
-            "actor_role": actor_role,
-        }).execute()
-        return _request_from_row(row)
+    def create_request(self, context, *, subject_id, requested_action, requesting_actor,
+                       reason, request_id=None, workflow_stage="FINANCE"):
+        from auth.authenticated_tenant import require_protected_workflow
 
-    def get_history(self, context: TenantContext, request_id: str) -> tuple[ApprovalHistory, ...]:
-        rows = (
-            self._client.table("nexora_v1_approval_history")
-            .select("*")
-            .eq("organization_id", context.organization_id)
-            .eq("tenant_id", context.tenant_id)
-            .eq("request_id", request_id)
-            .order("occurred_at")
-            .execute()
-            .data
-            or []
-        )
-        return tuple(ApprovalHistory(**row) for row in rows)
+        context = self._context(context)
+        require_protected_workflow("approval_submission", context, actor=requesting_actor)
+
+    def transition_request(self, context, request_id, *, to_state, actor, reason,
+                           actor_role=None, escalated_to=None):
+        from auth.authenticated_tenant import require_protected_workflow
+
+        context = self._context(context)
+        require_protected_workflow("approval_decision", context, actor=actor)
+
+    def get_request(self, context, request_id):
+        context = self._context(context)
+        rows = (self._client.table("nexora_v1_approval_requests").select("*")
+                .eq("organization_id",context.organization_id).eq("tenant_id",context.tenant_id)
+                .eq("request_id",request_id).limit(1).execute().data or [])
+        return _request_from_row(self._checked(context,rows[0],request_id)) if rows else None
+
+    def list_requests(self, context):
+        context = self._context(context)
+        rows = (self._client.table("nexora_v1_approval_requests").select("*")
+                .eq("organization_id",context.organization_id).eq("tenant_id",context.tenant_id)
+                .order("created_at",desc=True).execute().data or [])
+        return tuple(_request_from_row(self._checked(context,row)) for row in rows)
+
+    def get_history(self, context, request_id):
+        context = self._context(context)
+        rows = (self._client.table("nexora_v1_approval_history").select("*")
+                .eq("organization_id",context.organization_id).eq("tenant_id",context.tenant_id)
+                .eq("request_id",request_id).order("occurred_at").execute().data or [])
+        return tuple(ApprovalHistory(**(self._checked(context,row,request_id) |
+                     {"occurred_at":_timestamp(row["occurred_at"])})) for row in rows)
 
 
 def _request_from_row(row: Mapping[str, Any]) -> ApprovalRequest:

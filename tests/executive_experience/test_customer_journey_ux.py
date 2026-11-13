@@ -2,10 +2,43 @@ import json
 from pathlib import Path
 
 from auth.connector_context import CONNECTOR_ADMIN_ROLES
+from components.navigation.sidebar import (
+    build_persona_navigation_items,
+    filter_navigation_by_v1_scope,
+)
 from components.sidebar_navigation import DEFAULT_ROLE_PAGE, PAGE_PATHS, get_role_pages
 from services.local_auth_service import LOCAL_PERSONAS
 
 ROOT = Path(__file__).parents[2]
+
+
+def test_customer_workspace_is_navigable_for_customer_and_approval_roles():
+    roles = ("client_admin", "executive", "cio", "finance", "auditor", "operations")
+    for role in roles:
+        items = build_persona_navigation_items(role=role, page_paths=PAGE_PATHS)
+        assert any(
+            child["label"] == "Home"
+            and child["page"] == PAGE_PATHS["Customer Workspace"]
+            for section in items
+            for child in section["children"]
+        )
+        visible = filter_navigation_by_v1_scope(
+            items,
+            role,
+            page_paths=PAGE_PATHS,
+            role_pages={role: get_role_pages(role)},
+        )
+        visible_pages = {
+            child["page"]
+            for section in visible
+            for child in section["children"]
+        }
+        assert visible_pages
+        assert visible_pages <= {
+            PAGE_PATHS["Customer Workspace"],
+            PAGE_PATHS["Approvals"],
+            PAGE_PATHS["Reports"],
+        }
 
 
 def test_canonical_persona_start_surfaces_are_explicit():
@@ -46,7 +79,6 @@ def test_analysis_starts_with_four_real_governed_actions():
         )
     )
     assert '"pages/prospect_data_intake.py"' in source
-    assert 'st.switch_page("pages/welcome.py")' in source
     assert "demo_mode_enabled() and is_demo_tenant(organization_id)" in source
     assert "Learn more about supported evidence and secure processing" in source
 
@@ -89,7 +121,6 @@ def test_analysis_is_a_focused_four_step_wizard():
     assert 'st.caption(f"STEP {step} OF 4")' in source
     assert '"Connect {provider}"' in source
     assert '"Analyze environment"' in source
-    assert '"Executive brief ready"' in source
     assert '"Prospect brief ready"' in source
 
 
@@ -98,7 +129,7 @@ def test_analysis_exposes_only_certified_live_onboarding_capabilities():
     assert "IAM Role (Certified)" in source
     assert "Nexora Runtime Identity" in source
     assert "Client secrets are never stored" in source
-    assert "Access Key and organization-wide authentication are not yet certified" in source
+    assert "credential reference is resolved from the Nexora runtime configuration" in source
     assert "Managed Identity and management-group onboarding are not yet certified" in source
     assert "Certified packages require manifest.json" in source
     assert "standalone ZIP is not supported" in source
@@ -118,8 +149,15 @@ def test_azure_start_discovery_uses_authenticated_canonical_path_only():
 def test_analysis_completion_uses_returned_evidence_not_synthetic_progress():
     source = (ROOT / "pages" / "analyze_environment.py").read_text(encoding="utf-8")
     assert "_render_cloud_results(cloud_result)" in source
-    assert '("Technology inventory", "Persisted")' in source
-    assert '("Relationship graph", "Persisted")' in source
+    cloud_result_rendering = source.rsplit(
+        'cloud_result = st.session_state.get("environment_analysis_result")', 1
+    )[1].split('prospect_result = st.session_state.get("prospect_analysis")', 1)[0]
+    assert "AWS discovery completed; persistence blocked" in cloud_result_rendering
+    assert "Azure resource discovery complete" in cloud_result_rendering
+    assert "Financial cost ingestion: NOT PERFORMED" in cloud_result_rendering
+    assert "Dashboard financial readiness: UNKNOWN" in cloud_result_rendering
+    assert "Executive brief ready" not in cloud_result_rendering
+    assert "retrieved" in source
     assert "prospect_result.total_spend" in source
     assert "prospect_result.evidence_coverage" in source
     assert "prospect_result.opportunity_evidence_qualified" in source
@@ -222,12 +260,12 @@ def test_v30_progressive_disclosure_hides_technical_surfaces_by_default():
     assert "I cannot certify an answer" in copilot
 
 
-def test_v30_reports_only_preview_existing_generated_outputs():
+def test_v1_reports_are_customer_workflow_export_alias():
     source = (ROOT / "pages" / "reports.py").read_text(encoding="utf-8")
-    assert "generated_report_thumbnail" in source
-    assert 'str(row.get("status", "")).lower() != "generated"' in source
-    assert 'Path(str(row.get("file_name") or "")).name' in source
-    assert "Generated report · first-page preview" in source
+    assert "require_role(_CUSTOMER_ROLES)" in source
+    assert "Evidence-linked Exports" in source
+    assert "only after the Finance, CIO, " in source
+    assert 'v1_page_link(\n    "pages/customer_workspace.py"' in source
 
 def test_production_ga_executive_metric_grid_is_bounded():
     experience = Path(

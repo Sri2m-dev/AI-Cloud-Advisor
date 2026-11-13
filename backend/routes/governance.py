@@ -1,8 +1,24 @@
 from fastapi import APIRouter, Depends, Query
 
 from backend.security import get_current_user, require_role, tenant_guard
-from backend.services.governance_service import get_governance_summary
-from services.escalation_service import batch_escalate_stale, get_aging_summary, get_escalation_report
+# Resolve service dependencies only after the route authentication dependencies.
+def get_governance_summary(*args, **kwargs):
+    from backend.services.governance_service import get_governance_summary as implementation
+    return implementation(*args, **kwargs)
+
+# Resolve service dependencies only after the route authentication dependencies.
+def batch_escalate_stale(*args, **kwargs):
+    from services.escalation_service import batch_escalate_stale as implementation
+    return implementation(*args, **kwargs)
+
+def get_aging_summary(*args, **kwargs):
+    from services.escalation_service import get_aging_summary as implementation
+    return implementation(*args, **kwargs)
+
+def get_escalation_report(*args, **kwargs):
+    from services.escalation_service import get_escalation_report as implementation
+    return implementation(*args, **kwargs)
+
 
 router = APIRouter()
 

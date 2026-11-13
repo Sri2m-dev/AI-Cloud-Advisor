@@ -9,11 +9,10 @@ def test_approve_request_rbac():
         approval_service.approve_request("approval1", "user1", user_role="Analyst")
 
 
-def test_approve_request_success():
-    resp = approval_service.approve_request("approval1", "user1", user_role="Admin")
-    assert resp.success
-    assert "trace_id" in resp.data
-    assert "request_id" in resp.data
+def test_approve_request_role_check_is_not_committed_success():
+    from auth.authenticated_tenant import ProtectedWorkflowUnavailable
+    with pytest.raises(ProtectedWorkflowUnavailable):
+        approval_service.approve_request("approval1", "user1", user_role="Admin")
 
 
 def test_reject_request_rbac():
@@ -21,11 +20,10 @@ def test_reject_request_rbac():
         approval_service.reject_request("approval1", "user1", user_role="Analyst")
 
 
-def test_reject_request_success():
-    resp = approval_service.reject_request("approval1", "user1", user_role="Manager")
-    assert resp.success
-    assert "trace_id" in resp.data
-    assert "request_id" in resp.data
+def test_reject_request_role_check_is_not_committed_success():
+    from auth.authenticated_tenant import ProtectedWorkflowUnavailable
+    with pytest.raises(ProtectedWorkflowUnavailable):
+        approval_service.reject_request("approval1", "user1", user_role="Manager")
 
 
 def test_dashboard_reads_degrade_safely_when_supabase_is_unconfigured(monkeypatch):

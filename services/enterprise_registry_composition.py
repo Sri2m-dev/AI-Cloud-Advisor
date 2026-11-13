@@ -55,6 +55,7 @@ def enterprise_registry_service(
 ):
     if not isinstance(context, TenantContext):
         raise PermissionError("Explicit tenant context is required for Enterprise Registry.")
+    v1_profile = os.getenv("NEXORA_PRODUCT_PROFILE", "").strip().lower() == "v1"
     runtime = (
         str(
             environment or os.getenv("ENVIRONMENT") or os.getenv("CLOUD_ADVISOR_ENV", "development")
@@ -74,6 +75,10 @@ def enterprise_registry_service(
         else supabase_key
     )
     configured = _valid_supabase(url, key)
+    if v1_profile and canonical_source is None and not configured:
+        raise EnterpriseRegistryConfigurationError(
+            "canonical Data Fabric source is required for the V1 profile"
+        )
     if runtime == "production" and not configured:
         raise EnterpriseRegistryConfigurationError(
             "valid Supabase configuration is required for production enterprise registry"
@@ -81,7 +86,7 @@ def enterprise_registry_service(
     selected_client = client or supabase
     if configured:
         source = SupabaseEnterpriseRegistrySource(selected_client)
-        source_mode = "supabase"
+        source_mode = "data_fabric" if v1_profile else "supabase"
         classifications = SupabaseClassificationRepository(selected_client)
         financial = SupabaseEntityFinancialContext(selected_client)
         service_role_key = (
@@ -101,9 +106,14 @@ def enterprise_registry_service(
     else:
         kwargs = {"connection_factory": connection_factory} if connection_factory else {}
         source = SQLiteEnterpriseRegistrySource(**kwargs)
-        source_mode = "sqlite"
+        source_mode = "data_fabric" if v1_profile else "sqlite"
         classifications = None
         financial = None
+
+    if v1_profile and canonical_source is None:
+        raise EnterpriseRegistryConfigurationError(
+            "canonical Data Fabric reader credentials are required for the V1 profile"
+        )
 
     entities = InMemoryEntityRegistry()
     identities = InMemoryIdentityResolver()
@@ -112,7 +122,7 @@ def enterprise_registry_service(
     demo_entities, _ = demo_enterprise_topology(context)
 
     canonical_entities = canonical_source.entities(context) if canonical_source else ()
-    compatibility_entities = source.entities(context)
+    compatibility_entities = () if v1_profile else source.entities(context)
     canonical_relationships = canonical_source.relationships(context) if canonical_source else ()
 
     seen_canonical_ids = set()

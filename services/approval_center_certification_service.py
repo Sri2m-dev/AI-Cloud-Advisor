@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-
 APPROVAL_COLUMNS = [
     "id",
     "request_type",
@@ -66,7 +65,12 @@ class ApprovalCenterCertificationService:
     ) -> dict[str, Any]:
         overdue_count = len(overdue_approvals)
         due_today_count = ApprovalCenterCertificationService.count_due_today(approval_register)
-        sla_value = sla.get("sla_compliance_percent", sla.get("sla_compliance", 100))
+        sla_value = sla.get("sla_compliance_percent", sla.get("sla_compliance"))
+        if sla_value is None:
+            sla_value = sla.get("status", "UNKNOWN")
+        if sla.get("sla_compliance_percent") is None:
+            overdue_count = sla.get("status", "UNKNOWN")
+            due_today_count = sla.get("status", "UNKNOWN")
         pending_count = metrics.get("pending", 0)
 
         return {
@@ -107,7 +111,7 @@ class ApprovalCenterCertificationService:
             posture = "There are no pending approval requests requiring immediate action."
 
         risk_sentence = (
-            f"{overdue_count} approval request(s) are overdue and {due_today_count} are due today."
+            f"Overdue approval count: {overdue_count}; due today: {due_today_count}."
             if overdue_count or due_today_count
             else "No overdue approvals or same-day approval deadlines are currently visible."
         )
@@ -138,17 +142,53 @@ class ApprovalCenterCertificationService:
 
         return {
             "source_data": [
-                {"Section": "Approval Metrics", "Source": "ApprovalService.get_dashboard_metrics", "Mode": "Service"},
-                {"Section": "Workflow Stages", "Source": "ApprovalService.get_workflow_stage_metrics", "Mode": "Service"},
-                {"Section": "Pending Approvals", "Source": "ApprovalService.get_pending_approvals", "Mode": "Service"},
-                {"Section": "Approval Register", "Source": "ApprovalService.get_all_approvals", "Mode": "Service"},
+                {
+                    "Section": "Approval Metrics",
+                    "Source": "ApprovalService.get_dashboard_metrics",
+                    "Mode": "Service",
+                },
+                {
+                    "Section": "Workflow Stages",
+                    "Source": "ApprovalService.get_workflow_stage_metrics",
+                    "Mode": "Service",
+                },
+                {
+                    "Section": "Pending Approvals",
+                    "Source": "ApprovalService.get_pending_approvals",
+                    "Mode": "Service",
+                },
+                {
+                    "Section": "Approval Register",
+                    "Source": "ApprovalService.get_all_approvals",
+                    "Mode": "Service",
+                },
                 {"Section": "SLA", "Source": "ApprovalService.get_sla_metrics", "Mode": "Service"},
             ],
             "data_coverage": [
-                {"Coverage Area": "Approval Register", "Value": f"{coverage:.1f}%", "Status": "Tracked" if total else "No Records"},
-                {"Coverage Area": "Pending Approvals", "Value": str(pending_count), "Status": "Action Required" if pending_count else "Clear"},
-                {"Coverage Area": "Overdue Approvals", "Value": str(overdue_count), "Status": "Review" if overdue_count else "Clear"},
-                {"Coverage Area": "Due Today", "Value": str(due_today_count), "Status": "Watch" if due_today_count else "Clear"},
+                {
+                    "Coverage Area": "Approval Register",
+                    "Value": f"{coverage:.1f}%",
+                    "Status": "Tracked" if total else "No Records",
+                },
+                {
+                    "Coverage Area": "Pending Approvals",
+                    "Value": str(pending_count),
+                    "Status": "Action Required" if pending_count else "Clear",
+                },
+                {
+                    "Coverage Area": "Overdue Approvals",
+                    "Value": str(overdue_count),
+                    "Status": overdue_count
+                    if isinstance(overdue_count, str)
+                    else ("Review" if overdue_count else "Clear"),
+                },
+                {
+                    "Coverage Area": "Due Today",
+                    "Value": str(due_today_count),
+                    "Status": due_today_count
+                    if isinstance(due_today_count, str)
+                    else ("Watch" if due_today_count else "Clear"),
+                },
             ],
             "ai_interpretation": (
                 "Approval Center is service-backed and ready for executive governance review. "

@@ -18,6 +18,7 @@ from shared.layout import render_page_header, render_section
 from components.sidebar_navigation import render_sidebar_navigation
 from components.tables import data_table
 
+from services.enterprise_spend_composition import authenticated_tenant_context
 from services.cost_intelligence_service import (
     get_enterprise_spend,
     get_enterprise_forecast,
@@ -52,12 +53,24 @@ render_page_header(
 )
 
 enterprise_spend = get_enterprise_spend()
-enterprise_forecast_resp = get_enterprise_forecast()
-trend_resp = get_cost_trend()
-forecast_resp = get_cost_forecast()
-anomaly_resp = get_cost_anomalies()
-optimization_resp = get_optimization_opportunities()
-recommendation_resp = get_recommendations()
+tenant_context = authenticated_tenant_context(st.session_state)
+enterprise_forecast_resp = get_enterprise_forecast(tenant_context)
+trend_resp = get_cost_trend(tenant_context)
+forecast_resp = get_cost_forecast(tenant_context)
+anomaly_resp = get_cost_anomalies(tenant_context)
+optimization_resp = get_optimization_opportunities(tenant_context)
+recommendation_resp = get_recommendations(tenant_context)
+
+for section, response in (
+    ("Enterprise forecast", enterprise_forecast_resp),
+    ("Cost trend", trend_resp),
+    ("Cost forecast", forecast_resp),
+    ("Cost anomalies", anomaly_resp),
+    ("Optimization opportunities", optimization_resp),
+    ("Recommendations", recommendation_resp),
+):
+    if not response["success"]:
+        st.warning(f"{section} unavailable: {response['message']}")
 
 enterprise_forecast_df = enterprise_forecast_resp["data"]
 trend_df = trend_resp["data"]

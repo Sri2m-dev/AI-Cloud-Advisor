@@ -1,0 +1,8 @@
+FROM docker.io/postgrest/postgrest@sha256:c847127074bd26e1b8d3f7c0e6e01e5346f4b85dd34f5d699fd230af960827c0 AS postgrest
+FROM docker.io/library/postgres@sha256:73bedc9eaa0121b92b9b26bb52e5141b3f6f37479c7ef913c0160455763ca80a
+
+COPY --from=postgrest --chown=1000:1000 /bin/postgrest /usr/local/bin/postgrest
+COPY --chown=1000:1000 deploy/sq-app/financial-data-postgrest-entrypoint.sh /opt/nexora/financial-data-postgrest-entrypoint.sh
+
+USER 1000:1000
+ENTRYPOINT ["/bin/sh", "/opt/nexora/financial-data-postgrest-entrypoint.sh"]

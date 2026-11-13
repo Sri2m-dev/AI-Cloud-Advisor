@@ -84,9 +84,7 @@ def render_demo_risk_governance(payload: dict) -> None:
 
     st.title("Risk & Governance")
     st.caption("Executive risk, decision accountability, and evidence posture.")
-    st.warning(
-        "SYNTHETIC DEMONSTRATION DATA — isolated from customer and production records."
-    )
+    st.warning("SYNTHETIC DEMONSTRATION DATA — isolated from customer and production records.")
     st.subheader("Leadership risk posture")
     cols = st.columns(4)
     cols[0].metric("Material technology risks", len(risk_decisions))
@@ -161,10 +159,12 @@ def render_certification_summary() -> None:
             "metrics": [
                 {
                     "label": "Governance Confidence",
-                    "value": f"{governance_score:.0f}%",
+                    "value": RiskGovernanceCertificationService.metric_percent(governance_score),
                     "description": "Directional governance posture",
                     "icon": "governance",
-                    "status": "healthy" if governance_score >= 75 else "warning",
+                    "status": "healthy"
+                    if governance_score is not None and governance_score >= 75
+                    else "warning",
                 },
                 {
                     "label": "Active Risk Signals",
@@ -210,10 +210,12 @@ def render_certification_summary() -> None:
                 },
                 {
                     "label": "SLA Compliance",
-                    "value": f"{sla_compliance:.0f}%",
+                    "value": RiskGovernanceCertificationService.metric_percent(sla_compliance),
                     "description": "Approval service-level compliance",
                     "icon": "health",
-                    "status": "healthy" if sla_compliance >= 90 else "warning",
+                    "status": "healthy"
+                    if sla_compliance is not None and sla_compliance >= 90
+                    else "warning",
                 },
             ],
         }
@@ -264,9 +266,11 @@ def render_governance_content():
     with k1:
         render_kpi_card(
             "Governance Confidence",
-            f"{governance_score:.0f}%",
+            RiskGovernanceCertificationService.metric_percent(governance_score),
             icon="governance",
-            status="healthy" if governance_score >= 75 else "warning",
+            status="healthy"
+            if governance_score is not None and governance_score >= 75
+            else "warning",
         )
     with k2:
         render_metric_card(
@@ -298,7 +302,9 @@ def render_governance_content():
     render_ai_narrative(
         "Executive Governance Summary",
         (
-            f"Governance confidence is currently {governance_score:.0f}%, based on high-priority risk load, "
+            "Governance confidence is currently "
+            f"{RiskGovernanceCertificationService.metric_percent(governance_score)}, "
+            "based on high-priority risk load, "
             f"approval queue pressure, and SLA compliance signals. "
             f"There are {active_risks} active risk signals, including {int(critical_risks)} high-priority items. "
             f"The decision queue has {pending_count} pending approval items, and {optimization_items} optimization "
@@ -428,10 +434,12 @@ def render_governance_content():
     with impact_cols[2]:
         render_metric_card(
             "Compliance Readiness",
-            f"{governance_score:.0f}%",
+            RiskGovernanceCertificationService.metric_percent(governance_score),
             description="Governance confidence as a directional compliance readiness signal.",
             icon="governance",
-            status="healthy" if governance_score >= 75 else "warning",
+            status="healthy"
+            if governance_score is not None and governance_score >= 75
+            else "warning",
         )
     with impact_cols[3]:
         render_approval_card(

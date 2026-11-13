@@ -155,10 +155,20 @@ def store(context):
     return Store(
         (
             AccountMapping(
-                context.organization_id, context.tenant_id, "PAYER-A", "PAYER-A", "active"
+                context.organization_id,
+                context.tenant_id,
+                "PAYER-A",
+                "PAYER-A",
+                "active",
+                effective_from="2026-01-01",
             ),
             AccountMapping(
-                context.organization_id, context.tenant_id, "PAYER-A", "MEMBER-A", "active"
+                context.organization_id,
+                context.tenant_id,
+                "PAYER-A",
+                "MEMBER-A",
+                "active",
+                effective_from="2026-01-01",
             ),
         )
     )
@@ -264,6 +274,47 @@ def test_profile_validation_and_billing_period_are_from_cur_not_upload_date(cont
     persisted = store.imports[result.import_id]
     assert persisted["billing_period_start"] == "2026-07-01"
     assert persisted["billing_period_end"] == "2026-07-31"
+    assert persisted["currency_code"] == "USD"
+
+
+@pytest.mark.parametrize(
+    ("field_index", "value", "error"),
+    [
+        (10, "EUR", "mixed CUR currencies"),
+        (2, "2026-08-01T00:00:00Z", "mixed CUR billing periods"),
+    ],
+)
+def test_mixed_currency_or_billing_period_fails_before_fact_persistence(
+    context, store, field_index, value, error
+):
+    inconsistent_row = row()
+    inconsistent_row[field_index] = value
+    if field_index == 2:
+        inconsistent_row[3] = "2026-08-31T23:59:59Z"
+
+    with pytest.raises(CurIngestionError, match=error):
+        engine(store).ingest(
+            context,
+            io.BytesIO(cur([row(), inconsistent_row])),
+            "inconsistent.csv",
+        )
+
+    imported = next(iter(store.imports.values()))
+    assert imported["status"] == CurState.FAILED
+    assert imported["currency_code"] == "USD"
+    assert store.facts == {}
+    assert store.reconciliations == {}
+
+
+def test_currency_code_is_normalized_and_persisted_in_import_and_reconciliation(context, store):
+    source_row = row()
+    source_row[10] = " usd "
+
+    result = engine(store).ingest(context, io.BytesIO(cur([source_row])), "currency.csv")
+
+    assert result.status is CurState.COMPLETED
+    assert store.imports[result.import_id]["currency_code"] == "USD"
+    assert store.reconciliations[result.import_id]["currency_code"] == "USD"
 
 
 def test_unknown_account_is_tenant_scoped_quarantine(context, store):
@@ -271,6 +322,8 @@ def test_unknown_account_is_tenant_scoped_quarantine(context, store):
     assert result.status is CurState.AWAITING_ACCOUNT_RESOLUTION
     assert result.quarantined_rows == 1
     assert next(iter(store.facts.values()))["fact_status"] == "quarantined"
+    assert store.imports[result.import_id]["status"] == CurState.AWAITING_ACCOUNT_RESOLUTION
+    assert store.reconciliations[result.import_id]["status"] == "quarantined"
 
 
 def test_foreign_mapping_and_mixed_payer_fail_closed(context, store):
@@ -279,6 +332,189 @@ def test_foreign_mapping_and_mixed_payer_fail_closed(context, store):
         engine(foreign).ingest(context, io.BytesIO(cur([row()])), "foreign.csv")
     with pytest.raises(CurIngestionError, match="mixed-payer"):
         engine(store).ingest(context, io.BytesIO(cur([row(), row(payer="PAYER-B")])), "mixed.csv")
+
+
+@pytest.mark.parametrize(
+    ("mappings", "member", "expected_status"),
+    [
+        (
+            (
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "PAYER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-B",
+                    "MEMBER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+            ),
+            "MEMBER-A",
+            "quarantined",
+        ),
+        (
+            (
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "PAYER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "MEMBER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                    effective_to="not-a-date",
+                ),
+            ),
+            "MEMBER-A",
+            "quarantined",
+        ),
+        (
+            (
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "PAYER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "MEMBER-A",
+                    "inactive",
+                    effective_from="2026-01-01",
+                ),
+            ),
+            "MEMBER-A",
+            "quarantined",
+        ),
+        (
+            (
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "PAYER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "MEMBER-A",
+                    "active",
+                    effective_from="2026-07-03",
+                ),
+            ),
+            "MEMBER-A",
+            "quarantined",
+        ),
+        (
+            (
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "PAYER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "MEMBER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                    effective_to="2026-07-02",
+                ),
+            ),
+            "MEMBER-A",
+            "quarantined",
+        ),
+        (
+            (
+                AccountMapping(
+                    "org-a",
+                    "tenant-a",
+                    "PAYER-A",
+                    "PAYER-A",
+                    "active",
+                    effective_from="2026-01-01",
+                ),
+                AccountMapping("org-a", "tenant-a", "PAYER-A", "MEMBER-A", "active"),
+            ),
+            "MEMBER-A",
+            "quarantined",
+        ),
+    ],
+)
+def test_account_pair_status_and_effective_dates_control_fact_resolution(
+    context, mappings, member, expected_status
+):
+    store = Store(mappings)
+
+    result = engine(store).ingest(
+        context,
+        io.BytesIO(cur([row(member=member)])),
+        "mapping.csv",
+    )
+
+    fact = next(iter(store.facts.values()))
+    assert fact["fact_status"] == expected_status
+    assert result.status is CurState.AWAITING_ACCOUNT_RESOLUTION
+    assert result.accepted_rows == 0
+    assert result.quarantined_rows == 1
+    assert store.reconciliations[result.import_id]["status"] == "quarantined"
+
+
+def test_mapping_effective_to_covers_usage_ending_at_its_exclusive_boundary(context):
+    mappings = (
+        AccountMapping(
+            "org-a",
+            "tenant-a",
+            "PAYER-A",
+            "PAYER-A",
+            "active",
+            effective_from="2026-01-01",
+            effective_to="2026-07-03",
+        ),
+        AccountMapping(
+            "org-a",
+            "tenant-a",
+            "PAYER-A",
+            "MEMBER-A",
+            "active",
+            effective_from="2026-01-01",
+            effective_to="2026-07-03",
+        ),
+    )
+    source_row = row()
+    source_row[5] = "2026-07-03T00:00:00Z"
+    store = Store(mappings)
+
+    result = engine(store).ingest(context, io.BytesIO(cur([source_row])), "boundary.csv")
+
+    assert result.status is CurState.COMPLETED
+    assert result.accepted_rows == 1
+    assert result.quarantined_rows == 0
 
 
 def test_file_hash_duplicate_replays_without_duplicate_facts(context, store):

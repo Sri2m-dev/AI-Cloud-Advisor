@@ -1,6 +1,25 @@
 import streamlit as st
 
+from auth.authenticated_tenant import AuthenticatedTenantContext
 from services.supabase_client import supabase
+
+
+def _tenant_rows(
+    table_name: str,
+    context: AuthenticatedTenantContext,
+    tenant_column: str,
+    order_column: str | None = None,
+) -> list[dict]:
+    if not isinstance(context, AuthenticatedTenantContext):
+        raise TypeError("AuthenticatedTenantContext is required")
+    query = (
+        supabase.tenant_table(table_name, context)
+        .select("*")
+        .eq(tenant_column, context.organization_id)
+    )
+    if order_column:
+        query = query.order(order_column, desc=True)
+    return query.execute().data or []
 
 
 class CostIntelligenceRepository:
@@ -24,41 +43,35 @@ class CostIntelligenceRepository:
 
     @staticmethod
     @st.cache_data(ttl=300)
-    def get_enterprise_forecast():
-        response = supabase.table("mart_enterprise_forecast").select("*").execute()
-        return response.data or []
+    def get_enterprise_forecast(context: AuthenticatedTenantContext):
+        return _tenant_rows("mart_enterprise_forecast", context, "organization_id")
 
     @staticmethod
     @st.cache_data(ttl=300)
-    def get_cost_trend():
-        response = supabase.table("mart_cost_trend").select("*").execute()
-        return response.data or []
+    def get_cost_trend(context: AuthenticatedTenantContext):
+        return _tenant_rows("mart_cost_trend", context, "organization_id")
 
     @staticmethod
     @st.cache_data(ttl=300)
-    def get_cost_forecast():
-        response = supabase.table("mart_cost_forecast").select("*").execute()
-        return response.data or []
+    def get_cost_forecast(context: AuthenticatedTenantContext):
+        return _tenant_rows("mart_cost_forecast", context, "organization_id")
 
     @staticmethod
     @st.cache_data(ttl=300)
-    def get_cost_anomalies():
-        response = supabase.table("mart_cost_anomalies").select("*").execute()
-        return response.data or []
+    def get_cost_anomalies(context: AuthenticatedTenantContext):
+        return _tenant_rows("mart_cost_anomalies", context, "org_id")
 
     @staticmethod
     @st.cache_data(ttl=300)
-    def get_optimization_opportunities():
-        response = (
-            supabase.table("mart_optimization_opportunities")
-            .select("*")
-            .order("total_cost", desc=True)
-            .execute()
+    def get_optimization_opportunities(context: AuthenticatedTenantContext):
+        return _tenant_rows(
+            "mart_optimization_opportunities",
+            context,
+            "org_id",
+            order_column="total_cost",
         )
-        return response.data or []
 
     @staticmethod
     @st.cache_data(ttl=300)
-    def get_recommendations():
-        response = supabase.table("recommendations").select("*").execute()
-        return response.data or []
+    def get_recommendations(context: AuthenticatedTenantContext):
+        return _tenant_rows("recommendations", context, "org_id")

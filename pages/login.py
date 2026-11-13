@@ -1,7 +1,6 @@
 import streamlit as st
 
 from auth.role_constants import normalize_role
-from components.sidebar_navigation import DEFAULT_ROLE_PAGE
 from services import audit_service
 from services.local_auth_service import (
     authenticate_local_user,
@@ -15,6 +14,7 @@ from services.onboarding_service import (
     local_onboarding_allowed,
 )
 from shared.session import init_session
+from utils.auth import clear_auth_state
 from utils.auth import login_user as supabase_login_user
 
 # Initialize session defaults
@@ -54,6 +54,7 @@ def set_login_session(email, role, org_id, user_id=None):
     Normalize session keys used across pages, services, and repositories.
     """
 
+    clear_auth_state(st.session_state)
     normalized_role = normalize_role(role)
 
     st.session_state["authenticated"] = True
@@ -77,6 +78,7 @@ def login_with_dev_user(username, password):
     if not DEV_AUTH_ENABLED:
         return False
 
+    clear_auth_state(st.session_state)
     user = authenticate_local_user(username, password)
     if not user:
         return False
@@ -103,40 +105,23 @@ def login_with_supabase(username, password):
     if not auth_user:
         return False
 
-    profile = st.session_state.get("profile", {})
-    email = st.session_state.get("email") or getattr(auth_user, "email", username)
-    role = profile.get("role") or st.session_state.get("role")
-    org_id = (
-        get_profile_org_id(profile)
-        or st.session_state.get("org_id")
-        or st.session_state.get("organization_id")
-        or st.session_state.get("tenant_id")
-        or st.session_state.get("tenant")
+    profile = st.session_state.get("profile")
+    return bool(
+        profile
+        and st.session_state.get("authenticated")
+        and st.session_state.get("auth_backend") == "supabase"
+        and str(st.session_state.get("user_id") or "") == str(getattr(auth_user, "id", ""))
+        and st.session_state.get("authorized_organization_ids")
     )
-
-    if not org_id:
-        st.session_state["authenticated"] = False
-        st.error("No organization is assigned to this user.")
-        return False
-
-    set_login_session(
-        email=email, role=role, org_id=org_id, user_id=st.session_state.get("user_id")
-    )
-    return True
 
 
 def route_user(role: str):
     """
-    Route users to the correct dashboard based on role.
+    Let the authenticated V1 page registry choose the role's default route.
     """
 
-    role = normalize_role(role)
-    destination = DEFAULT_ROLE_PAGE.get(role)
-
-    if destination:
-        st.switch_page(destination)
-    else:
-        st.switch_page("pages/login.py")
+    st.session_state["role"] = normalize_role(role)
+    st.rerun()
 
 
 # ------------------------------------------------------------------

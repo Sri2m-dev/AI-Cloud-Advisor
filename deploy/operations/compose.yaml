@@ -1,0 +1,788 @@
+{
+  "name": "nexora-operations",
+  "services": {
+    "frontend": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_FRONTEND_IMAGE:?Supply inspected immutable image digest}",
+      "env_file": [
+        "${NEXORA_PUBLIC_ENV_FILE:?Supply reviewed non-secret configuration file}"
+      ],
+      "environment": {
+        "ENVIRONMENT": "production",
+        "AUTH_MODE": "supabase",
+        "NEXORA_PRODUCT_PROFILE": "v1",
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "HOME": "/tmp",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "NEXORA_JOB_SCHEDULER": "celery",
+        "NEXORA_SCHEDULED_JOBS_ENABLED": "false",
+        "NEXORA_APPLICATION_DB": "/var/lib/nexora/application/cloud_advisor.db",
+        "NEXORA_UNIVERSAL_EVIDENCE_DB": "/var/lib/nexora/evidence/lifecycle.db",
+        "NEXORA_PROSPECT_DATA_ROOT": "/var/lib/nexora/prospect",
+        "NEXORA_READINESS_FILE": "/var/lib/nexora/status/readiness.json",
+        "FERNET_KEY_FILE": "/run/secrets/credential_key",
+        "NEXORA_PROSPECT_DATA_KEY_FILE": "/run/secrets/prospect_key",
+        "NEXORA_DEMO_MODE": "false",
+        "PUE_PILOT_DEV_MODE": "false",
+        "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION": "true",
+        "STREAMLIT_SERVER_ENABLE_CORS": "true",
+        "SUPABASE_KEY_FILE": "/run/secrets/supabase_anon"
+      },
+      "entrypoint": [
+        "python",
+        "/opt/nexora-ops/runtime.py",
+        "frontend",
+        "--"
+      ],
+      "command": [
+        "streamlit",
+        "run",
+        "app_main.py",
+        "--server.address=0.0.0.0",
+        "--server.port=8501"
+      ],
+      "volumes": [
+        "./runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "application_data:/var/lib/nexora/application",
+        "evidence_data:/var/lib/nexora/evidence",
+        "prospect_data:/var/lib/nexora/prospect",
+        "ops_status:/var/lib/nexora/status:ro"
+      ],
+      "secrets": [
+        "credential_key",
+        "prospect_key",
+        "supabase_anon"
+      ],
+      "networks": [
+        "application",
+        "egress"
+      ],
+      "depends_on": {
+        "redis": {
+          "condition": "service_healthy"
+        },
+        "api": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "curl",
+          "--fail",
+          "--max-time",
+          "4",
+          "http://127.0.0.1:8501/_stcore/health"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3,
+        "start_period": "45s"
+      }
+    },
+    "api": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_API_IMAGE:?Supply inspected immutable image digest}",
+      "env_file": [
+        "${NEXORA_PUBLIC_ENV_FILE:?Supply reviewed non-secret configuration file}"
+      ],
+      "environment": {
+        "ENVIRONMENT": "production",
+        "AUTH_MODE": "supabase",
+        "NEXORA_PRODUCT_PROFILE": "v1",
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "HOME": "/tmp",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "NEXORA_JOB_SCHEDULER": "celery",
+        "NEXORA_SCHEDULED_JOBS_ENABLED": "false",
+        "NEXORA_APPLICATION_DB": "/var/lib/nexora/application/cloud_advisor.db",
+        "NEXORA_UNIVERSAL_EVIDENCE_DB": "/var/lib/nexora/evidence/lifecycle.db",
+        "NEXORA_PROSPECT_DATA_ROOT": "/var/lib/nexora/prospect",
+        "NEXORA_READINESS_FILE": "/var/lib/nexora/status/readiness.json",
+        "FERNET_KEY_FILE": "/run/secrets/credential_key",
+        "NEXORA_PROSPECT_DATA_KEY_FILE": "/run/secrets/prospect_key",
+        "REDIS_URL_FILE": "/run/secrets/broker_url",
+        "NEXORA_DEMO_MODE": "false",
+        "PUE_PILOT_DEV_MODE": "false",
+        "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION": "true",
+        "STREAMLIT_SERVER_ENABLE_CORS": "true",
+        "SUPABASE_SERVICE_ROLE_KEY_FILE": "/run/secrets/supabase_service",
+        "JWT_SECRET_FILE": "/run/secrets/jwt",
+        "API_USERS_JSON_FILE": "/run/secrets/api_accounts"
+      },
+      "entrypoint": [
+        "python",
+        "/opt/nexora-ops/runtime.py",
+        "api",
+        "--"
+      ],
+      "command": [
+        "uvicorn",
+        "backend.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "volumes": [
+        "./runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "application_data:/var/lib/nexora/application",
+        "evidence_data:/var/lib/nexora/evidence",
+        "prospect_data:/var/lib/nexora/prospect",
+        "ops_status:/var/lib/nexora/status:ro"
+      ],
+      "secrets": [
+        "credential_key",
+        "prospect_key",
+        "broker_url",
+        "supabase_service",
+        "jwt",
+        "api_accounts"
+      ],
+      "networks": [
+        "application",
+        "egress"
+      ],
+      "depends_on": {
+        "redis": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "curl",
+          "--fail",
+          "--max-time",
+          "4",
+          "http://127.0.0.1:8000/health"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3,
+        "start_period": "45s"
+      }
+    },
+    "worker": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_WORKER_IMAGE:?Supply inspected immutable image digest}",
+      "env_file": [
+        "${NEXORA_PUBLIC_ENV_FILE:?Supply reviewed non-secret configuration file}"
+      ],
+      "environment": {
+        "ENVIRONMENT": "production",
+        "AUTH_MODE": "supabase",
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "HOME": "/tmp",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "NEXORA_JOB_SCHEDULER": "celery",
+        "NEXORA_PRODUCT_PROFILE": "v1",
+        "NEXORA_SCHEDULED_JOBS_ENABLED": "false",
+        "NEXORA_APPLICATION_DB": "/var/lib/nexora/application/cloud_advisor.db",
+        "NEXORA_UNIVERSAL_EVIDENCE_DB": "/var/lib/nexora/evidence/lifecycle.db",
+        "NEXORA_PROSPECT_DATA_ROOT": "/var/lib/nexora/prospect",
+        "NEXORA_READINESS_FILE": "/var/lib/nexora/status/readiness.json",
+        "FERNET_KEY_FILE": "/run/secrets/credential_key",
+        "NEXORA_PROSPECT_DATA_KEY_FILE": "/run/secrets/prospect_key",
+        "REDIS_URL_FILE": "/run/secrets/broker_url",
+        "NEXORA_DEMO_MODE": "false",
+        "PUE_PILOT_DEV_MODE": "false",
+        "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION": "true",
+        "STREAMLIT_SERVER_ENABLE_CORS": "true",
+        "SUPABASE_SERVICE_ROLE_KEY_FILE": "/run/secrets/supabase_service",
+        "NEXORA_ENABLED_PERIODIC_JOBS": ""
+      },
+      "entrypoint": [
+        "python",
+        "/opt/nexora-ops/runtime.py",
+        "worker",
+        "--"
+      ],
+      "command": [
+        "celery",
+        "-A",
+        "backend.celery_app.celery_app",
+        "worker",
+        "--loglevel=WARNING",
+        "--queues=nexora-qualified"
+      ],
+      "volumes": [
+        "./runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "application_data:/var/lib/nexora/application",
+        "evidence_data:/var/lib/nexora/evidence",
+        "prospect_data:/var/lib/nexora/prospect",
+        "ops_status:/var/lib/nexora/status:ro"
+      ],
+      "secrets": [
+        "credential_key",
+        "prospect_key",
+        "broker_url",
+        "supabase_service"
+      ],
+      "networks": [
+        "application",
+        "egress"
+      ],
+      "depends_on": {
+        "redis": {
+          "condition": "service_healthy"
+        },
+        "api": {
+          "condition": "service_healthy"
+        }
+      },
+      "profiles": [
+        "jobs"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "/opt/nexora-ops/runtime.py",
+          "health-worker"
+        ],
+        "interval": "30s",
+        "timeout": "8s",
+        "retries": 3,
+        "start_period": "45s"
+      }
+    },
+    "beat": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_BEAT_IMAGE:?Supply inspected immutable image digest}",
+      "env_file": [
+        "${NEXORA_PUBLIC_ENV_FILE:?Supply reviewed non-secret configuration file}"
+      ],
+      "environment": {
+        "ENVIRONMENT": "production",
+        "AUTH_MODE": "supabase",
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "HOME": "/tmp",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "NEXORA_JOB_SCHEDULER": "celery",
+        "NEXORA_PRODUCT_PROFILE": "v1",
+        "NEXORA_SCHEDULED_JOBS_ENABLED": "false",
+        "REDIS_URL_FILE": "/run/secrets/broker_url",
+        "NEXORA_DEMO_MODE": "false",
+        "PUE_PILOT_DEV_MODE": "false",
+        "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION": "true",
+        "STREAMLIT_SERVER_ENABLE_CORS": "true",
+        "NEXORA_ENABLED_PERIODIC_JOBS": ""
+      },
+      "entrypoint": [
+        "python",
+        "/opt/nexora-ops/runtime.py",
+        "beat",
+        "--"
+      ],
+      "command": [
+        "celery",
+        "-A",
+        "backend.celery_app.celery_app",
+        "beat",
+        "--loglevel=WARNING",
+        "--schedule=/var/lib/nexora/scheduler/celerybeat-schedule",
+        "--pidfile=/var/lib/nexora/scheduler/beat.pid"
+      ],
+      "volumes": [
+        "./runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "scheduler_data:/var/lib/nexora/scheduler"
+      ],
+      "secrets": [
+        "broker_url"
+      ],
+      "networks": [
+        "application",
+        "egress"
+      ],
+      "depends_on": {
+        "redis": {
+          "condition": "service_healthy"
+        },
+        "api": {
+          "condition": "service_healthy"
+        },
+        "worker": {
+          "condition": "service_healthy"
+        }
+      },
+      "profiles": [
+        "jobs"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "/opt/nexora-ops/runtime.py",
+          "health-beat"
+        ],
+        "interval": "30s",
+        "timeout": "8s",
+        "retries": 3,
+        "start_period": "45s"
+      }
+    },
+    "redis": {
+      "image": "${NEXORA_REDIS_IMAGE:?Supply inspected redis digest}",
+      "restart": "unless-stopped",
+      "command": [],
+      "volumes": [
+        "redis_data:/data",
+        "./redis-entrypoint.sh:/opt/nexora-ops/redis-entrypoint.sh:ro"
+      ],
+      "secrets": [
+        "redis_password",
+        "redis_monitor_password"
+      ],
+      "networks": [
+        "application"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "[ \"$$(REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli --no-auth-warning ping 2>/dev/null)\" = PONG ]"
+        ],
+        "interval": "10s",
+        "timeout": "4s",
+        "retries": 5
+      },
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=16m"
+      ],
+      "entrypoint": [
+        "sh",
+        "/opt/nexora-ops/redis-entrypoint.sh"
+      ]
+    },
+    "edge-config": {
+      "restart": "no",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_API_IMAGE:?Supply inspected api digest}",
+      "entrypoint": [
+        "python",
+        "/opt/nexora-ops/runtime.py",
+        "render-edge"
+      ],
+      "environment": {
+        "NEXORA_PUBLIC_HOST": "${NEXORA_PUBLIC_HOST:?Supply canonical TLS hostname}"
+      },
+      "volumes": [
+        "./runtime.py:/opt/nexora-ops/runtime.py:ro",
+        "./nginx.conf.template:/opt/nexora-ops/nginx.conf.template:ro",
+        "edge_config:/etc/nexora-edge"
+      ],
+      "network_mode": "none"
+    },
+    "nginx": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_NGINX_IMAGE:?Supply inspected nginx digest}",
+      "entrypoint": [
+        "nginx"
+      ],
+      "command": [
+        "-c",
+        "/etc/nexora-edge/nginx.conf",
+        "-g",
+        "daemon off;"
+      ],
+      "ports": [
+        "127.0.0.1:8512:8080",
+        "127.0.0.1:8513:8443"
+      ],
+      "volumes": [
+        "edge_config:/etc/nexora-edge:ro"
+      ],
+      "secrets": [
+        "tls_cert",
+        "tls_key"
+      ],
+      "networks": [
+        "application"
+      ],
+      "depends_on": {
+        "edge-config": {
+          "condition": "service_completed_successfully"
+        },
+        "frontend": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8080/health"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3
+      }
+    },
+    "operations": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "10001:10001",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_API_IMAGE:?Supply inspected api digest}",
+      "command": [
+        "python",
+        "/opt/nexora-ops/monitor.py"
+      ],
+      "environment": {
+        "PYTHONPATH": "/app:/opt/nexora-ops",
+        "NEXORA_EXTERNAL_PROBES_ENABLED": "${NEXORA_EXTERNAL_PROBES_ENABLED:-false}",
+        "SUPABASE_URL": "${NEXORA_SUPABASE_URL:?Supply approved auth endpoint}",
+        "REDIS_URL_FILE": "/run/secrets/redis_monitor_url"
+      },
+      "volumes": [
+        "./monitor.py:/opt/nexora-ops/monitor.py:ro",
+        "application_data:/var/lib/nexora/application:ro",
+        "evidence_data:/var/lib/nexora/evidence:ro",
+        "prospect_data:/var/lib/nexora/prospect:ro",
+        "ops_status:/var/lib/nexora/status",
+        "${NEXORA_BACKUP_STATUS_DIR:?Supply dedicated host backup status directory}:/var/lib/nexora/backup-status:ro",
+        "${NEXORA_BACKUP_ROOT:?Supply encrypted archive directory}:/var/lib/nexora/backup:ro"
+      ],
+      "secrets": [
+        "pg_monitor",
+        "pg_ca",
+        "redis_monitor_url"
+      ],
+      "networks": [
+        "application",
+        "egress"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "curl",
+          "--fail",
+          "http://127.0.0.1:9108/health"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3
+      }
+    },
+    "prometheus": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "65534:65534",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_PROMETHEUS_IMAGE:?Supply inspected prometheus digest}",
+      "command": [
+        "--config.file=/etc/prometheus/prometheus.yml",
+        "--storage.tsdb.path=/prometheus",
+        "--storage.tsdb.retention.time=15d"
+      ],
+      "volumes": [
+        "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
+        "./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro",
+        "prometheus_data:/prometheus"
+      ],
+      "networks": [
+        "application"
+      ],
+      "depends_on": {
+        "operations": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "alertmanager": {
+      "restart": "unless-stopped",
+      "init": true,
+      "user": "65534:65534",
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=128m"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "image": "${NEXORA_ALERTMANAGER_IMAGE:?Supply inspected alertmanager digest}",
+      "command": [
+        "--config.file=/etc/alertmanager/alertmanager.yml",
+        "--storage.path=/alertmanager",
+        "--cluster.listen-address="
+      ],
+      "volumes": [
+        "./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro",
+        "alertmanager_data:/alertmanager"
+      ],
+      "secrets": [
+        "alert_webhook"
+      ],
+      "networks": [
+        "application",
+        "egress"
+      ]
+    }
+  },
+  "networks": {
+    "application": {
+      "internal": true
+    },
+    "egress": {}
+  },
+  "volumes": {
+    "application_data": {
+      "external": true,
+      "name": "${NEXORA_APPLICATION_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "evidence_data": {
+      "external": true,
+      "name": "${NEXORA_EVIDENCE_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "prospect_data": {
+      "external": true,
+      "name": "${NEXORA_PROSPECT_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "redis_data": {
+      "external": true,
+      "name": "${NEXORA_REDIS_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "scheduler_data": {
+      "external": true,
+      "name": "${NEXORA_SCHEDULER_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "ops_status": {
+      "external": true,
+      "name": "${NEXORA_OPS_STATUS_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "edge_config": {
+      "external": true,
+      "name": "${NEXORA_EDGE_CONFIG_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "prometheus_data": {
+      "external": true,
+      "name": "${NEXORA_PROMETHEUS_VOLUME:?Supply custodian-prepared persistent volume}"
+    },
+    "alertmanager_data": {
+      "external": true,
+      "name": "${NEXORA_ALERTMANAGER_VOLUME:?Supply custodian-prepared persistent volume}"
+    }
+  },
+  "secrets": {
+    "credential_key": {
+      "file": "${NEXORA_CREDENTIAL_KEY_FILE:?Supply managed secret file outside repository}"
+    },
+    "prospect_key": {
+      "file": "${NEXORA_PROSPECT_KEY_FILE:?Supply managed secret file outside repository}"
+    },
+    "broker_url": {
+      "file": "${NEXORA_BROKER_URL_FILE:?Supply managed secret file outside repository}"
+    },
+    "redis_password": {
+      "file": "${NEXORA_REDIS_PASSWORD_FILE:?Supply managed secret file outside repository}"
+    },
+    "jwt": {
+      "file": "${NEXORA_JWT_FILE:?Supply managed secret file outside repository}"
+    },
+    "api_accounts": {
+      "file": "${NEXORA_API_ACCOUNTS_FILE:?Supply managed secret file outside repository}"
+    },
+    "supabase_anon": {
+      "file": "${NEXORA_SUPABASE_ANON_FILE:?Supply managed secret file outside repository}"
+    },
+    "supabase_service": {
+      "file": "${NEXORA_SUPABASE_SERVICE_FILE:?Supply managed secret file outside repository}"
+    },
+    "tls_cert": {
+      "file": "${NEXORA_TLS_CERT_FILE:?Supply managed secret file outside repository}"
+    },
+    "tls_key": {
+      "file": "${NEXORA_TLS_KEY_FILE:?Supply managed secret file outside repository}"
+    },
+    "pg_monitor": {
+      "file": "${NEXORA_PG_MONITOR_FILE:?Supply managed secret file outside repository}"
+    },
+    "pg_ca": {
+      "file": "${NEXORA_PG_CA_FILE:?Supply managed secret file outside repository}"
+    },
+    "alert_webhook": {
+      "file": "${NEXORA_ALERT_WEBHOOK_FILE:?Supply managed secret file outside repository}"
+    },
+    "redis_monitor_password": {
+      "file": "${NEXORA_REDIS_MONITOR_PASSWORD_FILE:?Supply dedicated monitor password file}"
+    },
+    "redis_monitor_url": {
+      "file": "${NEXORA_REDIS_MONITOR_URL_FILE:?Supply ping-only monitor Redis URL file}"
+    }
+  }
+}

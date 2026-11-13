@@ -1,0 +1,46 @@
+services:
+  init-storage:
+    entrypoint:
+      - python
+      - /opt/init_storage_r5.py
+    volumes:
+      - ./init_storage_r5.py:/opt/init_storage_r5.py:ro
+  frontend:
+    environment:
+      NEXORA_SQAPP_SCOPE: nexora-sqapp-r5-auth-pending-20261111:unauthenticated-only
+    entrypoint:
+      - python
+      - /opt/sqapp/launcher-r5.py
+      - frontend
+    volumes:
+      - ./unauthenticated_smoke_r5.py:/opt/sqapp/launcher-r5.py:ro
+  api:
+    environment:
+      NEXORA_SQAPP_SCOPE: nexora-sqapp-r5-auth-pending-20261111:unauthenticated-only
+    entrypoint:
+      - python
+      - /opt/sqapp/launcher-r5.py
+      - api
+    volumes:
+      - ./unauthenticated_smoke_r5.py:/opt/sqapp/launcher-r5.py:ro
+  nginx:
+    ports: !override
+      - 127.0.0.1:18514:8443
+networks:
+  private:
+    name: nexora-sqapp-r5-auth-pending-20261111_private
+  ingress:
+    name: nexora-sqapp-r5-auth-pending-20261111_ingress_loopback
+volumes:
+  application_data:
+    name: nexora-sqapp-r5-auth-pending-20261111_application_data
+    external: true
+  evidence_data:
+    name: nexora-sqapp-r5-auth-pending-20261111_evidence_data
+    external: true
+  prospect_data:
+    name: nexora-sqapp-r5-auth-pending-20261111_prospect_data
+    external: true
+  redis_data:
+    name: nexora-sqapp-r5-auth-pending-20261111_redis_data
+    external: true

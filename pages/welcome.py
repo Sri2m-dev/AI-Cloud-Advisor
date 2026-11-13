@@ -5,14 +5,15 @@ import html
 import streamlit as st
 
 from auth.role_constants import normalize_role
+from components.navigation.v1_page_link import v1_page_link
 from components.sidebar_navigation import render_sidebar_navigation
 from services.demo_tenant_service import load_demo_tenant
+from shared.auth import require_role
 from shared.currency import format_currency_amount
 from shared.evidence_context import (
     activate_demo_workspace,
     resolve_active_evidence_context,
 )
-from shared.auth import require_role
 from shared.session import init_session
 from shared.styles import configure_page
 
@@ -121,19 +122,19 @@ if prospect_result and not getattr(prospect_result, "currency_resolution_require
 
     quick = st.columns(4)
     with quick[0]:
-        st.page_link(
+        v1_page_link(
             "pages/analyze_environment.py",
             label="Review Analysis",
             use_container_width=True,
         )
     with quick[1]:
-        st.page_link(
+        v1_page_link(
             "pages/enterprise_ai_copilot.py",
             label="Ask Nexora",
             use_container_width=True,
         )
     with quick[2]:
-        st.page_link(
+        v1_page_link(
             "pages/reports.py",
             label="Prepare Board Pack",
             use_container_width=True,
@@ -205,7 +206,7 @@ elif prospect_result:
             + ", ".join(getattr(prospect_result, "detected_currencies", ()))
             + ". Monetary totals are not available without separated evidence."
         )
-    st.page_link(
+    v1_page_link(
         "pages/analyze_environment.py",
         label="Resolve currency in Analyze Environment",
         use_container_width=True,
@@ -217,7 +218,7 @@ elif evidence_context.is_prospect:
         "Open Analyze Environment to review the retained evidence. Enterprise conclusions "
         "remain unavailable unless supported by governed prospect evidence."
     )
-    st.page_link(
+    v1_page_link(
         "pages/analyze_environment.py",
         label="Review Prospect Analysis",
         use_container_width=True,
@@ -259,13 +260,13 @@ elif is_demo:
 
     quick = st.columns(4)
     with quick[0]:
-        st.page_link("pages/ceo_workspace.py", label="Open Executive Brief", use_container_width=True)
+        v1_page_link("pages/ceo_workspace.py", label="Open Executive Brief", use_container_width=True)
     with quick[1]:
-        st.page_link("pages/decision_intelligence.py", label="Review Decisions", use_container_width=True)
+        v1_page_link("pages/decision_intelligence.py", label="Review Decisions", use_container_width=True)
     with quick[2]:
-        st.page_link("pages/analyze_environment.py", label="Analyze Environment", use_container_width=True)
+        v1_page_link("pages/analyze_environment.py", label="Analyze Environment", use_container_width=True)
     with quick[3]:
-        st.page_link("pages/reports.py", label="Prepare Board Pack", use_container_width=True)
+        v1_page_link("pages/reports.py", label="Prepare Board Pack", use_container_width=True)
 
     st.markdown("### Investment and value")
     posture = st.columns(4)
@@ -290,8 +291,8 @@ elif is_demo:
                 facts[2].metric("Evidence", f"{decision['evidence_coverage']}%")
                 st.markdown(f"**Recommended action:** {journey.get('recommendation', 'UNKNOWN')}")
                 actions = st.columns(2)
-                actions[0].page_link("pages/decision_intelligence.py", label="View Impact", use_container_width=True)
-                actions[1].page_link("pages/approval_center.py", label="Review Approval", use_container_width=True)
+                v1_page_link("pages/decision_intelligence.py", label="View Impact", use_container_width=True)
+                v1_page_link("pages/approval_center.py", label="Review Approval", use_container_width=True)
     with right:
         st.markdown("### Executive AI summary")
         with st.container(border=True):
@@ -300,20 +301,20 @@ elif is_demo:
             st.markdown(
                 f"**Recommended next move**  \n{story.get('recommendation', 'UNKNOWN')}"
             )
-            st.page_link("pages/ai_copilot.py", label="Ask Nexora", use_container_width=True)
+            v1_page_link("pages/ai_copilot.py", label="Ask Nexora", use_container_width=True)
 
         st.markdown("### Enterprise Digital Twin")
         lead_path = (next(iter(journeys.values()), {}).get("twin_path") or [])
         with st.container(border=True):
             for item in lead_path:
                 st.markdown(f"**{item['layer']}**  \n{item['entity']}")
-            st.page_link("pages/twin_explorer.py", label="Trace Dependencies", use_container_width=True)
+            v1_page_link("pages/twin_explorer.py", label="Trace Dependencies", use_container_width=True)
 
         st.markdown("### Business health")
         with st.container(border=True):
             st.metric("Business services", f"{metrics.get('business_services', 0):,}")
             st.write("The checkout and payments services carry the most material evidenced attention.")
-            st.page_link("pages/business_services.py", label="Open Business Services", use_container_width=True)
+            v1_page_link("pages/business_services.py", label="Open Business Services", use_container_width=True)
 
 else:
     st.markdown(
@@ -334,13 +335,13 @@ else:
         with st.container(border=True):
             st.markdown("### Analyze your environment")
             st.write("Connect an existing certified source or review supported upload paths.")
-            st.page_link("pages/analyze_environment.py", label="Start Analysis", use_container_width=True)
+            v1_page_link("pages/analyze_environment.py", label="Start Analysis", use_container_width=True)
     with choices[1]:
         with st.container(border=True):
             st.markdown("### Upload governed evidence")
             st.write("Encrypted temporary analysis with consent, audit, and automatic expiry.")
             if role in {"sales_engineer", "finance"}:
-                st.page_link("pages/prospect_data_intake.py", label="Upload Evidence", use_container_width=True)
+                v1_page_link("pages/prospect_data_intake.py", label="Upload Evidence", use_container_width=True)
             else:
                 st.caption("Requires a Sales Engineer or Finance Operator.")
     with choices[2]:

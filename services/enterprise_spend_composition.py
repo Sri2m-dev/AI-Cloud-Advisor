@@ -12,7 +12,7 @@ from auth.authenticated_tenant import (
 from repositories.enterprise_spend_repository import EnterpriseSpendRepository
 from repositories.source_fact_financial_repository import SourceFactFinancialRepository
 from services.enterprise_spend_service import EnterpriseSpendService
-from services.supabase_client import supabase
+from services.supabase_client import create_user_financial_data_client, supabase
 
 _service = EnterpriseSpendService(EnterpriseSpendRepository(supabase))
 
@@ -53,9 +53,9 @@ class _EmptyTenantSpendRepository:
 _local_service = EnterpriseSpendService(SourceFactFinancialRepository(), cache_ttl_seconds=0)
 
 
-def _organization_name(organization_id: str) -> str | None:
+def _organization_name(organization_id: str, client: Any) -> str | None:
     response = (
-        supabase.table("organizations")
+        client.table("organizations")
         .select("id,name")
         .eq("id", organization_id)
         .limit(1)
@@ -71,9 +71,33 @@ def _organization_name(organization_id: str) -> str | None:
 
 
 def _organization_resolver(session: Mapping[str, Any]):
-    """Use tenant claims from local auth; keep Supabase authoritative otherwise."""
-    if session.get("auth_backend") != "local":
-        return _organization_name
+    """Resolve organizations through the authenticated identity for this session."""
+    auth_backend = str(session.get("auth_backend") or "").strip().lower()
+    if auth_backend == "supabase":
+        client = session.get("auth_client")
+        if client is None:
+            raise AuthenticatedTenantError("authenticated Supabase client is required")
+
+        organization_id = str(
+            session.get("organization_id") or session.get("org_id") or ""
+        ).strip().lower()
+        authorized_ids = {
+            str(value).strip().lower()
+            for value in session.get("authorized_organization_ids") or ()
+        }
+
+        def resolve(requested_organization_id: str) -> str | None:
+            requested = str(requested_organization_id).strip().lower()
+            if requested != organization_id or requested not in authorized_ids:
+                raise AuthenticatedTenantError(
+                    "Supabase organization resolver crossed a tenant boundary"
+                )
+            return _organization_name(requested, client)
+
+        return resolve
+
+    if auth_backend != "local":
+        raise AuthenticatedTenantError("authenticated tenant resolver is unavailable")
 
     organization_id = str(session.get("organization_id") or session.get("org_id") or "").strip()
     authorized_ids = {
@@ -105,7 +129,7 @@ def authenticated_tenant_context(session: Mapping[str, Any]) -> AuthenticatedTen
     return context
 
 
-def enterprise_spend_service(context=None) -> EnterpriseSpendService:
+def enterprise_spend_service(context=None, *, auth_client=None) -> EnterpriseSpendService:
     # Golden Demo uses the same local SourceFact authority, never a parallel cost store.
     if isinstance(context, AuthenticatedTenantContext):
         from enterprise_intelligence.search import FINANCIAL_ROLES
@@ -118,6 +142,14 @@ def enterprise_spend_service(context=None) -> EnterpriseSpendService:
             if context.role in FINANCIAL_ROLES:
                 bootstrap_demo_financial_sourcefacts(context)
             return _local_service
+        if context.environment == "production":
+            if auth_client is None:
+                raise AuthenticatedTenantError(
+                    "authenticated Supabase session client is required for tenant reads"
+                )
+            return EnterpriseSpendService(
+                EnterpriseSpendRepository(create_user_financial_data_client(auth_client))
+            )
     environment = (
         os.getenv("ENVIRONMENT", os.getenv("CLOUD_ADVISOR_ENV", "development")).strip().lower()
     )

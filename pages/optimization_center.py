@@ -16,6 +16,7 @@ from shared.session import init_session
 from shared.styles import configure_page
 from shared.layout import render_page_header
 from components.sidebar_navigation import render_sidebar_navigation
+from services.enterprise_spend_composition import authenticated_tenant_context
 
 from services.cost_intelligence_service import (
     get_optimization_opportunities,
@@ -95,9 +96,19 @@ render_page_header(
 )
 
 executive_summary = get_executive_summary() or {}
+tenant_context = authenticated_tenant_context(st.session_state)
 
-optimization_df = safe_df(get_optimization_opportunities())
-recommendation_df = safe_df(get_recommendations())
+optimization_response = get_optimization_opportunities(tenant_context)
+recommendation_response = get_recommendations(tenant_context)
+for section, response in (
+    ("Optimization opportunities", optimization_response),
+    ("Recommendations", recommendation_response),
+):
+    if not response["success"]:
+        st.warning(f"{section} unavailable: {response['message']}")
+
+optimization_df = safe_df(optimization_response)
+recommendation_df = safe_df(recommendation_response)
 
 opportunity_count = len(optimization_df)
 

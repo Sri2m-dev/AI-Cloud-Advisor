@@ -151,6 +151,7 @@ class AzureConnectorService:
         projected = projector.project_entities(candidates)
         return {
             "status": "SUCCESS",
+            "discovery_status": "SUCCESS",
             "accounts": len(accounts),
             "costs": 0,
             "resources": len(resources),
@@ -160,6 +161,8 @@ class AzureConnectorService:
             "source_facts_published": len(publication.facts),
             "canonical_entities_projected": len(projected),
             "canonical_relationships_projected": 0,
+            "financial_ingestion_status": "NOT_PERFORMED",
+            "dashboard_readiness": "UNKNOWN",
             "run_id": run_id,
         }
 

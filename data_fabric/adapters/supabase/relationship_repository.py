@@ -21,7 +21,7 @@ from data_fabric.adapters.supabase.repository_utils import (
     response_rows,
     score_to_ratio,
 )
-from data_fabric.contracts import EnterpriseRelationship
+from data_fabric.contracts import EnterpriseRelationship, RelationshipDecisionState
 from data_fabric.foundation import TenantContext
 from data_fabric.persistence.interfaces import RelationshipRepository
 from data_fabric.persistence.mappers import RelationshipPersistenceMapper
@@ -40,10 +40,14 @@ class SupabaseRelationshipRepository(RelationshipRepository):
     def add(self, record: MutableRecord | EnterpriseRelationship) -> MutableRecord:
         persistence_record = self._coerce_record(record)
         row = self._record_to_row(persistence_record)
-        response = self.client.execute(lambda: self.client.table(self.table_name).insert(row).execute())
+        response = self.client.execute(
+            lambda: self.client.table(self.table_name).insert(row).execute()
+        )
         return self._row_to_record(ensure_inserted(response, "relationship"))
 
-    def get(self, tenant_context: TenantContext, record_id: str, *, include_inactive: bool = False) -> MutableRecord | None:
+    def get(
+        self, tenant_context: TenantContext, record_id: str, *, include_inactive: bool = False
+    ) -> MutableRecord | None:
         query = self._tenant_query(tenant_context).eq("id", record_id)
         if not include_inactive:
             query = query.eq("active", True)
@@ -51,11 +55,35 @@ class SupabaseRelationshipRepository(RelationshipRepository):
         row = optional_row(response)
         return self._row_to_record(row) if row else None
 
-    def find_by_source_entity(self, tenant_context: TenantContext, source_entity_id: str, *, include_inactive: bool = False) -> PageResult:
-        return self.search(RepositoryQuery(tenant_context, filters={"source_entity_id": source_entity_id}, include_inactive=include_inactive))
+    def find_by_source_entity(
+        self,
+        tenant_context: TenantContext,
+        source_entity_id: str,
+        *,
+        include_inactive: bool = False,
+    ) -> PageResult:
+        return self.search(
+            RepositoryQuery(
+                tenant_context,
+                filters={"source_entity_id": source_entity_id},
+                include_inactive=include_inactive,
+            )
+        )
 
-    def find_by_target_entity(self, tenant_context: TenantContext, target_entity_id: str, *, include_inactive: bool = False) -> PageResult:
-        return self.search(RepositoryQuery(tenant_context, filters={"target_entity_id": target_entity_id}, include_inactive=include_inactive))
+    def find_by_target_entity(
+        self,
+        tenant_context: TenantContext,
+        target_entity_id: str,
+        *,
+        include_inactive: bool = False,
+    ) -> PageResult:
+        return self.search(
+            RepositoryQuery(
+                tenant_context,
+                filters={"target_entity_id": target_entity_id},
+                include_inactive=include_inactive,
+            )
+        )
 
     def update(self, record: MutableRecord, *, expected_revision: int) -> MutableRecord:
         row = self._record_to_row(record)
@@ -76,11 +104,18 @@ class SupabaseRelationshipRepository(RelationshipRepository):
             raise SupabaseAdapterConflictError("stale revision or relationship not found")
         return self._row_to_record(rows[0])
 
-    def deactivate(self, tenant_context: TenantContext, record_id: str, *, deactivated_by: str | None = None) -> MutableRecord:
+    def deactivate(
+        self, tenant_context: TenantContext, record_id: str, *, deactivated_by: str | None = None
+    ) -> MutableRecord:
         current = self.get(tenant_context, record_id, include_inactive=True)
         if current is None:
             raise SupabaseAdapterConflictError("relationship not found")
-        updated = replace(current, active=False, deactivated_at=datetime.now(timezone.utc), deactivated_by=deactivated_by)
+        updated = replace(
+            current,
+            active=False,
+            deactivated_at=datetime.now(timezone.utc),
+            deactivated_by=deactivated_by,
+        )
         return self.update(updated, expected_revision=current.revision)
 
     def exists(self, tenant_context: TenantContext, record_id: str) -> bool:
@@ -97,36 +132,61 @@ class SupabaseRelationshipRepository(RelationshipRepository):
         response = self.client.execute(lambda: builder.execute())
         return page_result([self._row_to_record(row) for row in response_rows(response)], query)
 
-    def list_relationships(self, tenant_context: TenantContext, *, include_inactive: bool = False, page: PageRequest | None = None) -> PageResult:
-        return self.search(RepositoryQuery(tenant_context, include_inactive=include_inactive, page=default_page(page)))
+    def list_relationships(
+        self,
+        tenant_context: TenantContext,
+        *,
+        include_inactive: bool = False,
+        page: PageRequest | None = None,
+    ) -> PageResult:
+        return self.search(
+            RepositoryQuery(
+                tenant_context, include_inactive=include_inactive, page=default_page(page)
+            )
+        )
 
     def _tenant_query(self, tenant_context: TenantContext):
-        return self.client.table(self.table_name).select("*").eq("organization_id", tenant_context.organization_id).eq("tenant_id", tenant_context.tenant_id)
+        return (
+            self.client.table(self.table_name)
+            .select("*")
+            .eq("organization_id", tenant_context.organization_id)
+            .eq("tenant_id", tenant_context.tenant_id)
+        )
 
     def _coerce_record(self, value: MutableRecord | EnterpriseRelationship) -> MutableRecord:
         if isinstance(value, EnterpriseRelationship):
-            return self.mapper.domain_to_record(value, TenantContext(value.organization_id, value.tenant_id or ""))
+            return self.mapper.domain_to_record(
+                value, TenantContext(value.organization_id, value.tenant_id or "")
+            )
         return value
 
     def _record_to_row(self, record: MutableRecord) -> dict[str, Any]:
         payload = plain_mapping(record.payload)
         metadata = plain_mapping(record.metadata)
+        state = RelationshipDecisionState(payload.get("decision_state", "candidate"))
+        if state is RelationshipDecisionState.CONFIRMED:
+            raise PermissionError(
+                "Confirmed relationship writes unavailable: "
+                "approved authority-evidence contract is missing"
+            )
         return {
             "id": record.record_id,
             "source_entity_id": payload.get("source_entity_id") or metadata.get("source_entity_id"),
             "target_entity_id": payload.get("target_entity_id") or metadata.get("target_entity_id"),
-            "relationship_type": payload.get("relationship_type") or metadata.get("relationship_type"),
+            "relationship_type": payload.get("relationship_type")
+            or metadata.get("relationship_type"),
             "organization_id": record.organization_id,
             "tenant_id": record.tenant_id,
             "source_system": payload.get("source_system") or metadata.get("source_system"),
-            "source_identifier": payload.get("source_identifier") or metadata.get("source_identifier"),
+            "source_identifier": payload.get("source_identifier")
+            or metadata.get("source_identifier"),
             "confidence_score": ratio_to_100(payload.get("confidence_score")),
             "quality_score": ratio_to_100(payload.get("quality_score")),
             "metadata": plain_mapping(payload.get("metadata", {})),
             "evidence": list(payload.get("evidence") or ()),
             "lineage": plain_mapping(payload.get("lineage") or {}),
             "provenance": plain_mapping(payload.get("provenance") or {}),
-            "decision_state": payload.get("decision_state", "confirmed"),
+            "decision_state": state.value,
             "effective_from": _iso_value(payload.get("effective_from")),
             "effective_to": _iso_value(payload.get("effective_to")),
             "actor": payload.get("actor"),
@@ -161,7 +221,7 @@ class SupabaseRelationshipRepository(RelationshipRepository):
             "evidence": tuple(row.get("evidence") or ()),
             "lineage": plain_mapping(row.get("lineage") or {}) or None,
             "provenance": plain_mapping(row.get("provenance") or {}) or None,
-            "decision_state": row.get("decision_state", "confirmed"),
+            "decision_state": row.get("decision_state", "candidate"),
             "effective_from": dt(row.get("effective_from")),
             "effective_to": dt(row.get("effective_to")),
             "actor": row.get("actor"),

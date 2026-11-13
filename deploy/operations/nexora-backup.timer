@@ -1,0 +1,10 @@
+[Unit]
+Description=Authoritative host backup packaging timer (install only after qualification)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+Unit=nexora-backup.service
+
+[Install]
+WantedBy=timers.target

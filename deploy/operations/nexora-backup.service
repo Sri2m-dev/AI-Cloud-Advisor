@@ -1,0 +1,17 @@
+[Unit]
+Description=Nexora coordinated encrypted snapshot packaging
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=nexora-backup
+Group=nexora-ops
+EnvironmentFile=/etc/nexora/backup-public.conf
+ExecStart=/opt/nexora-operations/venv/bin/python /opt/nexora-operations/backup_job.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/nexora/snapshots /etc/nexora
+ReadWritePaths=/srv/nexora/backups /srv/nexora/backup-status /srv/nexora/recovery-evidence
+UMask=0077

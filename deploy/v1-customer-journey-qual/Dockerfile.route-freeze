@@ -1,0 +1,3 @@
+FROM nexora-v1-customer-workflow-postgres-qual:20261112
+
+COPY . /app

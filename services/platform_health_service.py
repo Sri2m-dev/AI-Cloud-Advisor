@@ -285,7 +285,10 @@ class PlatformHealthService:
         readiness = ReleaseReadinessService(self.organization_id).validate_production_readiness(persist=True)
         return {"score": readiness["score"], "status": readiness["status"], "domains": readiness["domains"], "kpis": readiness["kpis"]}
 
-    def calculate_readiness_score(self, scores: dict[str, float]) -> dict[str, Any]:
+    def calculate_readiness_score(self, scores: dict[str, float | None]) -> dict[str, Any]:
+        if any(scores.get(area) is None for area in READINESS_WEIGHTS):
+            return {"score": None, "classification": "NOT_VERIFIED",
+                    "weights": READINESS_WEIGHTS, "area_scores": scores}
         score = round(sum(float(scores.get(area, 0)) * weight for area, weight in READINESS_WEIGHTS.items()), 1)
         return {
             "score": score,
@@ -306,7 +309,9 @@ class PlatformHealthService:
             return "Attention Required"
         return "Critical"
 
-    def health_trend(self, current_score: float) -> dict[str, list[dict[str, Any]]]:
+    def health_trend(self, current_score: float | None) -> dict[str, list[dict[str, Any]]]:
+        if current_score is None:
+            return {"24 hours": [], "7 days": [], "30 days": []}
         now = datetime.now(timezone.utc)
         return {
             "24 hours": self._trend(now, current_score, 8, 0.08),
@@ -402,6 +407,8 @@ class PlatformHealthService:
         security: dict[str, Any] | None = None,
         compliance: dict[str, Any] | None = None,
     ) -> str:
+        if readiness.get("score") is None:
+            return "Platform readiness is NOT_VERIFIED; reviewed release evidence is unavailable."
         security = security or {}
         compliance = compliance or {}
         return (

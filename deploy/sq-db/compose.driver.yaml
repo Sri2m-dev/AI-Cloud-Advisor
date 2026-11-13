@@ -1,0 +1,104 @@
+{
+  "services": {
+    "commit-probe": {
+      "pull_policy": "never",
+      "network_mode": "service:postgres",
+      "read_only": true,
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=16m,mode=1777"
+      ],
+      "environment": {
+        "PGHOST": "127.0.0.1",
+        "PGPORT": "5432",
+        "PGDATABASE": "nexora_m2c_m3sq_20261110",
+        "PGUSER": "postgres",
+        "PGSSLMODE": "verify-full",
+        "PGSSLROOTCERT": "/run/secrets/client_ca",
+        "PGPASSFILE": "/tmp/client/pgpass",
+        "PGOPTIONS": "-c nexora.qualification_authorized=local-disposable",
+        "PYTHONPATH": "/app",
+        "NEXORA_LOCAL_QUALIFICATION_ACK": "authorized-disposable-cluster",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "secrets": [
+        "pgpass",
+        "client_ca"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2a",
+          "target": "/qualification/database/contracts/g08_m2a",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2b",
+          "target": "/qualification/database/contracts/g08_m2b",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/database/contracts/g08_m2c",
+          "target": "/qualification/database/contracts/g08_m2c",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/tests/database_integrity",
+          "target": "/qualification/tests/database_integrity",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${SQDB_SOURCE_ROOT:?Supply verified candidate root}/tests/owner_authorization",
+          "target": "/qualification/tests/owner_authorization",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        "./client.sh:/sqdb/client.sh:ro",
+        "./driver.sh:/sqdb/driver.sh:ro"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      },
+      "image": "${SQDB_DRIVER_IMAGE:?Supply qualified Python psycopg2 image digest}",
+      "profiles": [
+        "driver"
+      ],
+      "entrypoint": [
+        "/bin/sh",
+        "/sqdb/driver.sh"
+      ],
+      "command": [
+        "python",
+        "-B",
+        "/qualification/database/contracts/g08_m2c/qualification/unknown_commit_probe.py",
+        "--authorization-reference",
+        "${SQDB_AUTHORIZATION_REFERENCE:?Supply named disposable-target authorization reference}"
+      ]
+    }
+  }
+}
